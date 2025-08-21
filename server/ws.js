@@ -5,6 +5,40 @@ const fetch = require('node-fetch');
 const fs = require('fs').promises;
 const path = require('path');
 const os = require('os');
+const { v4: uuidv4 } = require('uuid');
+
+const LOG_FILE_PATH = path.join(__dirname, '..', 'terminal_log.json');
+
+let logQueue = Promise.resolve();
+
+function appendToLog(logEntry) {
+  logQueue = logQueue.then(async () => {
+    try {
+      let logs = [];
+      try {
+        const data = await fs.readFile(LOG_FILE_PATH, 'utf8');
+        logs = JSON.parse(data);
+      } catch (readErr) {
+        if (readErr.code !== 'ENOENT') { // ENOENT means file doesn't exist, which is fine
+          console.error('Error reading log file for appending:', readErr);
+        }
+      }
+      logs.push(logEntry);
+      await fs.writeFile(LOG_FILE_PATH, JSON.stringify(logs, null, 2));
+    } catch (writeErr) {
+      console.error('Error writing to log file:', writeErr);
+    }
+  }).catch(err => {
+    // Prevent unhandled promise rejection
+    console.error('Error in log queue:', err);
+  });
+}
+
+function stripAnsi(str) {
+  // This regex removes ANSI escape codes used for colors, cursor movement, etc.
+  return str.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
+}
+
 
 function findServer(serverId) {
   return (inventory.servers || []).find((s) => s.id === serverId);
@@ -56,8 +90,10 @@ function handleTerminal(ws, url) {
     try { ws.send(JSON.stringify({ type: 'fatal', error: 'credential error: ' + e.message })); } catch {}
     return setTimeout(() => { try { ws.close(1011, 'credential error'); } catch {} }, 10);
   }
+  const sessionId = uuidv4();
+
   const conn = new Client();
-  console.log(`[ws] terminal connect: serverId=${serverId} host=${server.ssh.host}`);
+  console.log(`[ws] terminal: connecting to ${server.ssh.user}@${server.ssh.host}`);
   conn
     .on('ready', () => {
       conn.shell({ term: 'xterm-color', cols, rows }, (err, stream) => {
@@ -67,10 +103,39 @@ function handleTerminal(ws, url) {
           return;
         }
 
+        let stdoutBuffer = '';
+        let stderrBuffer = '';
+
+        const flushBuffers = () => {
+          const cleanStdout = stripAnsi(stdoutBuffer).trim();
+          if (cleanStdout) {
+            appendToLog({
+              id: uuidv4(),
+              sessionId,
+              timestamp: new Date().toISOString(),
+              type: 'stdout',
+              terminal_output: cleanStdout
+            });
+          }
+          stdoutBuffer = '';
+
+          const cleanStderr = stripAnsi(stderrBuffer).trim();
+          if (cleanStderr) {
+            appendToLog({
+              id: uuidv4(),
+              sessionId,
+              timestamp: new Date().toISOString(),
+              type: 'stderr',
+              terminal_output: cleanStderr
+            });
+          }
+          stderrBuffer = '';
+        };
+
         ws.on('message', async (msg) => {
           try {
             const obj = JSON.parse(msg.toString());
-            const { type, data, prompt } = obj;
+            const { type, data, prompt, command } = obj;
 
             if (type === 'data') {
               stream.write(data);
@@ -78,13 +143,30 @@ function handleTerminal(ws, url) {
               stream.setWindow(obj.rows, obj.cols, 600, 800);
             } else if (type === 'close') {
               stream.end();
+            } else if (type === 'command_log' && command) {
+              flushBuffers(); // Log output of previous command first
+              appendToLog({
+                id: uuidv4(),
+                sessionId,
+                timestamp: new Date().toISOString(),
+                type: 'stdin',
+                executed_command: command
+              });
             } else if (type === 'ai_query' && prompt) {
+              flushBuffers(); // Log output of previous command first
               // Очищаем текущую строку в shell (удаляем команду ai:...)
               // Старый метод: stream.write('\x15'); // CTRL+U, не работает на Windows
               // Новый, универсальный метод:
               stream.write('\b'.repeat(prompt.length));
               
               const aiPrompt = prompt.substring(prompt.indexOf('ai:') + 3).trim();
+              appendToLog({
+                id: uuidv4(),
+                sessionId,
+                timestamp: new Date().toISOString(),
+                type: 'ai_query',
+                user_ai_query: aiPrompt
+              });
 
               try {
                 const aiServerUrl = process.env.AI_SERVER_URL || 'http://localhost:3002/api/send-request';
@@ -97,9 +179,17 @@ function handleTerminal(ws, url) {
                 // 1. С удаленной машины по SSH
                 const getRemoteKnowledge = (sshConn) => new Promise((resolve) => {
                   let content = '';
+                  let commandTimeout;
                   console.log('[AI Knowledge] Attempting to read remote knowledge file: ~/.kosmos/README_kosmos.md');
+
+                  commandTimeout = setTimeout(() => {
+                    console.error('[AI Knowledge] Remote command timed out.');
+                    resolve('');
+                  }, 5000); // 5 секунд таймаут
+
                   sshConn.exec('cat ~/.kosmos/README_kosmos.md', (err, stream) => {
                     if (err) {
+                      clearTimeout(commandTimeout);
                       console.error('[AI Knowledge] Error executing remote command:', err.message);
                       return resolve(''); // Ошибка создания канала, вернем пустоту
                     }
@@ -108,6 +198,7 @@ function handleTerminal(ws, url) {
                       console.error('[AI Knowledge] Remote command stderr:', data.toString().trim());
                     });
                     stream.on('close', (code) => {
+                      clearTimeout(commandTimeout);
                       if (code === 0 && content) {
                         console.log(`[AI Knowledge] Successfully read remote knowledge (${content.length} bytes).`);
                         resolve(content);
@@ -148,38 +239,63 @@ function handleTerminal(ws, url) {
                 
                 // --- END: Получение знаний ---
                 
-                const aiResponse = await fetch(aiServerUrl, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    model: aiModel,
-                    prompt: aiSystemPrompt,
-                    inputText: aiPrompt,
-                    provider: aiProvider
-                  })
-                });
-                const aiResult = await aiResponse.json();
+                console.log(`[AI] Preparing to send request to: ${aiServerUrl}`);
 
-                if (aiResult.success && aiResult.content) {
-                  let commandToExecute = aiResult.content.trim();
-                  
-                  // Если AI вернул многострочный ответ, берем только первую строку
-                  const lines = commandToExecute.split('\n');
-                  if (lines.length > 1) {
-                    commandToExecute = lines[0].trim();
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 секунд
+
+                try {
+                  const aiResponse = await fetch(aiServerUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      model: aiModel,
+                      prompt: aiSystemPrompt,
+                      inputText: aiPrompt,
+                      provider: aiProvider
+                    }),
+                    signal: controller.signal
+                  });
+
+                  clearTimeout(timeoutId);
+
+                  console.log(`[AI] Request sent for prompt: "${aiPrompt}". Status: ${aiResponse.status}`);
+                  const aiResult = await aiResponse.json();
+                  console.log('[AI] Response received:', JSON.stringify(aiResult, null, 2));
+
+                  if (aiResult.success && aiResult.content) {
+                    let commandToExecute = aiResult.content.trim();
+                    
+                    // Если AI вернул многострочный ответ, берем только первую строку
+                    const lines = commandToExecute.split('\n');
+                    if (lines.length > 1) {
+                      commandToExecute = lines[0].trim();
+                    }
+                    
+                    // Удаляем markdown кавычки, если есть
+                    commandToExecute = commandToExecute.replace(/^```[a-z]*\s*|\s*```$/g, '').trim();
+                    
+                    stream.write(commandToExecute + '\r');
+                    appendToLog({
+                      id: uuidv4(),
+                      sessionId,
+                      timestamp: new Date().toISOString(),
+                      type: 'stdin',
+                      executed_command: commandToExecute,
+                      user_ai_query: aiPrompt
+                    });
+                  } else {
+                    throw new Error(aiResult.error || 'Invalid response from AI API');
                   }
-                  
-                  // Удаляем markdown кавычки, если есть
-                  commandToExecute = commandToExecute.replace(/^```[a-z]*\s*|\s*```$/g, '').trim();
-                  
-                  stream.write(commandToExecute + '\r');
-                } else {
-                  throw new Error(aiResult.error || 'Invalid response from AI API');
+                } catch (e) {
+                  clearTimeout(timeoutId);
+                  console.error('[AI Error]', e);
+                  const errorMsg = `\r\n\x1b[1;31m[AI Error] ${e.name === 'AbortError' ? 'Request timed out' : e.message}\x1b[0m\r\n`;
+                  ws.send(JSON.stringify({ type: 'data', data: errorMsg }));
+                  stream.write('\r');
                 }
               } catch (e) {
-                const errorMsg = `\r\n\x1b[1;31m[AI Error] ${e.message}\x1b[0m\r\n`;
-                ws.send(JSON.stringify({ type: 'data', data: errorMsg }));
-                stream.write('\r');
+                console.error('[ERROR] in ws.on(message):', e);
               }
             }
           } catch (e) {
@@ -187,10 +303,26 @@ function handleTerminal(ws, url) {
           }
         });
 
-        stream.on('data', (d) => ws.send(JSON.stringify({ type: 'data', data: d.toString('utf8') })));
-        stream.stderr.on('data', (d) => ws.send(JSON.stringify({ type: 'err', data: d.toString('utf8') })));
-        stream.on('close', () => { try { ws.close(); } catch {}; conn.end(); });
-        ws.on('close', () => { try { stream.end(); } catch {}; try { conn.end(); } catch {}; });
+        stream.on('data', (d) => {
+          const data = d.toString('utf8');
+          ws.send(JSON.stringify({ type: 'data', data }));
+          stdoutBuffer += data;
+        });
+        stream.stderr.on('data', (d) => {
+          const data = d.toString('utf8');
+          ws.send(JSON.stringify({ type: 'err', data }));
+          stderrBuffer += data;
+        });
+        stream.on('close', () => { 
+          flushBuffers();
+          try { ws.close(); } catch {}; 
+          conn.end(); 
+        });
+        ws.on('close', () => { 
+          flushBuffers();
+          try { stream.end(); } catch {}; 
+          try { conn.end(); } catch {}; 
+        });
       });
     })
     .on('error', (e) => {
@@ -226,6 +358,8 @@ function handleTail(ws, url) {
     try { ws.send(JSON.stringify({ type: 'fatal', error: 'credential error: ' + e.message })); } catch {}
     return setTimeout(() => { try { ws.close(1011, 'credential error'); } catch {} }, 10);
   }
+  const sessionId = uuidv4();
+
   const conn = new Client();
   console.log(`[ws] tail connect: serverId=${serverId} path=${logPath}`);
   conn
@@ -237,8 +371,28 @@ function handleTail(ws, url) {
           setTimeout(() => { try { ws.close(1011, 'tail error'); } catch {}; conn.end(); }, 10);
           return;
         }
-        stream.on('data', (d) => ws.send(JSON.stringify({ type: 'data', data: d.toString('utf8') })));
-        stream.stderr.on('data', (d) => ws.send(JSON.stringify({ type: 'err', data: d.toString('utf8') })));
+        stream.on('data', (d) => {
+          const data = d.toString('utf8');
+          ws.send(JSON.stringify({ type: 'data', data }));
+          appendToLog({
+            id: uuidv4(),
+            sessionId,
+            timestamp: new Date().toISOString(),
+            type: 'stdout',
+            terminal_output: data
+          });
+        });
+        stream.stderr.on('data', (d) => {
+          const data = d.toString('utf8');
+          ws.send(JSON.stringify({ type: 'err', data }));
+          appendToLog({
+            id: uuidv4(),
+            sessionId,
+            timestamp: new Date().toISOString(),
+            type: 'stderr',
+            terminal_output: data
+          });
+        });
         stream.on('close', () => { try { ws.close(); } catch {}; conn.end(); });
         ws.on('close', () => { try { stream.end(); } catch {}; try { conn.end(); } catch {}; });
       });

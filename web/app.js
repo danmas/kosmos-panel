@@ -166,11 +166,13 @@ function openTerminal(server) {
   xterm.attachCustomKeyEventHandler((arg) => {
     if (arg.code === 'Enter' && arg.type === 'keydown') {
       const buffer = xterm.buffer.active;
-      const commandLine = buffer.getLine(buffer.cursorY).translateToString(true);
+      const commandLine = buffer.getLine(buffer.cursorY).translateToString(true).trim();
 
-      if (commandLine.includes('ai:')) {
+      if (commandLine.startsWith('ai:')) {
         ws.send(JSON.stringify({ type: 'ai_query', prompt: commandLine }));
         return false; // Блокируем отправку Enter через onData
+      } else if (commandLine) {
+        ws.send(JSON.stringify({ type: 'command_log', command: commandLine }));
       }
     }
     return true; // Разрешаем все остальные клавиши
@@ -266,11 +268,13 @@ function openTerminalWindow(server, mode, arg) {
     term.attachCustomKeyEventHandler((arg) => {
       if (arg.code === 'Enter' && arg.type === 'keydown') {
         const buffer = term.buffer.active;
-        const commandLine = buffer.getLine(buffer.cursorY).translateToString(true);
+        const commandLine = buffer.getLine(buffer.cursorY).translateToString(true).trim();
         
-        if (commandLine.includes('ai:')) {
+        if (commandLine.startsWith('ai:')) {
           ws.send(JSON.stringify({ type: 'ai_query', prompt: commandLine }));
           return false; // Блокируем отправку Enter через onData
+        } else if (commandLine) {
+          ws.send(JSON.stringify({ type: 'command_log', command: commandLine }));
         }
       }
       return true; // Разрешаем все остальные клавиши

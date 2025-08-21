@@ -24,7 +24,7 @@ app.get('/api/servers', (req, res) => {
 });
 
 app.get('/api/inventory', (req, res) => {
-  res.json({ servers: (inventory.servers || []).map((s) => ({ id: s.id, name: s.name, env: s.env })) });
+  res.json(inventory);
 });
 
 app.post('/api/reload', (req, res) => {
@@ -170,6 +170,20 @@ app.get('/api/test-ssh', async (req, res) => {
         SSH_AUTH_SOCK: process.env.SSH_AUTH_SOCK
       }
     }});
+  }
+});
+
+app.get('/api/logs', async (req, res) => {
+  const logFilePath = path.join(__dirname, '..', 'terminal_log.json');
+  try {
+    const data = await fs.readFile(logFilePath, 'utf8');
+    res.json(JSON.parse(data));
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      return res.json([]); // Файл не найден, это нормально. Отдаем пустой массив.
+    }
+    console.error('Error reading or parsing log file:', err);
+    res.status(500).json({ error: 'Failed to read or parse log file' });
   }
 });
 
