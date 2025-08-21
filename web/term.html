@@ -15,12 +15,98 @@
       .term { flex:1; background:#000; }
       .bar { padding:6px 10px; background:#0e1322; border-top:1px solid #1c2333; display:flex; gap:8px; }
       button { background:#1b2544; border:1px solid #223055; color:#e6ecff; border-radius:8px; padding:6px 10px; cursor:pointer; }
+      .term-container { position: relative; flex: 1; display: flex; }
+      .term { flex: 1; background: #000; }
+      .log-indicator {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 24px;
+        height: 24px;
+        background: #1b2544;
+        border: 1px solid #223055;
+        border-radius: 50%;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        opacity: 0.7;
+        transition: opacity 0.2s;
+        z-index: 10;
+      }
+      .log-indicator:hover { opacity: 1; }
+      .log-indicator.active { background: #2d4a87; opacity: 1; }
+      .log-panel {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 400px;
+        height: 100%;
+        background: #0e1322;
+        border-left: 1px solid #1c2333;
+        transform: translateX(100%);
+        transition: transform 0.3s ease;
+        z-index: 1000;
+        display: flex;
+        flex-direction: column;
+      }
+      .log-panel.visible { transform: translateX(0); }
+      .log-header {
+        padding: 8px 12px;
+        background: #1b2544;
+        border-bottom: 1px solid #223055;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .log-content {
+        flex: 1;
+        padding: 12px;
+        overflow-y: auto;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        line-height: 1.4;
+      }
+      .log-entry { margin-bottom: 16px; }
+      .log-entry-type {
+        color: #4a9eff;
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      .log-entry-content {
+        background: #0b0f1a;
+        padding: 8px;
+        border-radius: 4px;
+        border-left: 3px solid #4a9eff;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+      .log-ai-query { border-left-color: #ffa500; }
+      .log-stdin { border-left-color: #00ff00; }
+      .log-stdout { border-left-color: #4a9eff; }
     </style>
   </head>
   <body>
     <div class="wrap">
       <div class="top"><div class="title" id="t"></div><button id="close">Закрыть</button></div>
-      <div id="term" class="term"></div>
+      <div class="term-container">
+        <div id="term" class="term"></div>
+        <div class="log-indicator" id="logIndicator" title="Показать лог команды">📋</div>
+        <div class="log-panel" id="logPanel">
+          <div class="log-header">
+            <span>Лог команды</span>
+            <button onclick="hideLogPanel()" style="background:none;border:none;color:#e6ecff;cursor:pointer;">✕</button>
+          </div>
+          <div class="log-content" id="logContent">
+            <div style="color: #888; text-align: center; margin-top: 50px;">
+              Наведите курсор на команду в терминале
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="bar"><button id="fit">Подогнать</button></div>
     </div>
     <script>
@@ -98,8 +184,323 @@
 
       document.getElementById('close').onclick = () => { try { ws.close(); } catch {}; window.close(); };
       document.getElementById('fit').onclick = () => { try { fit.fit(); } catch {} };
+
+      // Ждем полной загрузки DOM
+      setTimeout(() => {
+        initializeLogPanel();
+      }, 100);
+
+      let currentLogEntries = [];
+      let logPanelVisible = false;
+
+      function initializeLogPanel() {
+        console.log('[DEBUG] Инициализация панели лога');
+        const indicator = document.getElementById('logIndicator');
+        if (!indicator) {
+          console.error('[DEBUG] Элемент logIndicator не найден!');
+          return;
+        }
+        console.log('[DEBUG] Элемент logIndicator найден:', indicator);
+        
+        // Настраиваем обработчики
+        setupLogIndicatorClick();
+        setupHoverEvents();
+      }
+
+      // Загружаем лог
+      async function loadTerminalLog() {
+        try {
+          const response = await fetch('/terminal_log.json');
+          // cache bust
+          const response2 = await fetch('/terminal_log.json?t=' + Date.now());
+          return await response2.json();
+        } catch (err) {
+          console.error('Ошибка загрузки лога:', err);
+          return [];
+        }
+      }
+
+      // Поиск команды под курсором
+      function findCommandAtCursor(term, row) {
+        const buffer = term.buffer.active;
+        console.log(`[DEBUG] Ищем команду в строке ${row}, длина буфера: ${buffer.length}`);
+        
+        if (row < 0 || row >= buffer.length) {
+          console.log(`[DEBUG] Строка ${row} вне диапазона буфера`);
+          return null;
+        }
+
+        // Показываем контекст - несколько строк вокруг
+        console.log(`[DEBUG] Контекст буфера:`);
+        for (let k = Math.max(0, row - 3); k <= Math.min(buffer.length - 1, row + 3); k++) {
+          const contextLine = buffer.getLine(k).translateToString(true);
+          console.log(`[DEBUG] Строка ${k}: "${contextLine}"`);
+        }
+
+        // Ищем последний промпт перед текущей строкой
+        for (let i = row; i >= 0; i--) {
+          const line = buffer.getLine(i).translateToString(true);
+          const promptEndIndex = Math.max(line.lastIndexOf('$'), line.lastIndexOf('#'), line.lastIndexOf('>'));
+
+          console.log(`[DEBUG] Проверяем строку ${i}: "${line}", promptEndIndex: ${promptEndIndex}`);
+
+          if (promptEndIndex !== -1) {
+            // Нашли строку с промптом, извлекаем команду
+            let commandParts = [line.substring(promptEndIndex + 1).trim()];
+            for (let j = i + 1; j <= row; j++) {
+              commandParts.push(buffer.getLine(j).translateToString(true).trim());
+            }
+            const fullCommand = commandParts.join(' ').trim();
+            
+            // Убираем ANSI-коды и прочий мусор
+            const cleanCommand = fullCommand.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '').replace(/[\b\u0007]/g, '');
+            
+            console.log(`[DEBUG] Полная команда: "${fullCommand}"`);
+            console.log(`[DEBUG] Очищенная команда: "${cleanCommand}"`);
+            
+            if (cleanCommand === '' && i === row) return ' '; 
+            return cleanCommand || null;
+          }
+        }
+        console.log(`[DEBUG] Промпт не найден`);
+        return null;
+      }
+
+      // Поиск последней команды в буфере
+      function findLastCommand(term) {
+        const buffer = term.buffer.active;
+        console.log(`[DEBUG] Ищем последнюю команду в буфере, длина: ${buffer.length}`);
+        
+        // Ищем с конца буфера
+        for (let i = buffer.length - 1; i >= 0; i--) {
+          const line = buffer.getLine(i).translateToString(true);
+          const promptEndIndex = Math.max(line.lastIndexOf('$'), line.lastIndexOf('#'), line.lastIndexOf('>'));
+          
+          if (promptEndIndex !== -1) {
+            console.log(`[DEBUG] Найден промпт в строке ${i}: "${line}"`);
+            
+            // Извлекаем команду после промпта
+            const commandPart = line.substring(promptEndIndex + 1).trim();
+            const cleanCommand = commandPart.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '').replace(/[\b\u0007]/g, '');
+            
+            console.log(`[DEBUG] Последняя команда: "${cleanCommand}"`);
+            return cleanCommand || null;
+          }
+        }
+        
+        console.log('[DEBUG] Последний промпт не найден');
+        return null;
+      }
+
+      // Поиск записей в логе для команды
+      function findLogEntriesForCommand(log, command) {
+        if (!command) return [];
+        command = command.trim();
+        if (!command) return [];
+        
+        console.log(`[DEBUG] Ищем команду в логе: "${command}"`);
+        console.log(`[DEBUG] Всего записей в логе: ${log.length}`);
+        
+        const entries = [];
+        
+        // Ищем последнюю stdin запись с такой командой
+        for (let i = log.length - 1; i >= 0; i--) {
+          const entry = log[i];
+          if (entry.type === 'stdin' && entry.executed_command) {
+            console.log(`[DEBUG] Проверяем stdin запись: "${entry.executed_command}" vs "${command}"`);
+            if (entry.executed_command.trim() === command) {
+              console.log(`[DEBUG] Найдена подходящая команда!`);
+              // Нашли команду, теперь собираем все связанные записи
+              const sessionId = entry.sessionId;
+              
+              // Ищем ai_query перед этой командой
+              if (entry.user_ai_query) {
+                 for (let j = i - 1; j >= 0; j--) {
+                  const prevEntry = log[j];
+                  if (prevEntry.sessionId === sessionId && prevEntry.type === 'ai_query') {
+                    if (prevEntry.user_ai_query === entry.user_ai_query) {
+                      entries.unshift(prevEntry);
+                      break;
+                    }
+                  }
+                }
+              }
+              
+              // Добавляем саму команду
+              entries.push(entry);
+              
+              // Ищем stdout после команды
+              for (let j = i + 1; j < log.length; j++) {
+                const nextEntry = log[j];
+                if (nextEntry.sessionId === sessionId) {
+                  if (nextEntry.type === 'stdout' || nextEntry.type === 'stderr') {
+                    entries.push(nextEntry);
+                  } else if (nextEntry.type === 'stdin') {
+                    // Дошли до следующей команды, останавливаемся
+                    break;
+                  }
+                }
+              }
+              break; // Нашли последнее выполнение, выходим
+            }
+          }
+        }
+        
+        console.log(`[DEBUG] Найдено записей: ${entries.length}`);
+        return entries;
+      }
+
+
+      // Отображение лога
+      function displayLogEntries(entries) {
+        const logContent = document.getElementById('logContent');
+        
+        if (entries.length === 0) {
+          logContent.innerHTML = '<div style="color: #888; text-align: center; margin-top: 50px;">Лог для этой команды не найден</div>';
+          return;
+        }
+        
+        const html = entries.map(entry => {
+          let typeLabel, content, className;
+          
+          switch (entry.type) {
+            case 'ai_query':
+              typeLabel = '🤖 AI Запрос';
+              content = entry.user_ai_query;
+              className = 'log-ai-query';
+              break;
+            case 'stdin':
+              typeLabel = '⚡ Команда';
+              content = entry.executed_command;
+              className = 'log-stdin';
+              break;
+            case 'stdout':
+              typeLabel = '📤 Вывод';
+              // Убираем ANSI escape codes
+              content = (entry.terminal_output || '').replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '');
+              className = 'log-stdout';
+              break;
+            case 'stderr':
+              typeLabel = '🔥 Ошибка';
+              content = (entry.terminal_output || '').replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '');
+              className = 'log-stderr'; // Нужно добавить стиль
+              break;
+            default:
+              return '';
+          }
+          
+          // Basic HTML escaping
+          content = content.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+          return `
+            <div class="log-entry">
+              <div class="log-entry-type">${typeLabel}</div>
+              <pre class="log-entry-content ${className}">${content}</pre>
+            </div>
+          `;
+        }).join('');
+        
+        logContent.innerHTML = html;
+      }
+
+      // Показать/скрыть панель
+      function showLogPanel() {
+        const panel = document.getElementById('logPanel');
+        const indicator = document.getElementById('logIndicator');
+        panel.classList.add('visible');
+        indicator.classList.add('active');
+        logPanelVisible = true;
+      }
+
+      function hideLogPanel() {
+        const panel = document.getElementById('logPanel');
+        const indicator = document.getElementById('logIndicator');
+        panel.classList.remove('visible');
+        indicator.classList.remove('active');
+        logPanelVisible = false;
+      }
+
+      let lastHoveredRow = -1;
+      let hoverTimeout = null;
+
+      // Эту функцию переместим в initializeLogPanel
+      function setupLogIndicatorClick() {
+        const indicator = document.getElementById('logIndicator');
+        if (indicator) {
+          indicator.onclick = async () => {
+            console.log('[DEBUG] Клик на индикатор лога');
+            if (logPanelVisible) {
+              hideLogPanel();
+            } else {
+               showLogPanel();
+               // Принудительно обновим лог для текущей позиции курсора
+               updateLogForPosition(term.buffer.active.cursorY);
+            }
+          };
+        }
+      }
+
+      async function updateLogForPosition(row) {
+        console.log(`[DEBUG] updateLogForPosition вызван для строки: ${row}`);
+        if (isNaN(row) || row < 0) {
+          console.log('[DEBUG] Некорректная строка, используем позицию курсора');
+          row = term.buffer.active.cursorY;
+        }
+        try {
+          const log = await loadTerminalLog();
+          let command = findCommandAtCursor(term, row);
+          
+          // Если команда не найдена, ищем последний промпт в буфере
+          if (!command) {
+            console.log('[DEBUG] Команда не найдена, ищем последний промпт');
+            command = findLastCommand(term);
+          }
+          
+          console.log(`[DEBUG] Найденная команда: "${command}"`);
+          const entries = findLogEntriesForCommand(log, command);
+          displayLogEntries(entries);
+          if (!logPanelVisible && entries.length > 0) {
+             // Можно сделать индикатор активным, если есть лог
+          }
+        } catch (error) {
+          console.error('[DEBUG] Ошибка в updateLogForPosition:', error);
+        }
+      }
+
+      function setupHoverEvents() {
+        // Обработка hover над терминалом для автообновления лога
+        const termElement = term.element;
+        if (termElement) {
+          termElement.addEventListener('mousemove', (e) => {
+            try {
+              const charHeight = term._core._renderService.dimensions.actualCellHeight;
+              if(charHeight <= 0) return;
+
+              const terminalRect = termElement.getBoundingClientRect();
+              const relativeY = e.clientY - terminalRect.top;
+              const row = Math.floor(relativeY / charHeight) + term.buffer.active.viewportY;
+
+              if (row !== lastHoveredRow && !isNaN(row)) {
+                lastHoveredRow = row;
+                if (hoverTimeout) clearTimeout(hoverTimeout);
+                
+                hoverTimeout = setTimeout(() => {
+                  if (logPanelVisible) {
+                     updateLogForPosition(row);
+                  }
+                }, 150); // Задержка в 150ms
+              }
+            } catch (err) {
+              console.error('[DEBUG] Ошибка в mousemove:', err);
+            }
+          });
+          console.log('[DEBUG] Hover события настроены');
+        } else {
+          console.error('[DEBUG] term.element не найден!');
+        }
+      }
     </script>
   </body>
-  </html>
+</html>
 
 
