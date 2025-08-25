@@ -109,6 +109,13 @@ function handleTerminal(ws, url) {
         // Переменные для связывания записей
         let currentAiQueryId = null;
         let currentStdinId = null;
+        
+        // Информация о сервере для логирования
+        const serverInfo = {
+          serverId: serverId,
+          serverName: server.name || serverId,
+          serverHost: server.ssh.host
+        };
 
         // Проверяем, есть ли промпт в буфере (команда завершилась)
         const checkForPromptAndFlush = () => {
@@ -144,7 +151,8 @@ function handleTerminal(ws, url) {
                   sessionId,
                   timestamp: new Date().toISOString(),
                   type: 'stdout',
-                  terminal_output: cleanOutput
+                  terminal_output: cleanOutput,
+                  ...serverInfo
                 };
                 
                 // Связываем stdout с предыдущей stdin командой
@@ -186,7 +194,8 @@ function handleTerminal(ws, url) {
                 sessionId,
                 timestamp: new Date().toISOString(),
                 type: 'stdin',
-                executed_command: command
+                executed_command: command,
+                ...serverInfo
               };
               
               // Связываем stdin с AI запросом, если есть
@@ -211,7 +220,8 @@ function handleTerminal(ws, url) {
                 sessionId,
                 timestamp: new Date().toISOString(),
                 type: 'ai_query',
-                user_ai_query: aiPrompt
+                user_ai_query: aiPrompt,
+                ...serverInfo
               });
               
               // Сохраняем ID для связи с будущей stdin записью
@@ -335,7 +345,8 @@ function handleTerminal(ws, url) {
                       type: 'stdin',
                       executed_command: commandToExecute,
                       user_ai_query: aiPrompt,
-                      ai_query_id: currentAiQueryId
+                      ai_query_id: currentAiQueryId,
+                      ...serverInfo
                     });
                     
                     // Сохраняем для связи с будущим stdout
@@ -380,7 +391,8 @@ function handleTerminal(ws, url) {
                 sessionId,
                 timestamp: new Date().toISOString(),
                 type: 'stderr',
-                terminal_output: cleanStderr
+                terminal_output: cleanStderr,
+                ...serverInfo
               });
             }
             stderrBuffer = '';
@@ -396,7 +408,8 @@ function handleTerminal(ws, url) {
                 sessionId,
                 timestamp: new Date().toISOString(),
                 type: 'stdout',
-                terminal_output: cleanOutput
+                terminal_output: cleanOutput,
+                ...serverInfo
               });
             }
           }
@@ -409,7 +422,8 @@ function handleTerminal(ws, url) {
                 sessionId,
                 timestamp: new Date().toISOString(),
                 type: 'stderr',
-                terminal_output: cleanStderr
+                terminal_output: cleanStderr,
+                ...serverInfo
               });
             }
           }
@@ -427,7 +441,8 @@ function handleTerminal(ws, url) {
                 sessionId,
                 timestamp: new Date().toISOString(),
                 type: 'stdout',
-                terminal_output: cleanOutput
+                terminal_output: cleanOutput,
+                ...serverInfo
               });
             }
           }
@@ -440,7 +455,8 @@ function handleTerminal(ws, url) {
                 sessionId,
                 timestamp: new Date().toISOString(),
                 type: 'stderr',
-                terminal_output: cleanStderr
+                terminal_output: cleanStderr,
+                ...serverInfo
               });
             }
           }

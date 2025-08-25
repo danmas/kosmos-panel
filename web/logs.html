@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="ru">
-  <head>
+<head>
     <meta charset="utf-8" />
     <title>Лог команд терминала</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <style>
+  <style>
       html, body { height:100%; margin:0; background:#0b0f1a; color:#e6ecff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
       .wrap { height:100%; display:flex; flex-direction:column; }
       .header { 
@@ -153,19 +153,22 @@
         text-align:center; 
         margin-top:100px; 
         color:#4a9eff; 
-      }
-    </style>
-  </head>
-  <body>
+    }
+  </style>
+</head>
+<body>
     <div class="wrap">
       <div class="header">
         <div class="title">Лог команд терминала</div>
-                  <div class="nav-controls">
-            <div class="nav-info" id="navInfo">Загрузка...</div>
-            <button onclick="location.href='/raw-logs.html'">📄 Raw JSON</button>
-            <button onclick="location.href='/'">← Главная</button>
-            <button onclick="refreshLogs()">Обновить</button>
-          </div>
+                          <div class="nav-controls">
+          <div class="nav-info" id="navInfo">Загрузка...</div>
+          <select id="serverFilter" onchange="applyServerFilter()" style="background:#1b2544; color:#e6ecff; border:1px solid #223055; border-radius:6px; padding:6px;">
+            <option value="">Все серверы</option>
+          </select>
+          <button onclick="location.href='/raw-logs.html'">📄 Raw JSON</button>
+          <button onclick="location.href='/'">← Главная</button>
+          <button onclick="refreshLogs()">Обновить</button>
+        </div>
       </div>
       
       <div class="main">
@@ -198,6 +201,8 @@
       let allLogs = [];
       let currentGroupIndex = -1;
       let logGroups = [];
+      let filteredGroups = [];
+      let currentServerFilter = '';
 
       async function loadLogs(preserveSelection = false) {
         try {
@@ -209,14 +214,15 @@
           
           // Группируем записи по связанным командам
           groupLogs();
-          renderLogList();
+          updateServerFilter();
+          applyServerFilter();
           
           // Восстанавливаем позицию или выбираем последнюю запись
-          if (logGroups.length > 0) {
-            if (preserveSelection && previousIndex >= 0 && previousIndex < logGroups.length) {
+          if (filteredGroups.length > 0) {
+            if (preserveSelection && previousIndex >= 0 && previousIndex < filteredGroups.length) {
               selectGroup(previousIndex);
             } else if (!preserveSelection) {
-              selectGroup(logGroups.length - 1);
+              selectGroup(filteredGroups.length - 1);
             }
           }
           
@@ -288,15 +294,60 @@
         logGroups.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
       }
 
+      function updateServerFilter() {
+        const serverSet = new Set();
+        allLogs.forEach(log => {
+          if (log.serverId) {
+            serverSet.add(log.serverId);
+          }
+        });
+        
+        const filterEl = document.getElementById('serverFilter');
+        const currentValue = filterEl.value;
+        
+        filterEl.innerHTML = '<option value="">Все серверы</option>';
+        Array.from(serverSet).sort().forEach(serverId => {
+          const option = document.createElement('option');
+          option.value = serverId;
+          option.textContent = serverId;
+          filterEl.appendChild(option);
+        });
+        
+        if (serverSet.has(currentValue)) {
+          filterEl.value = currentValue;
+          currentServerFilter = currentValue;
+        }
+      }
+
+      function applyServerFilter() {
+        const filterEl = document.getElementById('serverFilter');
+        currentServerFilter = filterEl.value;
+        
+        if (currentServerFilter) {
+          filteredGroups = logGroups.filter(group => 
+            group.entries.some(entry => entry.serverId === currentServerFilter)
+          );
+        } else {
+          filteredGroups = [...logGroups];
+        }
+        
+        renderLogList();
+        if (filteredGroups.length > 0 && currentGroupIndex >= filteredGroups.length) {
+          currentGroupIndex = filteredGroups.length - 1;
+          selectGroup(currentGroupIndex);
+        }
+        updateNavInfo();
+      }
+
       function renderLogList() {
         const listEl = document.getElementById('logList');
         
-        if (logGroups.length === 0) {
+        if (filteredGroups.length === 0) {
           listEl.innerHTML = '<div class="empty-state">Нет записей в логе</div>';
           return;
         }
 
-        const html = logGroups.map((group, index) => {
+        const html = filteredGroups.map((group, index) => {
           const firstEntry = group.entries[0];
           const time = new Date(firstEntry.timestamp).toLocaleString('ru-RU', {
             day: '2-digit',
@@ -308,16 +359,18 @@
 
           let typeLabel, preview, className;
           
+          const serverLabel = firstEntry.serverName ? ` [${firstEntry.serverName}]` : '';
+          
           if (firstEntry.type === 'ai_query') {
-            typeLabel = '🤖 AI Запрос';
+            typeLabel = `🤖 AI Запрос${serverLabel}`;
             preview = firstEntry.user_ai_query;
             className = 'ai-query';
           } else if (firstEntry.type === 'stdin') {
-            typeLabel = '⚡ Команда';
+            typeLabel = `⚡ Команда${serverLabel}`;
             preview = firstEntry.executed_command;
             className = 'stdin';
           } else {
-            typeLabel = '📤 Вывод';
+            typeLabel = `📤 Вывод${serverLabel}`;
             preview = (firstEntry.terminal_output || '').substring(0, 50);
             className = 'stdout';
           }
@@ -335,11 +388,11 @@
       }
 
       function selectGroup(index) {
-        if (index < 0 || index >= logGroups.length) return;
+        if (index < 0 || index >= filteredGroups.length) return;
         
         currentGroupIndex = index;
         renderLogList(); // Обновляем активный элемент
-        renderGroupDetails(logGroups[index]);
+        renderGroupDetails(filteredGroups[index]);
         updateNavButtons();
       }
 
@@ -354,24 +407,26 @@
         const html = group.entries.map(entry => {
           let typeLabel, content, className;
           
+          const serverInfo = entry.serverName ? ` [${entry.serverName}]` : '';
+          
           switch (entry.type) {
             case 'ai_query':
-              typeLabel = '🤖 AI Запрос';
+              typeLabel = `🤖 AI Запрос${serverInfo}`;
               content = entry.user_ai_query;
               className = 'ai-query';
               break;
             case 'stdin':
-              typeLabel = '⚡ Команда';
+              typeLabel = `⚡ Команда${serverInfo}`;
               content = entry.executed_command;
               className = 'stdin';
               break;
             case 'stdout':
-              typeLabel = '📤 Вывод';
+              typeLabel = `📤 Вывод${serverInfo}`;
               content = (entry.terminal_output || '').replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '');
               className = 'stdout';
               break;
             case 'stderr':
-              typeLabel = '🔥 Ошибка';
+              typeLabel = `🔥 Ошибка${serverInfo}`;
               content = (entry.terminal_output || '').replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '');
               className = 'stderr';
               break;
@@ -381,13 +436,16 @@
 
           const entryTime = new Date(entry.timestamp).toLocaleString('ru-RU');
           
-          // Добавляем информацию о связях
+          // Добавляем информацию о связях и сервере
           let linkInfo = '';
           if (entry.ai_query_id) {
             linkInfo += `<div style="font-size:10px; color:#888; margin-top:4px;">🔗 AI Query ID: ${entry.ai_query_id}</div>`;
           }
           if (entry.stdin_id) {
             linkInfo += `<div style="font-size:10px; color:#888; margin-top:4px;">🔗 Command ID: ${entry.stdin_id}</div>`;
+          }
+          if (entry.serverId) {
+            linkInfo += `<div style="font-size:10px; color:#888; margin-top:4px;">🖥️ Server: ${entry.serverId}${entry.serverHost ? ` (${entry.serverHost})` : ''}</div>`;
           }
           
           return `
@@ -406,7 +464,7 @@
 
       function navigateEntry(direction) {
         const newIndex = currentGroupIndex + direction;
-        if (newIndex >= 0 && newIndex < logGroups.length) {
+        if (newIndex >= 0 && newIndex < filteredGroups.length) {
           selectGroup(newIndex);
           
           // Прокручиваем список к активному элементу
@@ -422,15 +480,16 @@
         const nextBtn = document.getElementById('nextBtn');
         
         prevBtn.disabled = currentGroupIndex <= 0;
-        nextBtn.disabled = currentGroupIndex >= logGroups.length - 1;
+        nextBtn.disabled = currentGroupIndex >= filteredGroups.length - 1;
       }
 
       function updateNavInfo() {
         const infoEl = document.getElementById('navInfo');
-        if (logGroups.length === 0) {
+        if (filteredGroups.length === 0) {
           infoEl.textContent = 'Нет записей';
         } else {
-          infoEl.textContent = `${currentGroupIndex + 1} из ${logGroups.length}`;
+          const filterInfo = currentServerFilter ? ` [${currentServerFilter}]` : '';
+          infoEl.textContent = `${currentGroupIndex + 1} из ${filteredGroups.length}${filterInfo}`;
         }
       }
 
@@ -459,5 +518,5 @@
       // Загружаем при старте
       loadLogs();
     </script>
-  </body>
+</body>
 </html>
