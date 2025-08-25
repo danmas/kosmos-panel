@@ -155,7 +155,10 @@
               const promptEndIndex = Math.max(line.lastIndexOf('$'), line.lastIndexOf('#'), line.lastIndexOf('>'));
 
               if (promptEndIndex !== -1) {
-                const commandPart = line.substring(promptEndIndex);
+                const commandPart = line.substring(promptEndIndex + 1).trim();
+                
+                // Убираем ANSI коды из команды
+                const cleanCommand = commandPart.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '').replace(/[\b\u0007]/g, '').trim();
                 
                 const prefixText = aiCommandPrefix.slice(0, -1);
                 const prefixSep = aiCommandPrefix.slice(-1);
@@ -164,17 +167,18 @@
                 const match = commandPart.match(commandRegex);
 
                 if (match) {
+                  // AI команда
                   const aiPrompt = commandPart.substring(match.index + match[0].length).trim();
                   term.write('\r\n\x1b[1;33mЗапрос к AI: ' + aiPrompt + '\x1b[0m\r\n');
                   
                   ws.send(JSON.stringify({ type: 'ai_query', prompt: line }));
                   return false; // Блокируем стандартную отправку Enter
+                } else if (cleanCommand) {
+                  // Обычная команда - логируем её
+                  console.log(`[DEBUG] Логируем обычную команду: "${cleanCommand}"`);
+                  ws.send(JSON.stringify({ type: 'command_log', command: cleanCommand }));
                 }
-              }
-              
-              // Если нашли shell prompt без ai: - останавливаемся
-              if (promptEndIndex !== -1) {
-                break;
+                break; // Нашли промпт, выходим
               }
             }
           }
@@ -210,10 +214,8 @@
       // Загружаем лог
       async function loadTerminalLog() {
         try {
-          const response = await fetch('/terminal_log.json');
-          // cache bust
-          const response2 = await fetch('/terminal_log.json?t=' + Date.now());
-          return await response2.json();
+          const response = await fetch('/api/logs?t=' + Date.now());
+          return await response.json();
         } catch (err) {
           console.error('Ошибка загрузки лога:', err);
           return [];
@@ -292,6 +294,23 @@
         return null;
       }
 
+      // Поиск последней команды в логе
+      function findLastLogEntry(log) {
+        console.log(`[DEBUG] Ищем последнюю команду в логе, всего записей: ${log.length}`);
+        
+        // Ищем последнюю запись типа 'stdin' (команда)
+        for (let i = log.length - 1; i >= 0; i--) {
+          const entry = log[i];
+          if (entry.type === 'stdin' && entry.executed_command) {
+            console.log(`[DEBUG] Найдена последняя команда: "${entry.executed_command}"`);
+            return entry;
+          }
+        }
+        
+        console.log('[DEBUG] В логе нет команд');
+        return null;
+      }
+
       // Поиск записей в логе для команды
       function findLogEntriesForCommand(log, command) {
         if (!command) return [];
@@ -356,7 +375,14 @@
         const logContent = document.getElementById('logContent');
         
         if (entries.length === 0) {
-          logContent.innerHTML = '<div style="color: #888; text-align: center; margin-top: 50px;">Лог для этой команды не найден</div>';
+          logContent.innerHTML = `
+            <div style="color: #888; text-align: center; margin-top: 50px;">
+              <div>Лог для этой команды не найден</div>
+              <div style="font-size: 11px; margin-top: 10px; opacity: 0.7;">
+                Выполните команду в терминале и попробуйте снова
+              </div>
+            </div>
+          `;
           return;
         }
         
@@ -442,25 +468,19 @@
 
       async function updateLogForPosition(row) {
         console.log(`[DEBUG] updateLogForPosition вызван для строки: ${row}`);
-        if (isNaN(row) || row < 0) {
-          console.log('[DEBUG] Некорректная строка, используем позицию курсора');
-          row = term.buffer.active.cursorY;
-        }
         try {
           const log = await loadTerminalLog();
-          let command = findCommandAtCursor(term, row);
           
-          // Если команда не найдена, ищем последний промпт в буфере
-          if (!command) {
-            console.log('[DEBUG] Команда не найдена, ищем последний промпт');
-            command = findLastCommand(term);
-          }
+          // Новая логика: показываем последнюю команду из лога
+          const lastEntry = findLastLogEntry(log);
           
-          console.log(`[DEBUG] Найденная команда: "${command}"`);
-          const entries = findLogEntriesForCommand(log, command);
-          displayLogEntries(entries);
-          if (!logPanelVisible && entries.length > 0) {
-             // Можно сделать индикатор активным, если есть лог
+          if (lastEntry) {
+            console.log(`[DEBUG] Показываем последнюю команду из лога: "${lastEntry.executed_command}"`);
+            const entries = findLogEntriesForCommand(log, lastEntry.executed_command);
+            displayLogEntries(entries);
+          } else {
+            console.log('[DEBUG] В логе нет команд');
+            displayLogEntries([]);
           }
         } catch (error) {
           console.error('[DEBUG] Ошибка в updateLogForPosition:', error);

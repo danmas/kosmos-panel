@@ -105,6 +105,7 @@ function handleTerminal(ws, url) {
 
         let stdoutBuffer = '';
         let stderrBuffer = '';
+        let flushTimeout = null;
 
         const flushBuffers = () => {
           const cleanStdout = stripAnsi(stdoutBuffer).trim();
@@ -130,6 +131,13 @@ function handleTerminal(ws, url) {
             });
           }
           stderrBuffer = '';
+        };
+
+        const scheduleFlush = () => {
+          if (flushTimeout) clearTimeout(flushTimeout);
+          flushTimeout = setTimeout(() => {
+            flushBuffers();
+          }, 500); // Flush через 500ms после последнего вывода
         };
 
         ws.on('message', async (msg) => {
@@ -307,11 +315,13 @@ function handleTerminal(ws, url) {
           const data = d.toString('utf8');
           ws.send(JSON.stringify({ type: 'data', data }));
           stdoutBuffer += data;
+          scheduleFlush(); // Планируем flush через 500ms
         });
         stream.stderr.on('data', (d) => {
           const data = d.toString('utf8');
           ws.send(JSON.stringify({ type: 'err', data }));
           stderrBuffer += data;
+          scheduleFlush(); // Планируем flush через 500ms
         });
         stream.on('close', () => { 
           flushBuffers();
