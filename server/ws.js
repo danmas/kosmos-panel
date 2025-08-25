@@ -105,39 +105,66 @@ function handleTerminal(ws, url) {
 
         let stdoutBuffer = '';
         let stderrBuffer = '';
-        let flushTimeout = null;
+        
+        // Переменные для связывания записей
+        let currentAiQueryId = null;
+        let currentStdinId = null;
 
-        const flushBuffers = () => {
-          const cleanStdout = stripAnsi(stdoutBuffer).trim();
-          if (cleanStdout) {
-            appendToLog({
-              id: uuidv4(),
-              sessionId,
-              timestamp: new Date().toISOString(),
-              type: 'stdout',
-              terminal_output: cleanStdout
-            });
+        // Проверяем, есть ли промпт в буфере (команда завершилась)
+        const checkForPromptAndFlush = () => {
+          // Ищем промпт типа "user@host:path$ " или "root@host:path# "
+          const promptRegex = /\w+@\w+[^$#>]*[\$#>]\s*$/m;
+          
+          if (promptRegex.test(stdoutBuffer)) {
+            console.log('[DEBUG] Обнаружен промпт, сохраняем вывод команды в лог');
+            
+            // Разделяем буфер на вывод команды и промпт
+            const lines = stdoutBuffer.split('\n');
+            let commandOutput = '';
+            let promptFound = false;
+            
+            for (let i = 0; i < lines.length; i++) {
+              if (promptRegex.test(lines[i])) {
+                // Нашли строку с промптом
+                promptFound = true;
+                break;
+              } else {
+                commandOutput += lines[i] + '\n';
+              }
+            }
+            
+            // Записываем только вывод команды (без промпта)
+            if (commandOutput.trim()) {
+              const cleanOutput = stripAnsi(commandOutput).trim();
+              
+              // Фильтруем эхо ввода ai: команд
+              if (cleanOutput && !cleanOutput.includes('ai:')) {
+                const logEntry = {
+                  id: uuidv4(),
+                  sessionId,
+                  timestamp: new Date().toISOString(),
+                  type: 'stdout',
+                  terminal_output: cleanOutput
+                };
+                
+                // Связываем stdout с предыдущей stdin командой
+                if (currentStdinId) {
+                  logEntry.stdin_id = currentStdinId;
+                }
+                
+                appendToLog(logEntry);
+                console.log('[DEBUG] Записан stdout с stdin_id:', currentStdinId);
+              } else if (cleanOutput.includes('ai:')) {
+                console.log('[DEBUG] Отфильтровано эхо ai: команды:', cleanOutput);
+              }
+            }
+            
+            // Сбрасываем ID после записи stdout
+            currentStdinId = null;
+            
+            // Очищаем буфер
+            stdoutBuffer = '';
           }
-          stdoutBuffer = '';
-
-          const cleanStderr = stripAnsi(stderrBuffer).trim();
-          if (cleanStderr) {
-            appendToLog({
-              id: uuidv4(),
-              sessionId,
-              timestamp: new Date().toISOString(),
-              type: 'stderr',
-              terminal_output: cleanStderr
-            });
-          }
-          stderrBuffer = '';
-        };
-
-        const scheduleFlush = () => {
-          if (flushTimeout) clearTimeout(flushTimeout);
-          flushTimeout = setTimeout(() => {
-            flushBuffers();
-          }, 500); // Flush через 500ms после последнего вывода
         };
 
         ws.on('message', async (msg) => {
@@ -152,29 +179,43 @@ function handleTerminal(ws, url) {
             } else if (type === 'close') {
               stream.end();
             } else if (type === 'command_log' && command) {
-              flushBuffers(); // Log output of previous command first
-              appendToLog({
-                id: uuidv4(),
+              // Записываем команду в лог
+              const stdinId = uuidv4();
+              const logEntry = {
+                id: stdinId,
                 sessionId,
                 timestamp: new Date().toISOString(),
                 type: 'stdin',
                 executed_command: command
-              });
+              };
+              
+              // Связываем stdin с AI запросом, если есть
+              if (currentAiQueryId) {
+                logEntry.ai_query_id = currentAiQueryId;
+                currentAiQueryId = null; // Сбрасываем после использования
+              }
+              
+              currentStdinId = stdinId; // Сохраняем для связи с stdout
+              appendToLog(logEntry);
             } else if (type === 'ai_query' && prompt) {
-              flushBuffers(); // Log output of previous command first
               // Очищаем текущую строку в shell (удаляем команду ai:...)
               // Старый метод: stream.write('\x15'); // CTRL+U, не работает на Windows
               // Новый, универсальный метод:
               stream.write('\b'.repeat(prompt.length));
               
               const aiPrompt = prompt.substring(prompt.indexOf('ai:') + 3).trim();
+              const aiQueryId = uuidv4();
+              
               appendToLog({
-                id: uuidv4(),
+                id: aiQueryId,
                 sessionId,
                 timestamp: new Date().toISOString(),
                 type: 'ai_query',
                 user_ai_query: aiPrompt
               });
+              
+              // Сохраняем ID для связи с будущей stdin записью
+              currentAiQueryId = aiQueryId;
 
               try {
                 const aiServerUrl = process.env.AI_SERVER_URL || 'http://localhost:3002/api/send-request';
@@ -284,14 +325,22 @@ function handleTerminal(ws, url) {
                     commandToExecute = commandToExecute.replace(/^```[a-z]*\s*|\s*```$/g, '').trim();
                     
                     stream.write(commandToExecute + '\r');
+                    
+                    // Создаем связанную stdin запись
+                    const stdinId = uuidv4();
                     appendToLog({
-                      id: uuidv4(),
+                      id: stdinId,
                       sessionId,
                       timestamp: new Date().toISOString(),
                       type: 'stdin',
                       executed_command: commandToExecute,
-                      user_ai_query: aiPrompt
+                      user_ai_query: aiPrompt,
+                      ai_query_id: currentAiQueryId
                     });
+                    
+                    // Сохраняем для связи с будущим stdout
+                    currentStdinId = stdinId;
+                    currentAiQueryId = null; // Сбрасываем после использования
                   } else {
                     throw new Error(aiResult.error || 'Invalid response from AI API');
                   }
@@ -315,21 +364,87 @@ function handleTerminal(ws, url) {
           const data = d.toString('utf8');
           ws.send(JSON.stringify({ type: 'data', data }));
           stdoutBuffer += data;
-          scheduleFlush(); // Планируем flush через 500ms
+          checkForPromptAndFlush(); // Проверяем, завершилась ли команда
         });
         stream.stderr.on('data', (d) => {
           const data = d.toString('utf8');
           ws.send(JSON.stringify({ type: 'err', data }));
           stderrBuffer += data;
-          scheduleFlush(); // Планируем flush через 500ms
+          
+          // Для stderr используем простой таймер, так как ошибки не содержат промптов
+          setTimeout(() => {
+            const cleanStderr = stripAnsi(stderrBuffer).trim();
+            if (cleanStderr) {
+              appendToLog({
+                id: uuidv4(),
+                sessionId,
+                timestamp: new Date().toISOString(),
+                type: 'stderr',
+                terminal_output: cleanStderr
+              });
+            }
+            stderrBuffer = '';
+          }, 500);
         });
         stream.on('close', () => { 
-          flushBuffers();
+          // Принудительно сохраняем оставшийся вывод при закрытии
+          if (stdoutBuffer.trim()) {
+            const cleanOutput = stripAnsi(stdoutBuffer).trim();
+            if (cleanOutput) {
+              appendToLog({
+                id: uuidv4(),
+                sessionId,
+                timestamp: new Date().toISOString(),
+                type: 'stdout',
+                terminal_output: cleanOutput
+              });
+            }
+          }
+          
+          if (stderrBuffer.trim()) {
+            const cleanStderr = stripAnsi(stderrBuffer).trim();
+            if (cleanStderr) {
+              appendToLog({
+                id: uuidv4(),
+                sessionId,
+                timestamp: new Date().toISOString(),
+                type: 'stderr',
+                terminal_output: cleanStderr
+              });
+            }
+          }
+          
           try { ws.close(); } catch {}; 
           conn.end(); 
         });
         ws.on('close', () => { 
-          flushBuffers();
+          // Аналогично для закрытия WebSocket
+          if (stdoutBuffer.trim()) {
+            const cleanOutput = stripAnsi(stdoutBuffer).trim();
+            if (cleanOutput) {
+              appendToLog({
+                id: uuidv4(),
+                sessionId,
+                timestamp: new Date().toISOString(),
+                type: 'stdout',
+                terminal_output: cleanOutput
+              });
+            }
+          }
+          
+          if (stderrBuffer.trim()) {
+            const cleanStderr = stripAnsi(stderrBuffer).trim();
+            if (cleanStderr) {
+              appendToLog({
+                id: uuidv4(),
+                sessionId,
+                timestamp: new Date().toISOString(),
+                type: 'stderr',
+                terminal_output: cleanStderr
+              });
+            }
+          }
+          
           try { stream.end(); } catch {}; 
           try { conn.end(); } catch {}; 
         });

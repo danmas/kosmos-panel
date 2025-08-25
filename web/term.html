@@ -311,7 +311,7 @@
         return null;
       }
 
-      // Поиск записей в логе для команды
+      // Поиск записей в логе для команды (с использованием связей по ID)
       function findLogEntriesForCommand(log, command) {
         if (!command) return [];
         command = command.trim();
@@ -323,44 +323,60 @@
         const entries = [];
         
         // Ищем последнюю stdin запись с такой командой
-        for (let i = log.length - 1; i >= 0; i--) {
-          const entry = log[i];
-          if (entry.type === 'stdin' && entry.executed_command) {
-            console.log(`[DEBUG] Проверяем stdin запись: "${entry.executed_command}" vs "${command}"`);
-            if (entry.executed_command.trim() === command) {
-              console.log(`[DEBUG] Найдена подходящая команда!`);
-              // Нашли команду, теперь собираем все связанные записи
-              const sessionId = entry.sessionId;
-              
-              // Ищем ai_query перед этой командой
-              if (entry.user_ai_query) {
-                 for (let j = i - 1; j >= 0; j--) {
-                  const prevEntry = log[j];
-                  if (prevEntry.sessionId === sessionId && prevEntry.type === 'ai_query') {
-                    if (prevEntry.user_ai_query === entry.user_ai_query) {
-                      entries.unshift(prevEntry);
-                      break;
-                    }
-                  }
-                }
+        const stdinEntries = log.filter(entry => 
+          entry.type === 'stdin' && 
+          entry.executed_command && 
+          entry.executed_command.trim() === command
+        );
+        
+        if (stdinEntries.length === 0) {
+          console.log(`[DEBUG] Команда "${command}" не найдена в логе`);
+          return [];
+        }
+        
+        // Берем последнюю stdin запись
+        const lastStdin = stdinEntries[stdinEntries.length - 1];
+        console.log(`[DEBUG] Найдена команда! ID: ${lastStdin.id}`);
+        
+        // Ищем связанную ai_query запись через ai_query_id
+        if (lastStdin.ai_query_id) {
+          const aiEntry = log.find(entry => 
+            entry.type === 'ai_query' && 
+            entry.id === lastStdin.ai_query_id
+          );
+          if (aiEntry) {
+            entries.push(aiEntry);
+            console.log(`[DEBUG] Найдена связанная AI запись: ${aiEntry.id}`);
+          }
+        }
+        
+        // Добавляем саму команду
+        entries.push(lastStdin);
+        
+        // Ищем связанные stdout/stderr записи через stdin_id
+        const relatedOutputs = log.filter(entry => 
+          (entry.type === 'stdout' || entry.type === 'stderr') && 
+          entry.stdin_id === lastStdin.id
+        );
+        
+        if (relatedOutputs.length > 0) {
+          entries.push(...relatedOutputs);
+          console.log(`[DEBUG] Найдены связанные outputs: ${relatedOutputs.length}`);
+        } else {
+          // Fallback: старая логика для записей без связей
+          console.log(`[DEBUG] Нет связанных outputs, используем fallback`);
+          const sessionId = lastStdin.sessionId;
+          const stdinIndex = log.indexOf(lastStdin);
+          
+          for (let j = stdinIndex + 1; j < log.length; j++) {
+            const nextEntry = log[j];
+            if (nextEntry.sessionId === sessionId) {
+              if (nextEntry.type === 'stdout' || nextEntry.type === 'stderr') {
+                entries.push(nextEntry);
+              } else if (nextEntry.type === 'stdin') {
+                // Дошли до следующей команды, останавливаемся
+                break;
               }
-              
-              // Добавляем саму команду
-              entries.push(entry);
-              
-              // Ищем stdout после команды
-              for (let j = i + 1; j < log.length; j++) {
-                const nextEntry = log[j];
-                if (nextEntry.sessionId === sessionId) {
-                  if (nextEntry.type === 'stdout' || nextEntry.type === 'stderr') {
-                    entries.push(nextEntry);
-                  } else if (nextEntry.type === 'stdin') {
-                    // Дошли до следующей команды, останавливаемся
-                    break;
-                  }
-                }
-              }
-              break; // Нашли последнее выполнение, выходим
             }
           }
         }

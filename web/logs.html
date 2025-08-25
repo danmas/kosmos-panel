@@ -229,35 +229,63 @@
 
       function groupLogs() {
         logGroups = [];
-        let currentGroup = null;
+        const processedIds = new Set();
+        
+        // Индексируем все логи по ID для быстрого доступа
+        const logMap = {};
+        allLogs.forEach(log => {
+          logMap[log.id] = log;
+        });
 
         allLogs.forEach(entry => {
+          if (processedIds.has(entry.id)) return;
+          
           if (entry.type === 'ai_query') {
-            // Начинаем новую группу с AI запроса
-            currentGroup = { entries: [entry], timestamp: entry.timestamp };
-            logGroups.push(currentGroup);
-          } else if (entry.type === 'stdin') {
-            if (entry.user_ai_query) {
-              // Команда связана с AI запросом
-              if (currentGroup) {
-                currentGroup.entries.push(entry);
-              } else {
-                // AI запрос отсутствует, создаем группу только с командой
-                currentGroup = { entries: [entry], timestamp: entry.timestamp };
-                logGroups.push(currentGroup);
-              }
-            } else {
-              // Обычная команда без AI
-              currentGroup = { entries: [entry], timestamp: entry.timestamp };
-              logGroups.push(currentGroup);
-            }
-          } else if (entry.type === 'stdout' || entry.type === 'stderr') {
-            // Добавляем вывод к текущей группе
-            if (currentGroup) {
-              currentGroup.entries.push(entry);
-            }
+            // Ищем связанную stdin запись через ai_query_id
+            const relatedStdin = allLogs.find(l => l.ai_query_id === entry.id);
+            const relatedStdout = relatedStdin ? allLogs.find(l => l.stdin_id === relatedStdin.id) : null;
+            
+            const groupEntries = [entry];
+            if (relatedStdin) groupEntries.push(relatedStdin);
+            if (relatedStdout) groupEntries.push(relatedStdout);
+            
+            const group = {
+              entries: groupEntries,
+              timestamp: entry.timestamp,
+              ai_query_id: entry.id,
+              stdin_id: relatedStdin ? relatedStdin.id : null
+            };
+            
+            logGroups.push(group);
+            
+            // Отмечаем все связанные записи как обработанные
+            processedIds.add(entry.id);
+            if (relatedStdin) processedIds.add(relatedStdin.id);
+            if (relatedStdout) processedIds.add(relatedStdout.id);
+            
+          } else if (entry.type === 'stdin' && !entry.ai_query_id) {
+            // Обычная команда без AI запроса
+            const relatedStdout = allLogs.find(l => l.stdin_id === entry.id);
+            
+            const groupEntries = [entry];
+            if (relatedStdout) groupEntries.push(relatedStdout);
+            
+            const group = {
+              entries: groupEntries,
+              timestamp: entry.timestamp,
+              ai_query_id: null,
+              stdin_id: entry.id
+            };
+            
+            logGroups.push(group);
+            
+            processedIds.add(entry.id);
+            if (relatedStdout) processedIds.add(relatedStdout.id);
           }
         });
+        
+        // Сортируем группы по времени
+        logGroups.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
       }
 
       function renderLogList() {
@@ -353,13 +381,22 @@
 
           const entryTime = new Date(entry.timestamp).toLocaleString('ru-RU');
           
+          // Добавляем информацию о связях
+          let linkInfo = '';
+          if (entry.ai_query_id) {
+            linkInfo += `<div style="font-size:10px; color:#888; margin-top:4px;">🔗 AI Query ID: ${entry.ai_query_id}</div>`;
+          }
+          if (entry.stdin_id) {
+            linkInfo += `<div style="font-size:10px; color:#888; margin-top:4px;">🔗 Command ID: ${entry.stdin_id}</div>`;
+          }
+          
           return `
             <div class="entry-card">
               <div class="entry-header">
                 <div class="entry-type ${className}">${typeLabel}</div>
                 <div class="entry-time">${entryTime}</div>
               </div>
-              <div class="entry-content ${className}">${content}</div>
+              <div class="entry-content ${className}">${content}${linkInfo}</div>
             </div>
           `;
         }).join('');
