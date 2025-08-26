@@ -4,23 +4,64 @@ const net = require('net');
 const tls = require('tls');
 const { Client } = require('ssh2');
 const { JSONPath } = require('jsonpath-plus');
+const dotenv = require('dotenv');
 
 const inventoryPath = path.join(process.cwd(), 'inventory.json');
 if (!fs.existsSync(inventoryPath)) {
   throw new Error('inventory.json not found in project root');
 }
 function expandEnvPlaceholders(obj) {
-  if (obj == null) return obj;
-  if (typeof obj === 'string') {
-    return obj.replace(/\$\{([A-Z0-9_]+)\}/gi, (_, name) => process.env[name] ?? '');
+  const usedVars = new Set();
+  
+  function processValue(value) {
+    if (value == null) return value;
+    
+    if (typeof value === 'string') {
+      // Поддержка ${VAR_NAME} синтаксиса
+      let result = value.replace(/\$\{([A-Z0-9_]+)\}/gi, (_, name) => {
+        usedVars.add(name);
+        const envValue = process.env[name];
+        if (envValue === undefined) {
+          console.warn(`[Config] Переменная окружения ${name} не найдена`);
+        }
+        return envValue ?? '';
+      });
+      
+      // Поддержка $VAR_NAME синтаксиса (без фигурных скобок)
+      result = result.replace(/\$([A-Z0-9_]+)/gi, (_, name) => {
+        usedVars.add(name);
+        const envValue = process.env[name];
+        if (envValue === undefined) {
+          console.warn(`[Config] Переменная окружения ${name} не найдена`);
+        }
+        return envValue ?? '';
+      });
+      
+      return result;
+    }
+    
+    if (Array.isArray(value)) {
+      return value.map(processValue);
+    }
+    
+    if (typeof value === 'object') {
+      const out = {};
+      for (const [k, v] of Object.entries(value)) {
+        out[k] = processValue(v);
+      }
+      return out;
+    }
+    
+    return value;
   }
-  if (Array.isArray(obj)) return obj.map(expandEnvPlaceholders);
-  if (typeof obj === 'object') {
-    const out = {};
-    for (const [k, v] of Object.entries(obj)) out[k] = expandEnvPlaceholders(v);
-    return out;
+  
+  const result = processValue(obj);
+  
+  if (usedVars.size > 0) {
+    console.log(`[Config] Используемые переменные окружения: ${Array.from(usedVars).join(', ')}`);
   }
-  return obj;
+  
+  return result;
 }
 
 const inventory = expandEnvPlaceholders(JSON.parse(fs.readFileSync(inventoryPath, 'utf8')));
@@ -44,6 +85,10 @@ function getCredential(credentialId) {
 }
 
 function reloadInventory() {
+  // Перечитываем .env файл, чтобы подхватить изменения без перезапуска
+  dotenv.config({ path: path.join(process.cwd(), '.env'), override: true });
+  console.log('[Config] Переменные окружения из .env перезагружены.');
+
   const raw = fs.readFileSync(inventoryPath, 'utf8');
   const fresh = expandEnvPlaceholders(JSON.parse(raw));
   // mutate exported object in-place so other modules keep reference
@@ -55,24 +100,42 @@ function reloadInventory() {
 
 function sshExec({ ssh, command, timeoutMs = 5000 }) {
   const cred = getCredential(ssh.credentialId);
+  const serverInfo = `${ssh.user}@${ssh.host}:${ssh.port || 22}`;
+
   return new Promise((resolve, reject) => {
+    // console.log(`[SSH] Попытка подключения к ${serverInfo} для команды: "${command}"`);
+
     const conn = new Client();
     let timer;
+
     conn
       .on('ready', () => {
+        // console.log(`[SSH] Успешное подключение к ${serverInfo}`);
         conn.exec(command, { pty: false }, (err, stream) => {
           if (err) {
+            // console.error(`[SSH] Ошибка выполнения команды на ${serverInfo}:`, err.message);
             clearTimeout(timer);
             conn.end();
-            return reject(err);
+            return reject(new Error(`SSH exec error: ${err.message}`));
           }
+
+          // console.log(`[SSH] Команда "${command}" выполняется на ${serverInfo}`);
           let stdout = '';
           let stderr = '';
+
           stream
             .on('close', (code, signal) => {
               clearTimeout(timer);
               conn.end();
-              resolve({ code, signal, stdout: stdout.trim(), stderr: stderr.trim() });
+
+              const result = { code, signal, stdout: stdout.trim(), stderr: stderr.trim() };
+              // console.log(`[SSH] Команда завершена на ${serverInfo}, код: ${code}, сигнал: ${signal}`);
+
+              if (stderr) {
+                // console.warn(`[SSH] Stderr на ${serverInfo}: ${stderr}`);
+              }
+
+              resolve(result);
             })
             .on('data', (d) => {
               stdout += d.toString();
@@ -83,22 +146,56 @@ function sshExec({ ssh, command, timeoutMs = 5000 }) {
         });
       })
       .on('error', (e) => {
+        // console.error(`[SSH] Ошибка подключения к ${serverInfo}:`, {
+        //   message: e.message,
+        //   code: e.code,
+        //   level: e.level,
+        //   description: e.description,
+        //   stack: e.stack
+        // });
         clearTimeout(timer);
-        reject(e);
+        reject(new Error(`SSH connection error: ${e.message}`));
+      })
+      .on('keyboard-interactive', (name, instructions, instructionsLang, prompts, finish) => {
+        // console.log(`[SSH] Keyboard-interactive auth для ${serverInfo}`);
+        finish([]);
+      })
+      .on('tcp connection', () => {
+        // console.log(`[SSH] TCP соединение установлено с ${serverInfo}`);
+      })
+      .on('handshake', (negotiated) => {
+        // console.log(`[SSH] SSH handshake завершен для ${serverInfo}`);
       })
       .connect((() => {
         const base = { host: ssh.host, port: Number(ssh.port) || 22, username: ssh.user };
         const agentSock = process.env.SSH_AUTH_SOCK || (process.platform === 'win32' ? '\\\\.\\pipe\\openssh-ssh-agent' : undefined);
         const auth = { ...base };
+
+        // Логируем параметры аутентификации (без чувствительных данных)
+        // console.log(`[SSH] Параметры подключения к ${serverInfo}:`, {
+        //   host: ssh.host,
+        //   port: ssh.port || 22,
+        //   username: ssh.user,
+        //   hasPrivateKey: !!cred.privateKey,
+        //   hasPassphrase: !!cred.passphrase,
+        //   hasPassword: !!cred.password,
+        //   useAgent: cred.useAgent,
+        //   agentSock: agentSock ? 'configured' : 'not configured',
+        //   timeoutMs: timeoutMs
+        // });
+
         if (cred.useAgent) auth.agent = agentSock;
         if (cred.privateKey) auth.privateKey = cred.privateKey;
         if (cred.passphrase) auth.passphrase = cred.passphrase;
         if (cred.password) auth.password = cred.password;
+
         return auth;
       })());
+
     timer = setTimeout(() => {
+      // console.error(`[SSH] Таймаут подключения к ${serverInfo} после ${timeoutMs}мс`);
       try { conn.end(); } catch {}
-      reject(new Error('SSH timeout'));
+      reject(new Error(`SSH timeout after ${timeoutMs}ms`));
     }, timeoutMs);
   });
 }
@@ -195,59 +292,86 @@ function checkTls(svc) {
 }
 
 async function checkSystemd(server, svc) {
-  const { stdout } = await sshExec({ ssh: server.ssh, command: `systemctl is-active ${svc.service} || echo inactive`, timeoutMs: svc.timeoutMs || 3000 });
-  const ok = stdout.trim() === 'active';
-  return { ok, detail: `systemd: ${stdout.trim()}` };
+  try {
+    // console.log(`[Monitor] Проверка systemd сервиса ${svc.service} на сервере ${server.name}`);
+    const { stdout } = await sshExec({ ssh: server.ssh, command: `systemctl is-active ${svc.service} || echo inactive`, timeoutMs: svc.timeoutMs || 3000 });
+    const ok = stdout.trim() === 'active';
+    // console.log(`[Monitor] Systemd сервис ${svc.service} на ${server.name}: ${ok ? 'OK' : 'FAIL'} (${stdout.trim()})`);
+    return { ok, detail: `systemd: ${stdout.trim()}` };
+  } catch (error) {
+    // console.error(`[Monitor] Ошибка проверки systemd ${svc.service} на ${server.name}:`, error.message);
+    return { ok: false, detail: `systemd error: ${error.message}` };
+  }
 }
 
 async function checkSshCommand(server, svc) {
-  const { stdout, stderr } = await sshExec({ ssh: server.ssh, command: svc.command, timeoutMs: svc.timeoutMs || 4000 });
-  const out = (stdout + '\n' + stderr).trim();
-  const ok = svc.okPattern ? new RegExp(svc.okPattern, 'i').test(out) : true;
-  return { ok, detail: out.slice(0, 256) || '(no output)' };
+  try {
+    // console.log(`[Monitor] Проверка SSH команды "${svc.command}" на сервере ${server.name}`);
+    const { stdout, stderr } = await sshExec({ ssh: server.ssh, command: svc.command, timeoutMs: svc.timeoutMs || 4000 });
+    const out = (stdout + '\n' + stderr).trim();
+    const ok = svc.okPattern ? new RegExp(svc.okPattern, 'i').test(out) : true;
+    // console.log(`[Monitor] SSH команда "${svc.command}" на ${server.name}: ${ok ? 'OK' : 'FAIL'} (pattern: "${svc.okPattern || 'none'}")`);
+    return { ok, detail: out.slice(0, 256) || '(no output)' };
+  } catch (error) {
+    // console.error(`[Monitor] Ошибка выполнения SSH команды "${svc.command}" на ${server.name}:`, error.message);
+    return { ok: false, detail: `ssh command error: ${error.message}` };
+  }
 }
 
 async function checkDockerContainer(server, svc) {
   const name = svc.container || svc.name;
   const timeoutMs = svc.timeoutMs || 8000; // give docker more time by default
 
-  async function runOnce() {
-    // 1) Try fast path via `docker inspect` (more direct than `ps`)
-    let res;
-    try {
-      res = await sshExec({ ssh: server.ssh, command: `/usr/bin/docker inspect --type container --format '{{.State.Status}}' ${name}`, timeoutMs });
-      const status = (res.stdout || '').trim().toLowerCase();
-      if (res.code === 0 && status) {
-        const ok = status === 'running';
-        return { ok, detail: `inspect: ${status}` };
-      }
-    } catch (e) {
-      // fall through to ps on errors (including timeout handled by caller)
-      throw e;
-    }
-
-    // 2) Fallback to `docker ps` exact name match
-    const fmt = "{{.Names}}|{{.Status}}";
-    const cmd = `/usr/bin/docker ps --format '${fmt}' --filter status=running --filter name=^${name}$`;
-    const { stdout, stderr } = await sshExec({ ssh: server.ssh, command: cmd, timeoutMs });
-    const line = (stdout || '').trim();
-    const ok = line.toLowerCase().includes('up');
-    const detail = line || (stderr.trim() || 'not found');
-    return { ok, detail: detail.slice(0, 256) };
-  }
-
-  // Retry once on SSH timeout
   try {
-    return await runOnce();
-  } catch (e) {
-    if (String(e && e.message || '').includes('timeout')) {
+    // console.log(`[Monitor] Проверка Docker контейнера "${name}" на сервере ${server.name}`);
+
+    async function runOnce() {
+      // 1) Try fast path via `docker inspect` (more direct than `ps`)
+      let res;
       try {
-        return await runOnce();
-      } catch (e2) {
-        return { ok: false, detail: `check error after retry: ${e2.message}` };
+        res = await sshExec({ ssh: server.ssh, command: `/usr/bin/docker inspect --type container --format '{{.State.Status}}' ${name}`, timeoutMs });
+        const status = (res.stdout || '').trim().toLowerCase();
+        if (res.code === 0 && status) {
+          const ok = status === 'running';
+          return { ok, detail: `inspect: ${status}` };
+        }
+      } catch (e) {
+        // fall through to ps on errors (including timeout handled by caller)
+        throw e;
       }
+
+      // 2) Fallback to `docker ps` exact name match
+      const fmt = "{{.Names}}|{{.Status}}";
+      const cmd = `/usr/bin/docker ps --format '${fmt}' --filter status=running --filter name=^${name}$`;
+      const { stdout, stderr } = await sshExec({ ssh: server.ssh, command: cmd, timeoutMs });
+      const line = (stdout || '').trim();
+      const ok = line.toLowerCase().includes('up');
+      const detail = line || (stderr.trim() || 'not found');
+      return { ok, detail: detail.slice(0, 256) };
     }
-    return { ok: false, detail: `check error: ${e.message}` };
+
+    // Retry once on SSH timeout
+    try {
+      const result = await runOnce();
+      // console.log(`[Monitor] Docker контейнер "${name}" на ${server.name}: ${result.ok ? 'OK' : 'FAIL'} (${result.detail})`);
+      return result;
+    } catch (e) {
+      if (String(e && e.message || '').includes('timeout')) {
+        try {
+          const result = await runOnce();
+          // console.log(`[Monitor] Docker контейнер "${name}" на ${server.name} после повторной попытки: ${result.ok ? 'OK' : 'FAIL'} (${result.detail})`);
+          return result;
+        } catch (e2) {
+          // console.error(`[Monitor] Ошибка проверки Docker контейнера "${name}" на ${server.name} после повторной попытки:`, e2.message);
+          return { ok: false, detail: `check error after retry: ${e2.message}` };
+        }
+      }
+      // console.error(`[Monitor] Ошибка проверки Docker контейнера "${name}" на ${server.name}:`, e.message);
+      return { ok: false, detail: `check error: ${e.message}` };
+    }
+  } catch (error) {
+    // console.error(`[Monitor] Критическая ошибка проверки Docker контейнера "${name}" на ${server.name}:`, error.message);
+    return { ok: false, detail: `docker check error: ${error.message}` };
   }
 }
 

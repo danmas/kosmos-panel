@@ -12,14 +12,21 @@ app.use(express.json());
 
 app.get('/api/servers', (req, res) => {
   const snap = getSnapshot();
-  const list = Object.values(snap.servers).map((s) => ({
-    id: s.id,
-    name: s.name,
-    env: s.env,
-    color: s.color,
-    ssh: s.ssh,
-    services: Object.entries(s.services).map(([id, sv]) => ({ id, ...sv })),
-  }));
+  // Сохраняем порядок серверов как в оригинальной конфигурации
+  const inventoryServers = inventory.servers || [];
+  const list = inventoryServers
+    .filter(server => snap.servers[server.id]) // Фильтруем только существующие сервера
+    .map(server => {
+      const s = snap.servers[server.id];
+      return {
+        id: s.id,
+        name: s.name,
+        env: s.env,
+        color: s.color,
+        ssh: s.ssh,
+        services: Object.entries(s.services).map(([id, sv]) => ({ id, ...sv })),
+      };
+    });
   res.json({ ts: snap.ts, servers: list });
 });
 
