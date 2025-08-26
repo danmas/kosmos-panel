@@ -12,15 +12,40 @@ app.use(express.json());
 
 app.get('/api/servers', (req, res) => {
   const snap = getSnapshot();
-  const list = Object.values(snap.servers).map((s) => ({
-    id: s.id,
-    name: s.name,
-    env: s.env,
-    color: s.color,
-    ssh: s.ssh,
-    services: Object.entries(s.services).map(([id, sv]) => ({ id, ...sv })),
-  }));
+  // Сохраняем порядок серверов как в оригинальной конфигурации
+  const inventoryServers = inventory.servers || [];
+  const list = inventoryServers
+    .filter(server => snap.servers[server.id]) // Фильтруем только существующие сервера
+    .map(server => {
+      const s = snap.servers[server.id];
+      return {
+        id: s.id,
+        name: s.name,
+        env: s.env,
+        color: s.color,
+        ssh: s.ssh,
+        services: Object.entries(s.services).map(([id, sv]) => ({ id, ...sv })),
+      };
+    });
   res.json({ ts: snap.ts, servers: list });
+});
+
+app.get('/api/service-log', (req, res) => {
+  const { serverId, serviceId } = req.query;
+  const snap = getSnapshot();
+  
+  const server = snap.servers[serverId];
+  if (!server) {
+    return res.status(404).json({ success: false, error: 'Сервер не найден' });
+  }
+  
+  const service = server.services[serviceId];
+  
+  if (!service) {
+    return res.status(404).json({ success: false, error: 'Сервис не найден' });
+  }
+  
+  res.json({ success: true, log: service.detail || '(пустой лог)' });
 });
 
 app.get('/api/inventory', (req, res) => {
