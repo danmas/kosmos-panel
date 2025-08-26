@@ -1,0 +1,76 @@
+[
+  {
+    "id": "9d2e13da-471d-4283-997b-f05d9210013a",
+    "sessionId": "14855bda-c82a-4049-ad2b-913ea993c871",
+    "timestamp": "2025-08-26T10:34:31.926Z",
+    "type": "stdout",
+    "terminal_output": "Welcome to Ubuntu 24.04.3 LTS (GNU/Linux 6.8.0-71-generic x86_64)\r\n\r\n * Documentation:  https://help.ubuntu.com\r\n * Management:     https://landscape.canonical.com\r\n * Support:        https://ubuntu.com/pro\r\n\r\n System information as of Tue Aug 26 10:33:43 UTC 2025\r\n\r\n  System load:  0.28               Processes:               250\r\n  Usage of /:   1.7% of 491.02GB   Users logged in:         1\r\n  Memory usage: 43%                IPv4 address for ens192: 87.251.79.241\r\n  Swap usage:   34%                IPv6 address for ens192: 2a0d:6c2:7:15::\r\n\r\n * Strictly confined Kubernetes makes edge and IoT secure. Learn how MicroK8s\r\n   just raised the bar for easy, resilient and secure K8s cluster deployment.\r\n\r\n   https://ubuntu.com/engage/secure-kubernetes-at-the-edge\r\n\r\nExpanded Security Maintenance for Applications is not enabled.\r\n\r\n3 updates can be applied immediately.\r\nTo see these additional updates run: apt list --upgradable\r\n\r\n1 additional security update can be applied with ESM Apps.\r\nLearn more about enabling ESM Apps service at https://ubuntu.com/esm\r\n\r\n\r\n*** System restart required ***\r\nLast login: Tue Aug 26 10:26:13 2025 from 194.190.114.197",
+    "serverId": "usa",
+    "serverName": "usa",
+    "serverHost": "usa"
+  },
+  {
+    "id": "890c61fd-c81c-4fcb-8167-f9afbbaf6950",
+    "sessionId": "14855bda-c82a-4049-ad2b-913ea993c871",
+    "timestamp": "2025-08-26T10:34:42.836Z",
+    "type": "stdin",
+    "executed_command": "cd projects-ex/kosmos-panel/",
+    "serverId": "usa",
+    "serverName": "usa",
+    "serverHost": "usa"
+  },
+  {
+    "id": "50ebe0bc-60d5-43a6-9685-ab669ff36141",
+    "sessionId": "14855bda-c82a-4049-ad2b-913ea993c871",
+    "timestamp": "2025-08-26T10:34:42.880Z",
+    "type": "stdout",
+    "terminal_output": "cd kos\b\b\bprojects-ex/kosmos-panel/",
+    "serverId": "usa",
+    "serverName": "usa",
+    "serverHost": "usa",
+    "stdin_id": "890c61fd-c81c-4fcb-8167-f9afbbaf6950"
+  },
+  {
+    "id": "098aa2ef-0a06-40c1-9a9d-69a681b29c35",
+    "sessionId": "14855bda-c82a-4049-ad2b-913ea993c871",
+    "timestamp": "2025-08-26T10:34:47.681Z",
+    "type": "stdin",
+    "executed_command": "git status",
+    "serverId": "usa",
+    "serverName": "usa",
+    "serverHost": "usa"
+  },
+  {
+    "id": "bac5c3f0-41b2-4814-ae5b-b216098fc1dd",
+    "sessionId": "14855bda-c82a-4049-ad2b-913ea993c871",
+    "timestamp": "2025-08-26T10:34:47.706Z",
+    "type": "stdout",
+    "terminal_output": "git status\r\n\rOn branch main\r\nYour branch and 'origin/main' have diverged,\r\nand have 1 and 3 different commits each, respectively.\r\n  (use \"git pull\" if you want to integrate the remote branch with yours)\r\n\r\nYou have unmerged paths.\r\n  (fix conflicts and run \"git commit\")\r\n  (use \"git merge --abort\" to abort the merge)\r\n\r\nChanges to be committed:\r\n\tmodified:   KB/README_INVENTORY_EDITOR.md\r\n\tmodified:   README.md\r\n\tmodified:   server/index.js\r\n\tmodified:   server/monitor.js\r\n\tmodified:   web/app.js\r\n\r\nUnmerged paths:\r\n  (use \"git add <file>...\" to mark resolution)\r\n\tboth modified:   terminal_log.json\r\n\r\nUntracked files:\r\n  (use \"git add <file>...\" to include in what will be committed)\r\n\tinventory.json.backup.1755584837904\r\n\tinventory.json.backup.1755584949070\r\n\tinventory.json.backup.1756192474771",
+    "serverId": "usa",
+    "serverName": "usa",
+    "serverHost": "usa",
+    "stdin_id": "098aa2ef-0a06-40c1-9a9d-69a681b29c35"
+  },
+  {
+    "id": "23f9bd89-5597-4545-b4ac-fff30d296521",
+    "sessionId": "14855bda-c82a-4049-ad2b-913ea993c871",
+    "timestamp": "2025-08-26T10:35:38.730Z",
+    "type": "ai_query",
+    "user_ai_query": "git/ откатить сделать копию terminal_log.json",
+    "serverId": "usa",
+    "serverName": "usa",
+    "serverHost": "usa"
+  },
+  {
+    "id": "47f8f594-e572-4f81-a99b-14654b277beb",
+    "sessionId": "14855bda-c82a-4049-ad2b-913ea993c871",
+    "timestamp": "2025-08-26T10:35:43.865Z",
+    "type": "stdin",
+    "executed_command": "cp terminal_log.json terminal_log.json.backup && git reset --hard",
+    "user_ai_query": "git/ откатить сделать копию terminal_log.json",
+    "ai_query_id": "23f9bd89-5597-4545-b4ac-fff30d296521",
+    "serverId": "usa",
+    "serverName": "usa",
+    "serverHost": "usa"
+  }
+]
