@@ -1,5 +1,7 @@
 .kosmos/
 
+terminal_log.json
+
 # Node modules
 node_modules/
 
