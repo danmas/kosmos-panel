@@ -1,6 +1,7 @@
 const grid = document.getElementById('grid');
 const tsEl = document.getElementById('ts');
 const tooltip = document.getElementById('tooltip');
+let lastServerData = []; // Для хранения последних данных
 
 const overlay = document.getElementById('overlay');
 const overlayTitle = document.getElementById('overlay-title');
@@ -37,7 +38,12 @@ function closeOverlay() {
   if (currentWs) {
     try { currentWs.close(); } catch {}
   }
-  terminalEl.textContent = '';
+  if (xterm) {
+    xterm.dispose();
+    xterm = null;
+    fitAddon = null;
+  }
+  terminalEl.innerHTML = '';
 }
 
 async function fetchServers() {
@@ -60,13 +66,17 @@ function render(servers) {
       ${s.services
         .map(
           (sv) => {
-            const link = (sv.url && (sv.type === 'http' || sv.type === 'httpJson'))
-              ? ` <a href="${sv.url}" target="_blank" class="svc-link" title="Открыть в новой вкладке" onclick="event.stopPropagation()">🔗</a>`
-              : '';
+            let links = '';
+            if (sv.url && (sv.type === 'http' || sv.type === 'httpJson')) {
+              links += ` <a href="${sv.url}" target="_blank" class="svc-link" title="Открыть в новой вкладке" onclick="event.stopPropagation()">🔗</a>`;
+            }
+            if (sv.hasLogs) {
+              links += ` <a href="#" onclick="openSshLogs('${s.id}', '${sv.id}', '${sv.name}'); event.stopPropagation()" class="svc-link" title="Показать лог">📜</a>`;
+            }
             return `
               <div class="svc">
                 <div class="dot ${sv.ok ? 'ok' : 'fail'}"></div>
-                <div>${sv.name} <span style="opacity:.7">(${sv.type})</span>${link}</div>
+                <div>${sv.name} <span style="opacity:.7">(${sv.type})</span>${links}</div>
               </div>
             `;
           }
@@ -101,6 +111,23 @@ function positionTooltip(ev) {
 }
 function hideTooltip() {
   tooltip.classList.add('hidden');
+}
+
+function openSshLogs(serverId, serviceId, serviceName) {
+  openOverlay(`Лог для ${serviceName}`);
+  ensureTerm(); 
+  xterm.clear();
+
+  const server = lastServerData.find(s => s.id === serverId);
+  const service = server ? Object.values(server.services).find(sv => sv.id === serviceId) : null;
+  
+  if (service && service.detail) {
+    xterm.writeln(service.detail.replace(/\n/g, '\r\n'));
+  } else {
+    xterm.writeln(`\x1b[31m[Ошибка] Лог для этого сервиса не найден.\x1b[0m`);
+  }
+  
+  setTimeout(() => { try { fitAddon.fit(); } catch {} }, 0);
 }
 
 function openActions(server) {
@@ -349,7 +376,8 @@ async function loop() {
   try {
     const data = await fetchServers();
     tsEl.innerText = new Date(data.ts || Date.now()).toLocaleTimeString();
-    render(data.servers || []);
+    lastServerData = data.servers || [];
+    render(lastServerData);
   } catch (e) {
     tsEl.innerText = 'Ошибка загрузки';
   } finally {

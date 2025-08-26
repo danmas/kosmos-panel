@@ -405,6 +405,9 @@ async function pollOnce() {
         if (svc.url && (svc.type === 'http' || svc.type === 'httpJson')) {
           serviceData.url = svc.url;
         }
+        if (svc.type === 'sshCommand') {
+          serviceData.hasLogs = true;
+        }
         perServices[svc.id] = serviceData;
       }));
       const oks = Object.values(perServices).map((s) => s.ok);
