@@ -6,9 +6,16 @@ const path = require('path');
 const fs = require('fs').promises;
 const { startScheduler, getSnapshot, inventory, reloadInventory, sshExec } = require('./monitor');
 const { attachWsServer } = require('./ws');
+const { createSession, executeCommand, closeSession } = require('./terminal');
 
 const app = express();
 app.use(express.json());
+
+// Terminal API routes
+app.post('/api/v1/terminal/sessions', createSession);
+app.post('/api/v1/terminal/sessions/:sessionId/exec', executeCommand);
+app.delete('/api/v1/terminal/sessions/:sessionId', closeSession);
+
 
 app.get('/api/servers', (req, res) => {
   const snap = getSnapshot();

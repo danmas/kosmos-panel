@@ -6,6 +6,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const os = require('os');
 const { v4: uuidv4 } = require('uuid');
+const { findServer, resolvePrivateKey } = require('./ws-utils');
 
 const LOG_FILE_PATH = path.join(__dirname, '..', 'terminal_log.json');
 
@@ -39,25 +40,6 @@ function stripAnsi(str) {
   return str.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
 }
 
-
-function findServer(serverId) {
-  return (inventory.servers || []).find((s) => s.id === serverId);
-}
-
-function resolvePrivateKey(credentialId) {
-  const fs = require('fs');
-  const cred = (inventory.credentials || []).find((c) => c.id === credentialId);
-  if (!cred) throw new Error('credential not found');
-  let key;
-  try {
-    if (cred.privateKeyPath) key = fs.readFileSync(cred.privateKeyPath, 'utf8');
-  } catch (e) {
-    // ignore; may use agent/password instead
-  }
-  let useAgent = cred.useAgent;
-  if (typeof useAgent === 'string') useAgent = ['1', 'true', 'yes', 'on'].includes(useAgent.toLowerCase());
-  return { key, passphrase: cred.passphrase || undefined, password: cred.password, useAgent: !!useAgent };
-}
 
 function attachWsServer(httpServer) {
   const wss = new WebSocket.Server({ server: httpServer });
