@@ -223,3 +223,48 @@
     ```bash
     curl -X DELETE http://localhost:3000/api/v1/terminal/sessions/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
     ```
+## Terminal REST API (v2)
+
+Этот API идентичен `v1`, но предоставляет стандартизированный формат ответа JSON для всех эндпоинтов, что упрощает обработку на стороне клиента.
+
+**Структура ответа:**
+
+-   **Успех:**
+    ```json
+    {
+      "success": true,
+      "data": { ... }
+    }
+    ```
+-   **Ошибка:**
+    ```json
+    {
+      "success": false,
+      "error": {
+        "message": "Описание ошибки"
+      }
+    }
+    ```
+
+### `POST /api/v2/terminal/sessions`
+
+Создает новую SSH-сессию.
+
+-   **Тело запроса:** Аналогично `v1`.
+-   **Успешный ответ (201):**
+    -   `data`: Объект, содержащий `sessionId`.
+
+### `POST /api/v2/terminal/sessions/:sessionId/exec`
+
+Выполняет команду в рамках существующей сессии.
+
+-   **Тело запроса:** Аналогично `v1`.
+-   **Успешный ответ (200):**
+    -   `data`: Объект, содержащий `exitCode`, `signal`, `stdout`, `stderr`.
+
+### `DELETE /api/v2/terminal/sessions/:sessionId`
+
+Закрывает SSH-сессию.
+
+-   **Успешный ответ (200):**
+    -   `data`: Объект, содержащий сообщение об успешном закрытии.
