@@ -252,7 +252,21 @@
 
 -   **Тело запроса:** Аналогично `v1`.
 -   **Успешный ответ (201):**
+    -   `success`: `true`
     -   `data`: Объект, содержащий `sessionId`.
+-   **Пример:**
+    ```bash
+    curl -X POST -H "Content-Type: application/json" -d '{"serverId": "my-server-1"}' http://localhost:3000/api/v2/terminal/sessions
+    ```
+-   **Пример ответа:**
+    ```json
+    {
+      "success": true,
+      "data": {
+        "sessionId": "9b6a8f8e-137e-46b9-8e62-6fe449aaee3a"
+      }
+    }
+    ```
 
 ### `POST /api/v2/terminal/sessions/:sessionId/exec`
 
@@ -260,11 +274,41 @@
 
 -   **Тело запроса:** Аналогично `v1`.
 -   **Успешный ответ (200):**
+    -   `success`: `true`
     -   `data`: Объект, содержащий `exitCode`, `signal`, `stdout`, `stderr`.
+-   **Пример:**
+    ```bash
+    curl -X POST -H "Content-Type: application/json" -d '{"command": "ls -la"}' http://localhost:3000/api/v2/terminal/sessions/9b6a8f8e-137e-46b9-8e62-6fe449aaee3a/exec
+    ```
+-   **Пример ответа:**
+    ```json
+    {
+      "success": true,
+      "data": {
+        "exitCode": 0,
+        "stdout": "total 76\ndrwx------ 12 root root  4096 Aug 26 10:31 .\ndrwxr-xr-x 24 root root  4096 Aug 20 09:23 ..\n...",
+        "stderr": ""
+      }
+    }
+    ```
 
 ### `DELETE /api/v2/terminal/sessions/:sessionId`
 
 Закрывает SSH-сессию.
 
 -   **Успешный ответ (200):**
+    -   `success`: `true`
     -   `data`: Объект, содержащий сообщение об успешном закрытии.
+-   **Пример:**
+    ```bash
+    curl -X DELETE http://localhost:3000/api/v2/terminal/sessions/9b6a8f8e-137e-46b9-8e62-6fe449aaee3a
+    ```
+-   **Пример ответа:**
+    ```json
+    {
+      "success": true,
+      "data": {
+        "message": "Session closed"
+      }
+    }
+    ```

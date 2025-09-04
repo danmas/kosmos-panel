@@ -172,7 +172,7 @@ async function createSessionV2(req, res) {
       sendSuccess(res, { sessionId }, 201);
     }).on('error', (err) => {
       console.error(`[terminal-api-v2] SSH connection error for server ${serverId}:`, err);
-      // Не отправляем ответ здесь, если он уже был отправлен в .connect
+      sendError(res, 'SSH connection failed: ' + err.message, 500);
     }).connect((() => {
         const base = { host: server.ssh.host, port: Number(server.ssh.port) || 22, username: server.ssh.user };
         const auth = { ...base };
@@ -243,7 +243,6 @@ function closeSessionV2(req, res) {
       sendError(res, 'Session not found', 404);
     }
 }
-
 
 module.exports = {
   createSession,
