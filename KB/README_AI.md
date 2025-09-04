@@ -6,9 +6,11 @@
 
 ## Архитектура
 - Backend (Node.js/Express) — `server/`:
-  - `index.js`: HTTP‑сервер, статика `web/`, API: `/api/servers`, `/api/inventory`, `/api/reload`, `/api/test-ssh`, запуск scheduler’а.
+  - `index.js`: HTTP‑сервер, статика `web/`, API: `/api/servers`, `/api/inventory`, `/api/reload`, `/api/test-ssh`, запуск scheduler'а, регистрация маршрутов для терминального REST API.
   - `monitor.js`: загрузка/горячий reload `inventory.json`, кеш кредов, проверки: http, httpJson(JSONPath via jsonpath-plus), tcp, tls(сертификат), systemd, sshCommand, dockerContainer; агрегирование статуса (цвет).
   - `ws.js`: WS `/ws/terminal` (pty shell по ssh2) и `/ws/tail` (`tail -F` по ssh2). Сообщения JSON: `{type:"data"|"err"|"fatal"|"ai_query", data?, error?, prompt?}`. Поддерживает AI-команды с префиксом `ai:`.
+  - `terminal.js`: REST API для управления терминальными сессиями и выполнения команд. Поддерживает две версии API: v1 (базовая) и v2 (со стандартизированным форматом ответов).
+  - `ws-utils.js`: Общие утилиты для работы с SSH и инвентарем, используемые как в WebSocket, так и в REST API.
 - Frontend (ванильный JS) — `web/`:
   - `index.html`, `styles.css`, `app.js`: сетка плиток, тултипы, меню действий, xterm.js терминал, плавающие окна терминала/tail, открытие отдельного окна `/term.html`.
   - `term.html`: автономная вкладка/окно с xterm. Поддерживает AI-команды через перехват клавиши Enter.
@@ -81,6 +83,9 @@
 - Терминал во вкладке: `/term.html?mode=terminal&serverId=usa`
 - Tail во вкладке: `/term.html?mode=tail&serverId=usa&path=/var/log/syslog`
 - AI-команда в терминале: `ai: покажи 10 самых больших файлов` → автоматически выполнится `find . -type f -exec ls -s {} + | sort -n -r | head -n 10`
+- REST API v1: `curl -X POST -H "Content-Type: application/json" -d '{"serverId": "usa"}' http://localhost:3000/api/v1/terminal/sessions`
+- REST API v2: `curl -X POST -H "Content-Type: application/json" -d '{"serverId": "usa"}' http://localhost:3000/api/v2/terminal/sessions`
+- Тестовые скрипты: `node test_usa.js` (для v1) и `node tests/test_usa_v2.js` (для v2)
 
 ## Локальный запуск
 ```bash
