@@ -223,7 +223,6 @@
     ```bash
     curl -X DELETE http://localhost:3000/api/v1/terminal/sessions/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
     ```
-
 ## Terminal REST API (v2)
 
 Этот API идентичен `v1`, но предоставляет стандартизированный формат ответа JSON для всех эндпоинтов, что упрощает обработку на стороне клиента.
