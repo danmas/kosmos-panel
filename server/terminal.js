@@ -135,8 +135,120 @@ function closeSession(req, res) {
   }
 }
 
+// --- V2 API with standardized JSON response ---
+
+const sendSuccess = (res, data, statusCode = 200) => {
+  res.status(statusCode).json({ success: true, data });
+};
+
+const sendError = (res, message, statusCode = 500) => {
+  res.status(statusCode).json({ success: false, error: { message } });
+};
+
+async function createSessionV2(req, res) {
+    const { serverId } = req.body;
+    if (!serverId) {
+      return sendError(res, 'serverId is required', 400);
+    }
+  
+    const server = findServer(serverId);
+    if (!server) {
+      return sendError(res, 'Server not found', 404);
+    }
+  
+    let key, passphrase, password, useAgent;
+    try {
+      const r = resolvePrivateKey(server.ssh.credentialId);
+      key = r.key; passphrase = r.passphrase; password = r.password; useAgent = r.useAgent;
+    } catch (e) {
+      return sendError(res, 'Credential error: ' + e.message, 500);
+    }
+  
+    const conn = new Client();
+    const sessionId = uuidv4();
+  
+    conn.on('ready', () => {
+      sessions[sessionId] = { conn, lastUsed: Date.now(), serverId };
+      sendSuccess(res, { sessionId }, 201);
+    }).on('error', (err) => {
+      console.error(`[terminal-api-v2] SSH connection error for server ${serverId}:`, err);
+      sendError(res, 'SSH connection failed: ' + err.message, 500);
+    }).connect((() => {
+        const base = { host: server.ssh.host, port: Number(server.ssh.port) || 22, username: server.ssh.user };
+        const auth = { ...base };
+        const agentSock = process.env.SSH_AUTH_SOCK || (process.platform === 'win32' ? '\\\\.\\pipe\\openssh-ssh-agent' : undefined);
+        if (useAgent) auth.agent = agentSock;
+        if (key) auth.privateKey = key;
+        if (passphrase) auth.passphrase = passphrase;
+        if (password) auth.password = password;
+        return auth;
+      })());
+}
+
+function executeCommandV2(req, res) {
+    const { sessionId } = req.params;
+    const { command, timeout = 30000 } = req.body;
+  
+    if (!command) {
+      return sendError(res, 'command is required', 400);
+    }
+  
+    const session = sessions[sessionId];
+    if (!session) {
+      return sendError(res, 'Session not found or expired', 404);
+    }
+  
+    session.lastUsed = Date.now();
+    const { conn } = session;
+  
+    let stdout = '';
+    let stderr = '';
+    let timer;
+  
+    conn.exec(command, {}, (err, stream) => {
+      if (err) {
+        console.error(`[terminal-api-v2] SSH exec error for session ${sessionId}:`, err);
+        return sendError(res, 'Failed to execute command: ' + err.message, 500);
+      }
+  
+      const cleanup = () => clearTimeout(timer);
+  
+      timer = setTimeout(() => {
+        stream.close();
+        cleanup();
+        console.error(`[terminal-api-v2] Command timed out for session ${sessionId}`);
+        sendError(res, 'Command execution timed out', 500);
+      }, timeout);
+  
+      stream.on('data', (data) => { stdout += data.toString('utf8'); });
+      stream.stderr.on('data', (data) => { stderr += data.toString('utf8'); });
+  
+      stream.on('close', (code, signal) => {
+        cleanup();
+        sendSuccess(res, { exitCode: code, signal, stdout, stderr });
+      });
+    });
+}
+
+function closeSessionV2(req, res) {
+    const { sessionId } = req.params;
+    const session = sessions[sessionId];
+  
+    if (session) {
+      console.log(`[terminal-api-v2] Closing session ${sessionId}`);
+      session.conn.end();
+      delete sessions[sessionId];
+      sendSuccess(res, { message: 'Session closed' });
+    } else {
+      sendError(res, 'Session not found', 404);
+    }
+}
+
 module.exports = {
   createSession,
   executeCommand,
   closeSession,
+  createSessionV2,
+  executeCommandV2,
+  closeSessionV2,
 };
