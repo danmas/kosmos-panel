@@ -1,5 +1,5 @@
 .kosmos/
-
+inventory.json.backup.*
 terminal_log.json
 
 # Node modules
