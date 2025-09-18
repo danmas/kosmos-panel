@@ -1,4 +1,5 @@
 .kosmos/
+inventory.json.backup.*
 terminal_log.json
 inventory.json.backup*
 

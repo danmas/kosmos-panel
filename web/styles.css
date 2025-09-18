@@ -29,7 +29,8 @@ body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Arial; backgro
 .status.yellow { background:#f59e0b; }
 .status.red { background:#ef4444; }
 .status.gray { background:#64748b; }
-.svc { display:flex; align-items:center; gap:8px; margin-top:7px; }
+.svc { display:flex; align-items:center; gap:8px; margin-top:7px; cursor: pointer; position: relative; padding: 3px; border-radius: 4px; }
+.svc:hover { background: rgba(255,255,255,0.05); }
 .svc .dot { width:8px; height:8px; border-radius:50%; }
 .dot.ok { background:#22c55e; }
 .dot.fail { background:#ef4444; }
@@ -37,6 +38,14 @@ body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Arial; backgro
 .tooltip.hidden { display:none; }
 .tooltip .title { font-weight:700; margin-bottom:6px; }
 .tooltip .line { font-size:13px; margin:2px 0; color:#d6defa; }
+
+/* Стили для подсказок сервисов */
+.service-title { color: var(--accent); border-bottom: 1px solid #253055; padding-bottom: 6px; margin-bottom: 8px; }
+.service-tooltip { display: flex; flex-direction: column; gap: 6px; }
+.service-status { font-weight: 500; }
+.service-type { font-size: 12px; color: #9fb0ff; }
+.service-description { font-size: 13px; color: #d6defa; margin-top: 4px; padding: 6px; background: rgba(255,255,255,0.05); border-radius: 4px; }
+.service-url { font-size: 12px; color: #9fb0ff; word-break: break-all; }
 .svc-link { text-decoration: none; margin-left: 4px; }
 
 .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:200; }
