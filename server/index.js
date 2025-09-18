@@ -36,7 +36,15 @@ app.get('/api/servers', (req, res) => {
         env: s.env,
         color: s.color,
         ssh: s.ssh,
-        services: Object.entries(s.services).map(([id, sv]) => ({ id, ...sv })),
+        services: Object.entries(s.services).map(([id, sv]) => {
+          // Находим оригинальный сервис из inventory для получения description
+          const originalService = server.services.find(svc => svc.id === id);
+          return { 
+            id, 
+            ...sv, 
+            description: originalService?.description || undefined 
+          };
+        }),
       };
     });
   res.json({ ts: snap.ts, servers: list });

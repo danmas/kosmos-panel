@@ -59,30 +59,51 @@ function render(servers) {
     tile.onmouseenter = (e) => showTooltip(e, s);
     tile.onmouseleave = hideTooltip;
     tile.onclick = () => openActions(s);
+    
+    // Создаем HTML для плитки
+    let servicesHTML = '';
+    s.services.forEach(sv => {
+      let links = '';
+      if (sv.url && (sv.type === 'http' || sv.type === 'httpJson')) {
+        links += ` <a href="${sv.url}" target="_blank" class="svc-link" title="Открыть в новой вкладке" onclick="event.stopPropagation()">🔗</a>`;
+      }
+      if (sv.hasLogs) {
+        links += ` <a href="#" onclick="openSshLogs('${s.id}', '${sv.id}', '${sv.name}'); event.stopPropagation()" class="svc-link" title="Показать лог">📜</a>`;
+      }
+      servicesHTML += `
+        <div class="svc" data-service-id="${sv.id}">
+          <div class="dot ${sv.ok ? 'ok' : 'fail'}"></div>
+          <div>${sv.name} <span style="opacity:.7">(${sv.type})</span>${links}</div>
+        </div>
+      `;
+    });
+    
     tile.innerHTML = `
       <div class="status ${s.color}"></div>
       <div class="name">${s.name}</div>
       <div class="env">${s.env}</div>
-      ${s.services
-        .map(
-          (sv) => {
-            let links = '';
-            if (sv.url && (sv.type === 'http' || sv.type === 'httpJson')) {
-              links += ` <a href="${sv.url}" target="_blank" class="svc-link" title="Открыть в новой вкладке" onclick="event.stopPropagation()">🔗</a>`;
-            }
-            if (sv.hasLogs) {
-              links += ` <a href="#" onclick="openSshLogs('${s.id}', '${sv.id}', '${sv.name}'); event.stopPropagation()" class="svc-link" title="Показать лог">📜</a>`;
-            }
-            return `
-              <div class="svc">
-                <div class="dot ${sv.ok ? 'ok' : 'fail'}"></div>
-                <div>${sv.name} <span style="opacity:.7">(${sv.type})</span>${links}</div>
-              </div>
-            `;
-          }
-        )
-        .join('')}
+      ${servicesHTML}
     `;
+    
+    // Добавляем обработчики событий для каждого сервиса
+    tile.querySelectorAll('.svc').forEach(svcEl => {
+      const serviceId = svcEl.dataset.serviceId;
+      const service = s.services.find(sv => sv.id === serviceId);
+      
+      svcEl.onmouseenter = (e) => {
+        e.stopPropagation(); // Останавливаем всплытие, чтобы не сработал обработчик плитки
+        showServiceTooltip(e, service);
+      };
+      
+      svcEl.onmouseleave = (e) => {
+        // Проверяем, не наведена ли мышь на другой сервис или на плитку
+        const relatedTarget = e.relatedTarget;
+        if (!relatedTarget || !tile.contains(relatedTarget)) {
+          hideTooltip();
+        }
+      };
+    });
+    
     grid.appendChild(tile);
   });
 }
@@ -91,11 +112,34 @@ function showTooltip(ev, server) {
   const lines = server.services
     .map((sv) => {
       const icon = sv.ok ? '✅' : '❌';
-      const detail = (sv.detail || '').replace(/\s+/g, ' ').slice(0, 160);
-      return `<div class="line">${icon} <b>${sv.name}</b> — ${detail}</div>`;
+      const description = sv.description || sv.detail || '';
+      const cleanDescription = description.replace(/\s+/g, ' ').slice(0, 160);
+      return `<div class="line">${icon} <b>${sv.name}</b> — ${cleanDescription}</div>`;
     })
     .join('');
   tooltip.innerHTML = `<div class="title">${server.name} — ${server.env}</div>${lines}`;
+  tooltip.classList.remove('hidden');
+  positionTooltip(ev);
+}
+
+// Новая функция для показа подсказки для отдельного сервиса
+function showServiceTooltip(ev, service) {
+  if (!service) return;
+  
+  const icon = service.ok ? '✅' : '❌';
+  const description = service.description || service.detail || '';
+  const cleanDescription = description.replace(/\s+/g, ' ').slice(0, 160);
+  
+  tooltip.innerHTML = `
+    <div class="title service-title">${service.name}</div>
+    <div class="service-tooltip">
+      <div class="service-status">${icon} ${service.ok ? 'Работает' : 'Не работает'}</div>
+      <div class="service-type">Тип: ${service.type}</div>
+      ${description ? `<div class="service-description">${cleanDescription}</div>` : ''}
+      ${service.url ? `<div class="service-url">URL: ${service.url}</div>` : ''}
+    </div>
+  `;
+  
   tooltip.classList.remove('hidden');
   positionTooltip(ev);
 }
