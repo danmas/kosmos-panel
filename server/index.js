@@ -5,7 +5,8 @@ const http = require('http');
 const path = require('path');
 const fs = require('fs').promises;
 const { startScheduler, getSnapshot, inventory, reloadInventory, sshExec } = require('./monitor');
-const { attachWsServer } = require('./ws');
+const { attachWsServer, wsSessions, pendingCommands } = require('./ws');
+const { v4: uuidv4 } = require('uuid');
 const { createSession, executeCommand, closeSession, createSessionV2, executeCommandV2, closeSessionV2 } = require('./terminal');
 
 const app = express();
@@ -334,6 +335,178 @@ app.get('/api/config', (req, res) => {
     aiCommandPrefix: process.env.AI_COMMAND_PREFIX || 'ai:',
   });
 });
+
+// ========== WS Terminal REST Bridge API ==========
+
+// Список активных WebSocket терминалов
+app.get('/api/ws-terminal/sessions', (req, res) => {
+  const sessions = Object.entries(wsSessions).map(([sessionId, session]) => ({
+    sessionId,
+    serverId: session.serverId,
+    serverName: session.serverName,
+    connectedAt: session.connectedAt
+  }));
+  res.json({ success: true, data: sessions });
+});
+
+// Отправить команду в WebSocket терминал
+app.post('/api/ws-terminal/:sessionId/command', (req, res) => {
+  const { sessionId } = req.params;
+  const { command, requireConfirmation = false, timeout = 60000, wait = false } = req.body;
+
+  if (!command) {
+    return res.status(400).json({ success: false, error: 'command is required' });
+  }
+
+  const session = wsSessions[sessionId];
+  if (!session) {
+    return res.status(404).json({ success: false, error: 'Session not found. Terminal may be closed.' });
+  }
+
+  const commandId = uuidv4();
+  const cmd = {
+    commandId,
+    sessionId,
+    command,
+    requireConfirmation,
+    status: requireConfirmation ? 'awaiting_confirmation' : 'pending',
+    result: null,
+    createdAt: new Date().toISOString(),
+    resolve: null,
+    reject: null,
+    timeoutId: null
+  };
+
+  pendingCommands[commandId] = cmd;
+
+  // Отправляем команду в браузерный терминал через WebSocket
+  try {
+    session.ws.send(JSON.stringify({
+      type: 'remote_command',
+      commandId,
+      command,
+      requireConfirmation
+    }));
+    console.log(`[ws-bridge] Sent command ${commandId} to session ${sessionId}: "${command}"`);
+  } catch (e) {
+    delete pendingCommands[commandId];
+    return res.status(500).json({ success: false, error: 'Failed to send command to terminal: ' + e.message });
+  }
+
+  if (!wait) {
+    // Async режим - сразу возвращаем commandId
+    return res.json({ 
+      success: true, 
+      data: { 
+        commandId, 
+        status: cmd.status 
+      } 
+    });
+  }
+
+  // Sync режим - ждём результат
+  const timeoutMs = Math.min(timeout, 300000); // Максимум 5 минут
+
+  const promise = new Promise((resolve, reject) => {
+    cmd.resolve = resolve;
+    cmd.reject = reject;
+
+    cmd.timeoutId = setTimeout(() => {
+      cmd.status = 'timeout';
+      reject(new Error('Command execution timed out'));
+    }, timeoutMs);
+  });
+
+  promise
+    .then((result) => {
+      res.json({
+        success: true,
+        data: {
+          commandId: result.commandId,
+          status: result.status,
+          stdout: result.result?.stdout || '',
+          stderr: result.result?.stderr || '',
+          exitCode: result.result?.exitCode
+        }
+      });
+    })
+    .catch((err) => {
+      res.json({
+        success: false,
+        error: err.message,
+        data: {
+          commandId,
+          status: cmd.status
+        }
+      });
+    })
+    .finally(() => {
+      // Очищаем команду через 60 секунд после завершения
+      setTimeout(() => {
+        delete pendingCommands[commandId];
+      }, 60000);
+    });
+});
+
+// Получить статус/результат команды
+app.get('/api/ws-terminal/command/:commandId', (req, res) => {
+  const { commandId } = req.params;
+  const cmd = pendingCommands[commandId];
+
+  if (!cmd) {
+    return res.status(404).json({ success: false, error: 'Command not found or expired' });
+  }
+
+  res.json({
+    success: true,
+    data: {
+      commandId: cmd.commandId,
+      sessionId: cmd.sessionId,
+      command: cmd.command,
+      status: cmd.status,
+      result: cmd.result,
+      createdAt: cmd.createdAt
+    }
+  });
+});
+
+// Отменить ожидающую команду
+app.delete('/api/ws-terminal/command/:commandId', (req, res) => {
+  const { commandId } = req.params;
+  const cmd = pendingCommands[commandId];
+
+  if (!cmd) {
+    return res.status(404).json({ success: false, error: 'Command not found or expired' });
+  }
+
+  // Очищаем таймаут
+  if (cmd.timeoutId) {
+    clearTimeout(cmd.timeoutId);
+  }
+
+  // Отправляем отмену в браузер
+  const session = wsSessions[cmd.sessionId];
+  if (session) {
+    try {
+      session.ws.send(JSON.stringify({
+        type: 'cancel_command',
+        commandId
+      }));
+    } catch (e) {
+      console.warn(`[ws-bridge] Failed to send cancel to terminal: ${e.message}`);
+    }
+  }
+
+  cmd.status = 'cancelled';
+  if (cmd.reject) {
+    cmd.reject(new Error('Command cancelled'));
+  }
+
+  delete pendingCommands[commandId];
+  res.json({ success: true, data: { message: 'Command cancelled' } });
+});
+
+// ========== End WS Terminal REST Bridge API ==========
 
 app.use('/', express.static(path.join(process.cwd(), 'web')));
 

@@ -80,10 +80,20 @@ function render(servers) {
     
     tile.innerHTML = `
       <div class="status ${s.color}"></div>
-      <div class="name">${s.name}</div>
+      <div class="tile-header">
+        <div class="name">${s.name}</div>
+        <button class="tile-actions-btn" data-server-id="${s.id}" title="Действия с сервером">⚡</button>
+      </div>
       <div class="env">${s.env}</div>
       ${servicesHTML}
     `;
+    
+    // Обработчик кнопки действий
+    const actionsBtn = tile.querySelector('.tile-actions-btn');
+    actionsBtn.onclick = (e) => {
+      e.stopPropagation();
+      openActionsModal(s);
+    };
     
     // Добавляем обработчики событий для каждого сервиса
     tile.querySelectorAll('.svc').forEach(svcEl => {
@@ -174,27 +184,134 @@ function openSshLogs(serverId, serviceId, serviceName) {
   setTimeout(() => { try { fitAddon.fit(); } catch {} }, 0);
 }
 
+// ========== Utility Functions ==========
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    // Показываем уведомление
+    const notification = document.createElement('div');
+    notification.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#22c55e;color:#fff;padding:12px 20px;border-radius:8px;z-index:9999;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
+    notification.textContent = '✓ Скопировано в буфер обмена';
+    document.body.appendChild(notification);
+    setTimeout(() => notification.remove(), 2000);
+  }).catch(err => {
+    console.error('Failed to copy:', err);
+    alert('Не удалось скопировать: ' + text);
+  });
+}
+
+// ========== Actions Modal ==========
+const actionsModal = document.getElementById('actionsModal');
+const actionsModalTitle = document.getElementById('actionsModalTitle');
+const actionsModalBody = document.getElementById('actionsModalBody');
+const actionsModalClose = document.getElementById('actionsModalClose');
+
+let currentActionServer = null;
+
+const serverActions = [
+  { id: 'terminal-panel', icon: '🖥️', label: 'SSH-терминал (в панели)', shortcut: '1' },
+  { id: 'terminal-popup', icon: '🌐', label: 'Терминал в браузере (REST API)', shortcut: '7' },
+  { id: 'terminal-window', icon: '📺', label: 'Терминал в отдельном окне', shortcut: '5' },
+  { id: 'divider1' },
+  { id: 'tail-panel', icon: '📜', label: 'Tail лога (/var/log/syslog)', shortcut: '2' },
+  { id: 'tail-window', icon: '📋', label: 'Tail в отдельном окне', shortcut: '6' },
+  { id: 'divider2' },
+  { id: 'ssh-external', icon: '🔗', label: 'Открыть SSH (внешний клиент)', shortcut: '3' },
+  { id: 'ssh-copy', icon: '📎', label: 'Скопировать команду SSH', shortcut: '4' },
+];
+
+function openActionsModal(server) {
+  currentActionServer = server;
+  actionsModalTitle.textContent = server.name;
+  
+  actionsModalBody.innerHTML = serverActions.map(action => {
+    if (action.id.startsWith('divider')) {
+      return '<div class="actions-modal-divider"></div>';
+    }
+    return `
+      <button class="actions-modal-item" data-action="${action.id}">
+        <span class="icon">${action.icon}</span>
+        <span class="label">${action.label}</span>
+        <span class="shortcut">${action.shortcut}</span>
+      </button>
+    `;
+  }).join('');
+  
+  // Привязываем обработчики
+  actionsModalBody.querySelectorAll('.actions-modal-item').forEach(btn => {
+    btn.onclick = () => handleServerAction(btn.dataset.action);
+  });
+  
+  actionsModal.classList.add('visible');
+}
+
+function closeActionsModal() {
+  actionsModal.classList.remove('visible');
+  currentActionServer = null;
+}
+
+function handleServerAction(actionId) {
+  if (!currentActionServer) return;
+  const server = currentActionServer;
+  closeActionsModal();
+  
+  switch (actionId) {
+    case 'terminal-panel':
+      openTerminal(server);
+      break;
+    case 'terminal-popup':
+      window.open(`/term.html?mode=terminal&serverId=${encodeURIComponent(server.id)}`, '_blank', 'width=900,height=600');
+      break;
+    case 'terminal-window':
+      openTerminalWindow(server, 'terminal');
+      break;
+    case 'tail-panel':
+      openTail(server, '/var/log/syslog');
+      break;
+    case 'tail-window':
+      openTerminalWindow(server, 'tail', '/var/log/syslog');
+      break;
+    case 'ssh-external':
+      window.location.href = `ssh://${server.ssh.user}@${server.ssh.host}:${server.ssh.port || 22}`;
+      break;
+    case 'ssh-copy':
+      copyText(`ssh ${server.ssh.user}@${server.ssh.host} -p ${server.ssh.port || 22}`);
+      break;
+  }
+}
+
+actionsModalClose.onclick = closeActionsModal;
+actionsModal.onclick = (e) => {
+  if (e.target === actionsModal) closeActionsModal();
+};
+
+// Клавиатурные сокращения для модала
+document.addEventListener('keydown', (e) => {
+  if (!actionsModal.classList.contains('visible')) return;
+  
+  if (e.key === 'Escape') {
+    closeActionsModal();
+    return;
+  }
+  
+  // Цифровые сокращения
+  const shortcutMap = {
+    '1': 'terminal-panel',
+    '2': 'tail-panel',
+    '3': 'ssh-external',
+    '4': 'ssh-copy',
+    '5': 'terminal-window',
+    '6': 'tail-window',
+    '7': 'terminal-popup',
+  };
+  
+  if (shortcutMap[e.key]) {
+    handleServerAction(shortcutMap[e.key]);
+  }
+});
+
+// Legacy function - redirect to modal
 function openActions(server) {
-  const sshUrl = `ssh://${server.ssh.user}@${server.ssh.host}:${server.ssh.port || 22}`;
-  const choice = prompt(
-    [
-      'Выберите действие:',
-      '1. Открыть SSH-терминал (в панели)',
-      '2. Tail лога (/var/log/syslog)',
-      '3. Открыть SSH (внешний клиент)',
-      '4. Скопировать команду SSH',
-      '5. Открыть терминал в отдельном окне',
-      '6. Открыть tail (/var/log/syslog) в отдельном окне',
-      '7. Открыть терминал во всплывающем окне браузера'
-    ].join('\n')
-  );
-  if (choice === '1') openTerminal(server);
-  else if (choice === '2') openTail(server, '/var/log/syslog');
-  else if (choice === '3') window.location.href = sshUrl;
-  else if (choice === '4') copyText(`ssh ${server.ssh.user}@${server.ssh.host} -p ${server.ssh.port || 22}`);
-  else if (choice === '5') openTerminalWindow(server, 'terminal');
-  else if (choice === '6') openTerminalWindow(server, 'tail', '/var/log/syslog');
-  else if (choice === '7') window.open(`/term.html?mode=terminal&serverId=${encodeURIComponent(server.id)}`, '_blank', 'width=900,height=600');
+  openActionsModal(server);
 }
 
 let currentWs = null;
