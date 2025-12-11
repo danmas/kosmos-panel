@@ -257,10 +257,12 @@ function handleTerminal(ws, url) {
               // Сохраняем ID для связи с будущей stdin записью
               currentAiQueryId = aiQueryId;
 
-              try {
+              //TODO: переделать на OpenAI выриант
+              try { 
                 const aiServerUrl = process.env.AI_SERVER_URL || 'http://localhost:3002/api/send-request';
-                const aiModel = process.env.AI_MODEL || 'moonshotai/kimi-dev-72b:free';
-                const aiProvider = process.env.AI_PROVIDER || 'openroute';
+                // const aiModel = process.env.AI_MODEL || 'moonshotai/kimi-dev-72b:free';
+                const aiModel = process.env.AI_MODEL;
+                //const aiProvider = process.env.AI_PROVIDER || 'openroute';
                 const baseSystemPrompt = process.env.AI_SYSTEM_PROMPT || 'You are a Linux terminal AI assistant. Your task is to convert the user\'s request into a valid shell command, and return ONLY the shell command itself without any explanation.';
 
                 // --- START: Получение знаний ---
@@ -340,8 +342,8 @@ function handleTerminal(ws, url) {
                     body: JSON.stringify({
                       model: aiModel,
                       prompt: aiSystemPrompt,
-                      inputText: aiPrompt,
-                      provider: aiProvider
+                      inputText: aiPrompt
+                      // provider: aiProvider
                     }),
                     signal: controller.signal
                   });

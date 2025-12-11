@@ -289,15 +289,17 @@ app.post('/api/ai-help', async (req, res) => {
     
     // Отправляем запрос на AI сервер
     const aiServerUrl = process.env.AI_SERVER_URL_HELP || process.env.AI_SERVER_URL || 'http://localhost:3002/api/send-request';
-    const aiModel = process.env.AI_MODEL_HELP || process.env.AI_MODEL || 'moonshotai/kimi-dev-72b:free';
-    const aiProvider = process.env.AI_PROVIDER_HELP || process.env.AI_PROVIDER || 'openroute';
+    // const aiModel = process.env.AI_MODEL_HELP || process.env.AI_MODEL || 'moonshotai/kimi-dev-72b:free';
+    const aiModel = process.env.AI_MODEL;
+    // const aiProvider = process.env.AI_PROVIDER_HELP || process.env.AI_PROVIDER || 'openroute';
     
+    //TODO: переделать на OpenAI выриант
     const aiResponse = await fetch(aiServerUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: aiModel,
-        provider: aiProvider,
+        // provider: aiProvider,
         prompt: systemPrompt,
         inputText: query
       })
