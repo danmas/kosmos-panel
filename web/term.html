@@ -246,7 +246,14 @@
       const ws = new WebSocket(wsUrl);
       term.writeln(mode === 'tail' ? `[tail ${path}]` : '[подключение к SSH...]');
       ws.onopen = () => term.writeln('[соединение установлено]');
-      ws.onclose = ev => term.writeln(`\r\n[соединение закрыто${ev.code ? ' код ' + ev.code : ''}]`);
+      ws.onclose = ev => {
+        console.warn('[ws] closed:', ev.code, ev.reason);
+        term.writeln(`\r\n[соединение закрыто код ${ev.code}${ev.reason ? ' ' + ev.reason : ''}]`);
+      };
+      ws.onerror = err => {
+        console.error('[ws] error:', err);
+        term.writeln(`\r\n[ошибка соединения]`);
+      };
 
       // ========== REST Bridge Variables ==========
       let currentSessionId = null;

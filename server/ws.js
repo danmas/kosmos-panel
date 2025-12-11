@@ -51,14 +51,39 @@ function stripAnsi(str) {
 function attachWsServer(httpServer) {
   const wss = new WebSocket.Server({ server: httpServer });
 
+  // Heartbeat mechanism
+  const interval = setInterval(function ping() {
+    wss.clients.forEach(function each(ws) {
+      if (ws.isAlive === false) {
+        console.log('[ws] Terminating inactive connection');
+        return ws.terminate();
+      }
+      ws.isAlive = false;
+      ws.ping();
+    });
+  }, 30000);
+
+  wss.on('close', function close() {
+    clearInterval(interval);
+  });
+
   wss.on('connection', (ws, req) => {
+    // Heartbeat setup
+    ws.isAlive = true;
+    ws.on('pong', function heartbeat() {
+      this.isAlive = true;
+    });
+
     try {
       const url = new URL(req.url, 'http://localhost');
       if (url.pathname === '/ws/terminal') return handleTerminal(ws, url);
       if (url.pathname === '/ws/tail') return handleTail(ws, url);
+
+      console.warn(`[ws] Unknown path: ${url.pathname}`);
       ws.close(1008, 'unknown path');
     } catch (e) {
-      try { ws.close(1008, 'bad request'); } catch {}
+      console.error('[ws] Connection handling error:', e);
+      try { ws.close(1008, 'bad request'); } catch { }
     }
   });
 }
@@ -68,6 +93,17 @@ function handleTerminal(ws, url) {
   const serverId = url.searchParams.get('serverId');
   const cols = Number(url.searchParams.get('cols') || 120);
   const rows = Number(url.searchParams.get('rows') || 30);
+
+  // Добавляем обработчик закрытия для диагностики
+  ws.on('close', (code, reason) => {
+    console.log(`[ws] Terminal socket closed. Code: ${code}, Reason: ${reason ? reason.toString() : 'no reason'}`);
+    // Если код 1006 - это часто abnormal closure без отправки фрейма close
+  });
+
+  ws.on('error', (err) => {
+    console.error(`[ws] Terminal socket error:`, err);
+  });
+
   const server = findServer(serverId);
   if (!server) return ws.close(1008, 'server not found');
 
@@ -76,8 +112,8 @@ function handleTerminal(ws, url) {
     const r = resolvePrivateKey(server.ssh.credentialId);
     key = r.key; passphrase = r.passphrase; password = r.password; useAgent = r.useAgent;
   } catch (e) {
-    try { ws.send(JSON.stringify({ type: 'fatal', error: 'credential error: ' + e.message })); } catch {}
-    return setTimeout(() => { try { ws.close(1011, 'credential error'); } catch {} }, 10);
+    try { ws.send(JSON.stringify({ type: 'fatal', error: 'credential error: ' + e.message })); } catch { }
+    return setTimeout(() => { try { ws.close(1011, 'credential error'); } catch { } }, 10);
   }
   const sessionId = uuidv4();
 
@@ -87,8 +123,8 @@ function handleTerminal(ws, url) {
     .on('ready', () => {
       conn.shell({ term: 'xterm-color', cols, rows }, (err, stream) => {
         if (err) {
-          try { ws.send(JSON.stringify({ type: 'fatal', error: 'shell error: ' + err.message })); } catch {}
-          setTimeout(() => { try { ws.close(1011, 'shell error'); } catch {}; conn.end(); }, 10);
+          try { ws.send(JSON.stringify({ type: 'fatal', error: 'shell error: ' + err.message })); } catch { }
+          setTimeout(() => { try { ws.close(1011, 'shell error'); } catch { }; conn.end(); }, 10);
           return;
         }
 
@@ -111,11 +147,11 @@ function handleTerminal(ws, url) {
 
         let stdoutBuffer = '';
         let stderrBuffer = '';
-        
+
         // Переменные для связывания записей
         let currentAiQueryId = null;
         let currentStdinId = null;
-        
+
         // Информация о сервере для логирования
         const serverInfo = {
           serverId: serverId,
@@ -127,15 +163,15 @@ function handleTerminal(ws, url) {
         const checkForPromptAndFlush = () => {
           // Ищем промпт типа "user@host:path$ " или "root@host:path# "
           const promptRegex = /\w+@\w+[^$#>]*[\$#>]\s*$/m;
-          
+
           if (promptRegex.test(stdoutBuffer)) {
             console.log('[DEBUG] Обнаружен промпт, сохраняем вывод команды в лог');
-            
+
             // Разделяем буфер на вывод команды и промпт
             const lines = stdoutBuffer.split('\n');
             let commandOutput = '';
             let promptFound = false;
-            
+
             for (let i = 0; i < lines.length; i++) {
               if (promptRegex.test(lines[i])) {
                 // Нашли строку с промптом
@@ -145,11 +181,11 @@ function handleTerminal(ws, url) {
                 commandOutput += lines[i] + '\n';
               }
             }
-            
+
             // Записываем только вывод команды (без промпта)
             if (commandOutput.trim()) {
               const cleanOutput = stripAnsi(commandOutput).trim();
-              
+
               // Фильтруем эхо ввода ai: команд
               if (cleanOutput && !cleanOutput.includes('ai:')) {
                 const logEntry = {
@@ -160,22 +196,22 @@ function handleTerminal(ws, url) {
                   terminal_output: cleanOutput,
                   ...serverInfo
                 };
-                
+
                 // Связываем stdout с предыдущей stdin командой
                 if (currentStdinId) {
                   logEntry.stdin_id = currentStdinId;
                 }
-                
+
                 appendToLog(logEntry);
                 console.log('[DEBUG] Записан stdout с stdin_id:', currentStdinId);
               } else if (cleanOutput.includes('ai:')) {
                 console.log('[DEBUG] Отфильтровано эхо ai: команды:', cleanOutput);
               }
             }
-            
+
             // Сбрасываем ID после записи stdout
             currentStdinId = null;
-            
+
             // Очищаем буфер
             stdoutBuffer = '';
           }
@@ -203,13 +239,13 @@ function handleTerminal(ws, url) {
                 executed_command: command,
                 ...serverInfo
               };
-              
+
               // Связываем stdin с AI запросом, если есть
               if (currentAiQueryId) {
                 logEntry.ai_query_id = currentAiQueryId;
                 currentAiQueryId = null; // Сбрасываем после использования
               }
-              
+
               currentStdinId = stdinId; // Сохраняем для связи с stdout
               appendToLog(logEntry);
             } else if (type === 'command_result' && obj.commandId) {
@@ -223,12 +259,12 @@ function handleTerminal(ws, url) {
                   stderr: obj.stderr || '',
                   exitCode: obj.exitCode
                 };
-                
+
                 // Очищаем таймаут
                 if (cmd.timeoutId) {
                   clearTimeout(cmd.timeoutId);
                 }
-                
+
                 // Разрешаем Promise для sync режима
                 if (cmd.resolve) {
                   cmd.resolve(cmd);
@@ -241,10 +277,10 @@ function handleTerminal(ws, url) {
               // Старый метод: stream.write('\x15'); // CTRL+U, не работает на Windows
               // Новый, универсальный метод:
               stream.write('\b'.repeat(prompt.length));
-              
+
               const aiPrompt = prompt.substring(prompt.indexOf('ai:') + 3).trim();
               const aiQueryId = uuidv4();
-              
+
               appendToLog({
                 id: aiQueryId,
                 sessionId,
@@ -253,12 +289,12 @@ function handleTerminal(ws, url) {
                 user_ai_query: aiPrompt,
                 ...serverInfo
               });
-              
+
               // Сохраняем ID для связи с будущей stdin записью
               currentAiQueryId = aiQueryId;
 
               //TODO: переделать на OpenAI выриант
-              try { 
+              try {
                 const aiServerUrl = process.env.AI_SERVER_URL || 'http://localhost:3002/api/send-request';
                 // const aiModel = process.env.AI_MODEL || 'moonshotai/kimi-dev-72b:free';
                 const aiModel = process.env.AI_MODEL;
@@ -327,9 +363,9 @@ function handleTerminal(ws, url) {
                 if (localKnowledge.trim()) {
                   aiSystemPrompt = `Context from panel server:\n${localKnowledge.trim()}\n\n---\n\n${aiSystemPrompt}`;
                 }
-                
+
                 // --- END: Получение знаний ---
-                
+
                 console.log(`[AI] Preparing to send request to: ${aiServerUrl}`);
 
                 const controller = new AbortController();
@@ -356,18 +392,18 @@ function handleTerminal(ws, url) {
 
                   if (aiResult.success && aiResult.content) {
                     let commandToExecute = aiResult.content.trim();
-                    
+
                     // Если AI вернул многострочный ответ, берем только первую строку
                     const lines = commandToExecute.split('\n');
                     if (lines.length > 1) {
                       commandToExecute = lines[0].trim();
                     }
-                    
+
                     // Удаляем markdown кавычки, если есть
                     commandToExecute = commandToExecute.replace(/^```[a-z]*\s*|\s*```$/g, '').trim();
-                    
+
                     stream.write(commandToExecute + '\r');
-                    
+
                     // Создаем связанную stdin запись
                     const stdinId = uuidv4();
                     appendToLog({
@@ -380,7 +416,7 @@ function handleTerminal(ws, url) {
                       ai_query_id: currentAiQueryId,
                       ...serverInfo
                     });
-                    
+
                     // Сохраняем для связи с будущим stdout
                     currentStdinId = stdinId;
                     currentAiQueryId = null; // Сбрасываем после использования
@@ -413,7 +449,7 @@ function handleTerminal(ws, url) {
           const data = d.toString('utf8');
           ws.send(JSON.stringify({ type: 'err', data }));
           stderrBuffer += data;
-          
+
           // Для stderr используем простой таймер, так как ошибки не содержат промптов
           setTimeout(() => {
             const cleanStderr = stripAnsi(stderrBuffer).trim();
@@ -430,7 +466,7 @@ function handleTerminal(ws, url) {
             stderrBuffer = '';
           }, 500);
         });
-        stream.on('close', () => { 
+        stream.on('close', () => {
           // Принудительно сохраняем оставшийся вывод при закрытии
           if (stdoutBuffer.trim()) {
             const cleanOutput = stripAnsi(stdoutBuffer).trim();
@@ -445,7 +481,7 @@ function handleTerminal(ws, url) {
               });
             }
           }
-          
+
           if (stderrBuffer.trim()) {
             const cleanStderr = stripAnsi(stderrBuffer).trim();
             if (cleanStderr) {
@@ -459,11 +495,11 @@ function handleTerminal(ws, url) {
               });
             }
           }
-          
-          try { ws.close(); } catch {}; 
-          conn.end(); 
+
+          try { ws.close(); } catch { };
+          conn.end();
         });
-        ws.on('close', () => { 
+        ws.on('close', () => {
           // Аналогично для закрытия WebSocket
           if (stdoutBuffer.trim()) {
             const cleanOutput = stripAnsi(stdoutBuffer).trim();
@@ -478,7 +514,7 @@ function handleTerminal(ws, url) {
               });
             }
           }
-          
+
           if (stderrBuffer.trim()) {
             const cleanStderr = stripAnsi(stderrBuffer).trim();
             if (cleanStderr) {
@@ -492,22 +528,22 @@ function handleTerminal(ws, url) {
               });
             }
           }
-          
+
           // Удаляем сессию из REST bridge
           if (wsSessions[sessionId]) {
             console.log(`[ws] Session ${sessionId} removed from REST bridge`);
             delete wsSessions[sessionId];
           }
-          
-          try { stream.end(); } catch {}; 
-          try { conn.end(); } catch {}; 
+
+          try { stream.end(); } catch { };
+          try { conn.end(); } catch { };
         });
       });
     })
     .on('error', (e) => {
       console.error('[ws] terminal ssh error:', e.message);
-      try { ws.send(JSON.stringify({ type: 'fatal', error: e.message })); } catch {}
-      setTimeout(() => { try { ws.close(1011, e.message); } catch {} }, 10);
+      try { ws.send(JSON.stringify({ type: 'fatal', error: e.message })); } catch { }
+      setTimeout(() => { try { ws.close(1011, e.message); } catch { } }, 10);
     })
     .connect((() => {
       const base = { host: server.ssh.host, port: Number(server.ssh.port) || 22, username: server.ssh.user };
@@ -534,8 +570,8 @@ function handleTail(ws, url) {
     const r = resolvePrivateKey(server.ssh.credentialId);
     key = r.key; passphrase = r.passphrase; password = r.password; useAgent = r.useAgent;
   } catch (e) {
-    try { ws.send(JSON.stringify({ type: 'fatal', error: 'credential error: ' + e.message })); } catch {}
-    return setTimeout(() => { try { ws.close(1011, 'credential error'); } catch {} }, 10);
+    try { ws.send(JSON.stringify({ type: 'fatal', error: 'credential error: ' + e.message })); } catch { }
+    return setTimeout(() => { try { ws.close(1011, 'credential error'); } catch { } }, 10);
   }
   const sessionId = uuidv4();
 
@@ -546,8 +582,8 @@ function handleTail(ws, url) {
       const cmd = `test -f ${logPath} && tail -n ${lines} -F ${logPath} || echo 'File not found: ${logPath}'`;
       conn.exec(cmd, { pty: false }, (err, stream) => {
         if (err) {
-          try { ws.send(JSON.stringify({ type: 'fatal', error: 'tail error: ' + err.message })); } catch {}
-          setTimeout(() => { try { ws.close(1011, 'tail error'); } catch {}; conn.end(); }, 10);
+          try { ws.send(JSON.stringify({ type: 'fatal', error: 'tail error: ' + err.message })); } catch { }
+          setTimeout(() => { try { ws.close(1011, 'tail error'); } catch { }; conn.end(); }, 10);
           return;
         }
         stream.on('data', (d) => {
@@ -572,14 +608,14 @@ function handleTail(ws, url) {
             terminal_output: data
           });
         });
-        stream.on('close', () => { try { ws.close(); } catch {}; conn.end(); });
-        ws.on('close', () => { try { stream.end(); } catch {}; try { conn.end(); } catch {}; });
+        stream.on('close', () => { try { ws.close(); } catch { }; conn.end(); });
+        ws.on('close', () => { try { stream.end(); } catch { }; try { conn.end(); } catch { }; });
       });
     })
     .on('error', (e) => {
       console.error('[ws] tail ssh error:', e.message);
-      try { ws.send(JSON.stringify({ type: 'fatal', error: e.message })); } catch {}
-      setTimeout(() => { try { ws.close(1011, e.message); } catch {} }, 10);
+      try { ws.send(JSON.stringify({ type: 'fatal', error: e.message })); } catch { }
+      setTimeout(() => { try { ws.close(1011, e.message); } catch { } }, 10);
     })
     .connect((() => {
       const base = { host: server.ssh.host, port: Number(server.ssh.port) || 22, username: server.ssh.user };
