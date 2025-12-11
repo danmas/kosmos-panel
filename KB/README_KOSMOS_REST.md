@@ -312,3 +312,203 @@
       }
     }
     ```
+
+## WebSocket Terminal REST Bridge API
+
+Этот API позволяет отправлять команды в **браузерные WebSocket терминалы** через REST. В отличие от Terminal REST API v1/v2, который создаёт отдельные SSH-сессии, этот API управляет терминалами, открытыми пользователем в браузере.
+
+### Особенности
+
+- **Интерактивность**: Пользователь видит выполняемые команды в реальном времени
+- **Подтверждение**: Опциональное подтверждение команд пользователем перед выполнением
+- **Sync/Async**: Поддержка синхронного (ожидание результата) и асинхронного режимов
+- **Session ID**: Каждый браузерный терминал получает уникальный ID при подключении
+
+### Получение Session ID
+
+При открытии терминала в браузере (`/term.html`):
+1. Session ID отображается в левом верхнем углу терминала
+2. Session ID выводится серым текстом при подключении
+3. Клик по индикатору копирует полный ID в буфер обмена
+
+### `GET /api/ws-terminal/sessions`
+
+Получает список всех активных браузерных терминалов.
+
+-   **Успешный ответ (200):**
+    ```json
+    {
+      "success": true,
+      "data": [
+        {
+          "sessionId": "0ec45016-b1ae-4d88-94ee-979d8e3cb9de",
+          "serverId": "id-server-usa",
+          "serverName": "usa - Мой удаленный сервер",
+          "connectedAt": "2025-12-05T07:10:09.000Z"
+        }
+      ]
+    }
+    ```
+-   **Пример:**
+    ```bash
+    curl http://localhost:3000/api/ws-terminal/sessions
+    ```
+
+### `POST /api/ws-terminal/:sessionId/command`
+
+Отправляет команду в браузерный терминал.
+
+-   **Параметры URL:**
+    -   `sessionId` (string, required): ID сессии из списка активных терминалов.
+-   **Тело запроса:**
+    -   `command` (string, required): Команда для выполнения.
+    -   `requireConfirmation` (boolean, optional): Требовать подтверждение от пользователя. По умолчанию `false`.
+    -   `wait` (boolean, optional): Ждать завершения команды. По умолчанию `false`.
+    -   `timeout` (number, optional): Таймаут ожидания в мс. По умолчанию 60000. Максимум 300000 (5 минут).
+-   **Успешный ответ (wait=false):**
+    ```json
+    {
+      "success": true,
+      "data": {
+        "commandId": "a1b2c3d4-...",
+        "status": "pending"
+      }
+    }
+    ```
+-   **Успешный ответ (wait=true):**
+    ```json
+    {
+      "success": true,
+      "data": {
+        "commandId": "a1b2c3d4-...",
+        "status": "completed",
+        "stdout": "root\n",
+        "stderr": "",
+        "exitCode": 0
+      }
+    }
+    ```
+-   **Статусы команды:**
+    -   `pending` - команда отправлена, ожидает выполнения
+    -   `awaiting_confirmation` - ожидает подтверждения пользователя
+    -   `executing` - выполняется
+    -   `completed` - успешно завершена
+    -   `rejected` - отклонена пользователем
+    -   `timeout` - превышен таймаут
+    -   `cancelled` - отменена через API
+
+-   **Примеры:**
+    ```bash
+    # Async режим, без подтверждения (команда выполнится сразу)
+    curl -X POST http://localhost:3000/api/ws-terminal/SESSION_ID/command \
+      -H "Content-Type: application/json" \
+      -d '{"command": "whoami", "wait": false}'
+
+    # Sync режим, без подтверждения (ждём результат)
+    curl -X POST http://localhost:3000/api/ws-terminal/SESSION_ID/command \
+      -H "Content-Type: application/json" \
+      -d '{"command": "ls -la", "wait": true, "timeout": 30000}'
+
+    # С подтверждением пользователя
+    curl -X POST http://localhost:3000/api/ws-terminal/SESSION_ID/command \
+      -H "Content-Type: application/json" \
+      -d '{"command": "rm -rf /tmp/test", "requireConfirmation": true, "wait": true}'
+    ```
+
+### `GET /api/ws-terminal/command/:commandId`
+
+Получает статус и результат команды (для async режима).
+
+-   **Параметры URL:**
+    -   `commandId` (string, required): ID команды, полученный при отправке.
+-   **Успешный ответ (200):**
+    ```json
+    {
+      "success": true,
+      "data": {
+        "commandId": "a1b2c3d4-...",
+        "sessionId": "0ec45016-...",
+        "command": "whoami",
+        "status": "completed",
+        "result": {
+          "stdout": "root\n",
+          "stderr": "",
+          "exitCode": 0
+        },
+        "createdAt": "2025-12-05T07:15:00.000Z"
+      }
+    }
+    ```
+-   **Ошибка (404):** Команда не найдена или истекла.
+-   **Пример:**
+    ```bash
+    curl http://localhost:3000/api/ws-terminal/command/COMMAND_ID
+    ```
+
+### `DELETE /api/ws-terminal/command/:commandId`
+
+Отменяет ожидающую команду.
+
+-   **Параметры URL:**
+    -   `commandId` (string, required): ID команды для отмены.
+-   **Успешный ответ (200):**
+    ```json
+    {
+      "success": true,
+      "data": {
+        "message": "Command cancelled"
+      }
+    }
+    ```
+-   **Пример:**
+    ```bash
+    curl -X DELETE http://localhost:3000/api/ws-terminal/command/COMMAND_ID
+    ```
+
+### Пример использования (PowerShell)
+
+```powershell
+# 1. Получить список сессий
+$sessions = Invoke-RestMethod -Uri 'http://localhost:3000/api/ws-terminal/sessions'
+$sessionId = $sessions.data[0].sessionId
+Write-Host "Session ID: $sessionId"
+
+# 2. Отправить команду и ждать результат
+$body = @{
+    command = "uname -a"
+    wait = $true
+} | ConvertTo-Json
+
+$result = Invoke-RestMethod -Uri "http://localhost:3000/api/ws-terminal/$sessionId/command" `
+    -Method Post -Body $body -ContentType 'application/json'
+
+Write-Host "Output: $($result.data.stdout)"
+
+# 3. Отправить команду с подтверждением
+$body = @{
+    command = "echo 'Hello from REST API'"
+    requireConfirmation = $true
+    wait = $true
+    timeout = 120000
+} | ConvertTo-Json
+
+$result = Invoke-RestMethod -Uri "http://localhost:3000/api/ws-terminal/$sessionId/command" `
+    -Method Post -Body $body -ContentType 'application/json'
+
+if ($result.data.status -eq "rejected") {
+    Write-Host "Команда отклонена пользователем"
+} else {
+    Write-Host "Output: $($result.data.stdout)"
+}
+```
+
+### Визуализация в браузере
+
+Когда команда приходит через REST API, в браузерном терминале отображается:
+
+1. **Яркая плашка** `⚡ REST API COMMAND ⚡`
+2. **Command ID** и текст команды
+3. **Панель подтверждения** (если `requireConfirmation: true`):
+   - Кнопка "Выполнить" - выполнить команду
+   - Кнопка "Отклонить" - отказаться от выполнения
+   - Кнопка "Выполнить без подтверждения" - выполнить и не спрашивать

@@ -1,11 +1,10 @@
 .kosmos/
 inventory.json.backup.*
 terminal_log.json
-inventory.json.backup*
+data/
 
 # Node modules
 node_modules/
-
 
 # Configuration files with private data
 inventory.json

@@ -12,6 +12,13 @@ const LOG_FILE_PATH = path.join(__dirname, '..', 'terminal_log.json');
 
 let logQueue = Promise.resolve();
 
+// Глобальные хранилища для REST API bridge
+const wsSessions = {};
+// sessionId -> { ws, stream, serverId, serverName, connectedAt }
+
+const pendingCommands = {};
+// commandId -> { sessionId, command, status, result, resolve, reject, timeoutId, createdAt }
+
 function appendToLog(logEntry) {
   logQueue = logQueue.then(async () => {
     try {
@@ -83,6 +90,23 @@ function handleTerminal(ws, url) {
           try { ws.send(JSON.stringify({ type: 'fatal', error: 'shell error: ' + err.message })); } catch {}
           setTimeout(() => { try { ws.close(1011, 'shell error'); } catch {}; conn.end(); }, 10);
           return;
+        }
+
+        // Сохраняем сессию для REST API bridge
+        wsSessions[sessionId] = {
+          ws,
+          stream,
+          serverId,
+          serverName: server.name || serverId,
+          connectedAt: new Date().toISOString()
+        };
+        console.log(`[ws] Session ${sessionId} registered for REST bridge`);
+
+        // Отправляем sessionId клиенту
+        try {
+          ws.send(JSON.stringify({ type: 'session', sessionId }));
+        } catch (e) {
+          console.error('[ws] Failed to send sessionId to client:', e.message);
         }
 
         let stdoutBuffer = '';
@@ -188,6 +212,30 @@ function handleTerminal(ws, url) {
               
               currentStdinId = stdinId; // Сохраняем для связи с stdout
               appendToLog(logEntry);
+            } else if (type === 'command_result' && obj.commandId) {
+              // Обработка результата команды от клиента (REST bridge)
+              const cmd = pendingCommands[obj.commandId];
+              if (cmd) {
+                console.log(`[ws] Received command_result for ${obj.commandId}: status=${obj.status}`);
+                cmd.status = obj.status;
+                cmd.result = {
+                  stdout: obj.stdout || '',
+                  stderr: obj.stderr || '',
+                  exitCode: obj.exitCode
+                };
+                
+                // Очищаем таймаут
+                if (cmd.timeoutId) {
+                  clearTimeout(cmd.timeoutId);
+                }
+                
+                // Разрешаем Promise для sync режима
+                if (cmd.resolve) {
+                  cmd.resolve(cmd);
+                }
+              } else {
+                console.warn(`[ws] command_result for unknown commandId: ${obj.commandId}`);
+              }
             } else if (type === 'ai_query' && prompt) {
               // Очищаем текущую строку в shell (удаляем команду ai:...)
               // Старый метод: stream.write('\x15'); // CTRL+U, не работает на Windows
@@ -209,10 +257,12 @@ function handleTerminal(ws, url) {
               // Сохраняем ID для связи с будущей stdin записью
               currentAiQueryId = aiQueryId;
 
-              try {
+              //TODO: переделать на OpenAI выриант
+              try { 
                 const aiServerUrl = process.env.AI_SERVER_URL || 'http://localhost:3002/api/send-request';
-                const aiModel = process.env.AI_MODEL || 'moonshotai/kimi-dev-72b:free';
-                const aiProvider = process.env.AI_PROVIDER || 'openroute';
+                // const aiModel = process.env.AI_MODEL || 'moonshotai/kimi-dev-72b:free';
+                const aiModel = process.env.AI_MODEL;
+                //const aiProvider = process.env.AI_PROVIDER || 'openroute';
                 const baseSystemPrompt = process.env.AI_SYSTEM_PROMPT || 'You are a Linux terminal AI assistant. Your task is to convert the user\'s request into a valid shell command, and return ONLY the shell command itself without any explanation.';
 
                 // --- START: Получение знаний ---
@@ -292,8 +342,8 @@ function handleTerminal(ws, url) {
                     body: JSON.stringify({
                       model: aiModel,
                       prompt: aiSystemPrompt,
-                      inputText: aiPrompt,
-                      provider: aiProvider
+                      inputText: aiPrompt
+                      // provider: aiProvider
                     }),
                     signal: controller.signal
                   });
@@ -443,6 +493,12 @@ function handleTerminal(ws, url) {
             }
           }
           
+          // Удаляем сессию из REST bridge
+          if (wsSessions[sessionId]) {
+            console.log(`[ws] Session ${sessionId} removed from REST bridge`);
+            delete wsSessions[sessionId];
+          }
+          
           try { stream.end(); } catch {}; 
           try { conn.end(); } catch {}; 
         });
@@ -537,6 +593,6 @@ function handleTail(ws, url) {
     })());
 }
 
-module.exports = { attachWsServer };
+module.exports = { attachWsServer, wsSessions, pendingCommands };
 
 
