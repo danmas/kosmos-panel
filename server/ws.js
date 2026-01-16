@@ -477,7 +477,14 @@ function handleTerminal(ws, url) {
             stderrBuffer = '';
           }, 500);
         });
-        stream.on('close', () => {
+        stream.on('close', (code, signal) => {
+          logger.info('ssh', 'SSH stream closed', { 
+            sessionId, 
+            serverId,
+            code: code !== undefined ? code : 'none',
+            signal: signal || 'none'
+          });
+          
           // Принудительно сохраняем оставшийся вывод при закрытии
           if (stdoutBuffer.trim()) {
             const cleanOutput = stripAnsi(stdoutBuffer).trim();
@@ -509,6 +516,10 @@ function handleTerminal(ws, url) {
 
           try { ws.close(); } catch { };
           conn.end();
+        });
+        
+        stream.on('error', (err) => {
+          logger.error('ssh', 'SSH stream error', { sessionId, serverId, error: err.message });
         });
         ws.on('close', () => {
           // Аналогично для закрытия WebSocket
@@ -555,6 +566,12 @@ function handleTerminal(ws, url) {
       logger.error('ssh', 'Terminal SSH error', { error: e.message });
       try { ws.send(JSON.stringify({ type: 'fatal', error: e.message })); } catch { }
       setTimeout(() => { try { ws.close(1011, e.message); } catch { } }, 10);
+    })
+    .on('end', () => {
+      logger.info('ssh', 'Terminal SSH connection ended', { serverId });
+    })
+    .on('close', () => {
+      logger.info('ssh', 'Terminal SSH connection closed', { serverId });
     })
     .connect((() => {
       const base = { 
@@ -634,6 +651,12 @@ function handleTail(ws, url) {
       logger.error('ssh', 'Tail SSH error', { error: e.message });
       try { ws.send(JSON.stringify({ type: 'fatal', error: e.message })); } catch { }
       setTimeout(() => { try { ws.close(1011, e.message); } catch { } }, 10);
+    })
+    .on('end', () => {
+      logger.info('ssh', 'Tail SSH connection ended', { serverId });
+    })
+    .on('close', () => {
+      logger.info('ssh', 'Tail SSH connection closed', { serverId });
     })
     .connect((() => {
       const base = { 

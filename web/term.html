@@ -190,11 +190,23 @@
         background: rgba(74, 158, 255, 0.2);
         color: #fff;
       }
+      #reconnect { 
+        background: #22c55e; 
+        border-color: #16a34a; 
+      }
+      #reconnect:hover { 
+        background: #16a34a; 
+      }
     </style>
   </head>
   <body>
     <div class="wrap">
-      <div class="top"><div class="title" id="t"></div><button id="close">Закрыть</button></div>
+      <div class="top">
+        <div class="title" id="t"></div>
+        <button id="close">Закрыть</button>
+        <button id="fit">Подогнать</button>
+        <button id="reconnect" style="display:none;">Переподключить</button>
+      </div>
       <div class="term-container">
         <div id="term" class="term"></div>
         <div class="session-indicator" id="sessionIndicator" title="Session ID для REST API"></div>
@@ -225,7 +237,6 @@
           </div>
         </div>
       </div>
-      <div class="bar"><button id="fit">Подогнать</button></div>
     </div>
     <script>
       const params = new URLSearchParams(location.search);
@@ -249,6 +260,7 @@
       ws.onclose = ev => {
         console.warn('[ws] closed:', ev.code, ev.reason);
         term.writeln(`\r\n[соединение закрыто код ${ev.code}${ev.reason ? ' ' + ev.reason : ''}]`);
+        document.getElementById('reconnect').style.display = 'inline-block';
       };
       ws.onerror = err => {
         console.error('[ws] error:', err);
@@ -367,6 +379,9 @@
 
       document.getElementById('close').onclick = () => { try { ws.close(); } catch {}; window.close(); };
       document.getElementById('fit').onclick = () => { try { fit.fit(); } catch {} };
+      document.getElementById('reconnect').onclick = () => {
+        location.reload(); // Перезагрузить страницу для переподключения
+      };
 
       // Ждем полной загрузки DOM
       setTimeout(() => {
