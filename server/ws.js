@@ -7,6 +7,7 @@ const path = require('path');
 const os = require('os');
 const { v4: uuidv4 } = require('uuid');
 const { findServer, resolvePrivateKey } = require('./ws-utils');
+const logger = require('./logger');
 
 const LOG_FILE_PATH = path.join(__dirname, '..', 'terminal_log.json');
 
@@ -28,17 +29,17 @@ function appendToLog(logEntry) {
         logs = JSON.parse(data);
       } catch (readErr) {
         if (readErr.code !== 'ENOENT') { // ENOENT means file doesn't exist, which is fine
-          console.error('Error reading log file for appending:', readErr);
+          logger.error('terminal', 'Error reading log file for appending', { error: readErr.message });
         }
       }
       logs.push(logEntry);
       await fs.writeFile(LOG_FILE_PATH, JSON.stringify(logs, null, 2));
     } catch (writeErr) {
-      console.error('Error writing to log file:', writeErr);
+      logger.error('terminal', 'Error writing to log file', { error: writeErr.message });
     }
   }).catch(err => {
     // Prevent unhandled promise rejection
-    console.error('Error in log queue:', err);
+    logger.error('terminal', 'Error in log queue', { error: err.message });
   });
 }
 
@@ -55,7 +56,7 @@ function attachWsServer(httpServer) {
   const interval = setInterval(function ping() {
     wss.clients.forEach(function each(ws) {
       if (ws.isAlive === false) {
-        console.log('[ws] Terminating inactive connection');
+        logger.warn('ws', 'Terminating inactive connection');
         return ws.terminate();
       }
       ws.isAlive = false;
@@ -79,10 +80,10 @@ function attachWsServer(httpServer) {
       if (url.pathname === '/ws/terminal') return handleTerminal(ws, url);
       if (url.pathname === '/ws/tail') return handleTail(ws, url);
 
-      console.warn(`[ws] Unknown path: ${url.pathname}`);
+      logger.warn('ws', `Unknown path: ${url.pathname}`);
       ws.close(1008, 'unknown path');
     } catch (e) {
-      console.error('[ws] Connection handling error:', e);
+      logger.error('ws', 'Connection handling error', { error: e.message });
       try { ws.close(1008, 'bad request'); } catch { }
     }
   });
@@ -96,12 +97,22 @@ function handleTerminal(ws, url) {
 
   // Добавляем обработчик закрытия для диагностики
   ws.on('close', (code, reason) => {
-    console.log(`[ws] Terminal socket closed. Code: ${code}, Reason: ${reason ? reason.toString() : 'no reason'}`);
-    // Если код 1006 - это часто abnormal closure без отправки фрейма close
+    const reasonStr = reason ? reason.toString() : 'no reason';
+    if (code === 1006) {
+      logger.warn('ws', 'Terminal socket abnormal closure (1006)', { 
+        code, 
+        reason: reasonStr,
+        hint: 'Connection lost without close frame - network issue, browser closed, or server restart'
+      });
+    } else if (code === 1001) {
+      logger.info('ws', 'Terminal socket closed (going away)', { code, reason: reasonStr });
+    } else {
+      logger.info('ws', 'Terminal socket closed', { code, reason: reasonStr });
+    }
   });
 
   ws.on('error', (err) => {
-    console.error(`[ws] Terminal socket error:`, err);
+    logger.error('ws', 'Terminal socket error', { error: err.message });
   });
 
   const server = findServer(serverId);
@@ -118,7 +129,7 @@ function handleTerminal(ws, url) {
   const sessionId = uuidv4();
 
   const conn = new Client();
-  console.log(`[ws] terminal: connecting to ${server.ssh.user}@${server.ssh.host}`);
+  logger.info('ws', `Terminal connecting to ${server.ssh.user}@${server.ssh.host}`);
   conn
     .on('ready', () => {
       conn.shell({ term: 'xterm-256color', cols, rows }, (err, stream) => {
@@ -136,13 +147,13 @@ function handleTerminal(ws, url) {
           serverName: server.name || serverId,
           connectedAt: new Date().toISOString()
         };
-        console.log(`[ws] Session ${sessionId} registered for REST bridge`);
+        logger.info('ws', `Session registered for REST bridge`, { sessionId });
 
         // Отправляем sessionId клиенту
         try {
           ws.send(JSON.stringify({ type: 'session', sessionId }));
         } catch (e) {
-          console.error('[ws] Failed to send sessionId to client:', e.message);
+          logger.error('ws', 'Failed to send sessionId to client', { error: e.message });
         }
 
         let stdoutBuffer = '';
@@ -165,7 +176,7 @@ function handleTerminal(ws, url) {
           const promptRegex = /\w+@\w+[^$#>]*[\$#>]\s*$/m;
 
           if (promptRegex.test(stdoutBuffer)) {
-            console.log('[DEBUG] Обнаружен промпт, сохраняем вывод команды в лог');
+            logger.debug('terminal', 'Обнаружен промпт, сохраняем вывод команды в лог');
 
             // Разделяем буфер на вывод команды и промпт
             const lines = stdoutBuffer.split('\n');
@@ -203,9 +214,9 @@ function handleTerminal(ws, url) {
                 }
 
                 appendToLog(logEntry);
-                console.log('[DEBUG] Записан stdout с stdin_id:', currentStdinId);
+                logger.debug('terminal', 'Записан stdout', { stdin_id: currentStdinId });
               } else if (cleanOutput.includes('ai:')) {
-                console.log('[DEBUG] Отфильтровано эхо ai: команды:', cleanOutput);
+                logger.debug('terminal', 'Отфильтровано эхо ai: команды', { output: cleanOutput });
               }
             }
 
@@ -252,7 +263,7 @@ function handleTerminal(ws, url) {
               // Обработка результата команды от клиента (REST bridge)
               const cmd = pendingCommands[obj.commandId];
               if (cmd) {
-                console.log(`[ws] Received command_result for ${obj.commandId}: status=${obj.status}`);
+                logger.info('ws', 'Received command_result', { commandId: obj.commandId, status: obj.status });
                 cmd.status = obj.status;
                 cmd.result = {
                   stdout: obj.stdout || '',
@@ -270,7 +281,7 @@ function handleTerminal(ws, url) {
                   cmd.resolve(cmd);
                 }
               } else {
-                console.warn(`[ws] command_result for unknown commandId: ${obj.commandId}`);
+                logger.warn('ws', 'command_result for unknown commandId', { commandId: obj.commandId });
               }
             } else if (type === 'ai_query' && prompt) {
               // Очищаем текущую строку в shell (удаляем команду ai:...)
@@ -307,30 +318,30 @@ function handleTerminal(ws, url) {
                 const getRemoteKnowledge = (sshConn) => new Promise((resolve) => {
                   let content = '';
                   let commandTimeout;
-                  console.log('[AI Knowledge] Attempting to read remote knowledge file: ~/.kosmos/README_kosmos.md');
+                  logger.debug('ai', 'Attempting to read remote knowledge file: ~/.kosmos/README_kosmos.md');
 
                   commandTimeout = setTimeout(() => {
-                    console.error('[AI Knowledge] Remote command timed out.');
+                    logger.warn('ai', 'Remote command timed out');
                     resolve('');
                   }, 5000); // 5 секунд таймаут
 
                   sshConn.exec('cat ~/.kosmos/README_kosmos.md', (err, stream) => {
                     if (err) {
                       clearTimeout(commandTimeout);
-                      console.error('[AI Knowledge] Error executing remote command:', err.message);
+                      logger.error('ai', 'Error executing remote command', { error: err.message });
                       return resolve(''); // Ошибка создания канала, вернем пустоту
                     }
                     stream.on('data', (data) => { content += data.toString(); });
                     stream.stderr.on('data', (data) => {
-                      console.error('[AI Knowledge] Remote command stderr:', data.toString().trim());
+                      logger.warn('ai', 'Remote command stderr', { stderr: data.toString().trim() });
                     });
                     stream.on('close', (code) => {
                       clearTimeout(commandTimeout);
                       if (code === 0 && content) {
-                        console.log(`[AI Knowledge] Successfully read remote knowledge (${content.length} bytes).`);
+                        logger.info('ai', 'Successfully read remote knowledge', { bytes: content.length });
                         resolve(content);
                       } else {
-                        console.log('[AI Knowledge] Remote knowledge file not found, empty, or command failed.');
+                        logger.debug('ai', 'Remote knowledge file not found, empty, or command failed');
                         resolve('');
                       }
                     });
@@ -340,13 +351,13 @@ function handleTerminal(ws, url) {
                 // 2. С локального сервера панели
                 const getLocalKnowledge = async () => {
                   const knowledgePath = path.join(process.cwd(), '.kosmos', 'README_kosmos_server.md');
-                  console.log(`[AI Knowledge] Attempting to read local knowledge file: ${knowledgePath}`);
+                  logger.debug('ai', `Attempting to read local knowledge file: ${knowledgePath}`);
                   try {
                     const content = await fs.readFile(knowledgePath, 'utf8');
-                    console.log(`[AI Knowledge] Successfully read local knowledge (${content.length} bytes).`);
+                    logger.info('ai', 'Successfully read local knowledge', { bytes: content.length });
                     return content;
                   } catch (e) {
-                    console.log('[AI Knowledge] Local knowledge file not found or could not be read.');
+                    logger.debug('ai', 'Local knowledge file not found or could not be read');
                     return '';
                   } // Файл может не существовать
                 };
@@ -366,7 +377,7 @@ function handleTerminal(ws, url) {
 
                 // --- END: Получение знаний ---
 
-                console.log(`[AI] Preparing to send request to: ${aiServerUrl}`);
+                logger.info('ai', `Preparing to send request`, { url: aiServerUrl });
 
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 секунд
@@ -386,9 +397,9 @@ function handleTerminal(ws, url) {
 
                   clearTimeout(timeoutId);
 
-                  console.log(`[AI] Request sent for prompt: "${aiPrompt}". Status: ${aiResponse.status}`);
+                  logger.info('ai', 'Request sent', { prompt: aiPrompt, status: aiResponse.status });
                   const aiResult = await aiResponse.json();
-                  console.log('[AI] Response received:', JSON.stringify(aiResult, null, 2));
+                  logger.info('ai', 'Response received', { result: aiResult });
 
                   if (aiResult.success && aiResult.content) {
                     let commandToExecute = aiResult.content.trim();
@@ -425,17 +436,17 @@ function handleTerminal(ws, url) {
                   }
                 } catch (e) {
                   clearTimeout(timeoutId);
-                  console.error('[AI Error]', e);
+                  logger.error('ai', 'AI request error', { error: e.message, name: e.name });
                   const errorMsg = `\r\n\x1b[1;31m[AI Error] ${e.name === 'AbortError' ? 'Request timed out' : e.message}\x1b[0m\r\n`;
                   ws.send(JSON.stringify({ type: 'data', data: errorMsg }));
                   stream.write('\r');
                 }
               } catch (e) {
-                console.error('[ERROR] in ws.on(message):', e);
+                logger.error('ws', 'Error in ws.on(message)', { error: e.message });
               }
             }
           } catch (e) {
-            console.error('[ERROR] in ws.on(message):', e);
+            logger.error('ws', 'Error in ws.on(message)', { error: e.message });
           }
         });
 
@@ -531,7 +542,7 @@ function handleTerminal(ws, url) {
 
           // Удаляем сессию из REST bridge
           if (wsSessions[sessionId]) {
-            console.log(`[ws] Session ${sessionId} removed from REST bridge`);
+            logger.info('ws', 'Session removed from REST bridge', { sessionId });
             delete wsSessions[sessionId];
           }
 
@@ -541,12 +552,19 @@ function handleTerminal(ws, url) {
       });
     })
     .on('error', (e) => {
-      console.error('[ws] terminal ssh error:', e.message);
+      logger.error('ssh', 'Terminal SSH error', { error: e.message });
       try { ws.send(JSON.stringify({ type: 'fatal', error: e.message })); } catch { }
       setTimeout(() => { try { ws.close(1011, e.message); } catch { } }, 10);
     })
     .connect((() => {
-      const base = { host: server.ssh.host, port: Number(server.ssh.port) || 22, username: server.ssh.user };
+      const base = { 
+        host: server.ssh.host, 
+        port: Number(server.ssh.port) || 22, 
+        username: server.ssh.user,
+        keepaliveInterval: 10000,  // Пинг каждые 10 сек для предотвращения разрыва
+        keepaliveCountMax: 3,      // 3 пропущенных пинга = disconnect
+        readyTimeout: 30000        // Таймаут на handshake 30 сек
+      };
       const auth = { ...base };
       const agentSock = process.env.SSH_AUTH_SOCK || (process.platform === 'win32' ? '\\\\.\\pipe\\openssh-ssh-agent' : undefined);
       if (useAgent) auth.agent = agentSock;
@@ -576,7 +594,7 @@ function handleTail(ws, url) {
   const sessionId = uuidv4();
 
   const conn = new Client();
-  console.log(`[ws] tail connect: serverId=${serverId} path=${logPath}`);
+  logger.info('ws', 'Tail connecting', { serverId, path: logPath });
   conn
     .on('ready', () => {
       const cmd = `test -f ${logPath} && tail -n ${lines} -F ${logPath} || echo 'File not found: ${logPath}'`;
@@ -613,12 +631,19 @@ function handleTail(ws, url) {
       });
     })
     .on('error', (e) => {
-      console.error('[ws] tail ssh error:', e.message);
+      logger.error('ssh', 'Tail SSH error', { error: e.message });
       try { ws.send(JSON.stringify({ type: 'fatal', error: e.message })); } catch { }
       setTimeout(() => { try { ws.close(1011, e.message); } catch { } }, 10);
     })
     .connect((() => {
-      const base = { host: server.ssh.host, port: Number(server.ssh.port) || 22, username: server.ssh.user };
+      const base = { 
+        host: server.ssh.host, 
+        port: Number(server.ssh.port) || 22, 
+        username: server.ssh.user,
+        keepaliveInterval: 10000,  // Пинг каждые 10 сек для предотвращения разрыва
+        keepaliveCountMax: 3,      // 3 пропущенных пинга = disconnect
+        readyTimeout: 30000        // Таймаут на handshake 30 сек
+      };
       const auth = { ...base };
       const agentSock = process.env.SSH_AUTH_SOCK || (process.platform === 'win32' ? '\\\\.\\pipe\\openssh-ssh-agent' : undefined);
       if (useAgent) auth.agent = agentSock;

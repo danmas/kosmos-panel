@@ -2,6 +2,7 @@ const { Client } = require('ssh2');
 const { v4: uuidv4 } = require('uuid');
 const { inventory } = require('./monitor');
 const { resolvePrivateKey, findServer } = require('./ws-utils');
+const logger = require('./logger');
 
 const sessions = {};
 const SESSION_TIMEOUT = 10 * 60 * 1000; // 10 минут
@@ -11,7 +12,7 @@ setInterval(() => {
   const now = Date.now();
   for (const sessionId in sessions) {
     if (now - sessions[sessionId].lastUsed > SESSION_TIMEOUT) {
-      console.log(`[terminal-api] Closing stale session ${sessionId}`);
+      logger.info('terminal-api', 'Closing stale session', { sessionId });
       sessions[sessionId].conn.end();
       delete sessions[sessionId];
     }
@@ -44,7 +45,7 @@ async function createSession(req, res) {
     sessions[sessionId] = { conn, lastUsed: Date.now(), serverId };
     res.status(201).json({ sessionId });
   }).on('error', (err) => {
-    console.error(`[terminal-api] SSH connection error for server ${serverId}:`, err);
+    logger.error('terminal-api', 'SSH connection error', { serverId, error: err.message });
     res.status(500).json({ error: 'SSH connection failed: ' + err.message });
   }).connect((() => {
       const base = { host: server.ssh.host, port: Number(server.ssh.port) || 22, username: server.ssh.user };
@@ -82,7 +83,7 @@ function executeCommand(req, res) {
   
     conn.exec(command, execOptions, (err, stream) => {
       if (err) {
-        console.error(`[terminal-api] SSH exec error for session ${sessionId}:`, err);
+        logger.error('terminal-api', 'SSH exec error', { sessionId, error: err.message });
         return res.status(500).json({ error: 'Failed to execute command: ' + err.message });
       }
   
@@ -93,7 +94,7 @@ function executeCommand(req, res) {
       timer = setTimeout(() => {
         stream.close();
         cleanup();
-        console.error(`[terminal-api] Command timed out for session ${sessionId}`);
+        logger.error('terminal-api', 'Command timed out', { sessionId });
         res.status(500).json({ 
             error: 'Command execution timed out',
             stdout,
@@ -126,7 +127,7 @@ function closeSession(req, res) {
   const session = sessions[sessionId];
 
   if (session) {
-    console.log(`[terminal-api] Closing session ${sessionId}`);
+    logger.info('terminal-api', 'Closing session', { sessionId });
     session.conn.end();
     delete sessions[sessionId];
     res.status(200).json({ message: 'Session closed' });
@@ -171,7 +172,7 @@ async function createSessionV2(req, res) {
       sessions[sessionId] = { conn, lastUsed: Date.now(), serverId };
       sendSuccess(res, { sessionId }, 201);
     }).on('error', (err) => {
-      console.error(`[terminal-api-v2] SSH connection error for server ${serverId}:`, err);
+      logger.error('terminal-api', 'SSH connection error (v2)', { serverId, error: err.message });
       sendError(res, 'SSH connection failed: ' + err.message, 500);
     }).connect((() => {
         const base = { host: server.ssh.host, port: Number(server.ssh.port) || 22, username: server.ssh.user };
@@ -207,7 +208,7 @@ function executeCommandV2(req, res) {
   
     conn.exec(command, {}, (err, stream) => {
       if (err) {
-        console.error(`[terminal-api-v2] SSH exec error for session ${sessionId}:`, err);
+        logger.error('terminal-api', 'SSH exec error (v2)', { sessionId, error: err.message });
         return sendError(res, 'Failed to execute command: ' + err.message, 500);
       }
   
@@ -216,7 +217,7 @@ function executeCommandV2(req, res) {
       timer = setTimeout(() => {
         stream.close();
         cleanup();
-        console.error(`[terminal-api-v2] Command timed out for session ${sessionId}`);
+        logger.error('terminal-api', 'Command timed out (v2)', { sessionId });
         sendError(res, 'Command execution timed out', 500);
       }, timeout);
   
@@ -235,7 +236,7 @@ function closeSessionV2(req, res) {
     const session = sessions[sessionId];
   
     if (session) {
-      console.log(`[terminal-api-v2] Closing session ${sessionId}`);
+      logger.info('terminal-api', 'Closing session (v2)', { sessionId });
       session.conn.end();
       delete sessions[sessionId];
       sendSuccess(res, { message: 'Session closed' });

@@ -8,6 +8,7 @@ const { startScheduler, getSnapshot, inventory, reloadInventory, sshExec } = req
 const { attachWsServer, wsSessions, pendingCommands } = require('./ws');
 const { v4: uuidv4 } = require('uuid');
 const { createSession, executeCommand, closeSession, createSessionV2, executeCommandV2, closeSessionV2 } = require('./terminal');
+const logger = require('./logger');
 
 const app = express();
 app.use(express.json());
@@ -169,7 +170,7 @@ app.post('/api/inventory', async (req, res) => {
     } catch (e) {
       // Игнорируем ошибку если исходный файл не существует
       if (e.code !== 'ENOENT') {
-        console.warn('Не удалось создать резервную копию:', e.message);
+        logger.warn('api', 'Не удалось создать резервную копию', { error: e.message });
       }
     }
     
@@ -180,7 +181,7 @@ app.post('/api/inventory', async (req, res) => {
     res.json({ ok: true, message: 'Файл inventory.json успешно сохранен' });
     
   } catch (e) {
-    console.error('Ошибка сохранения inventory.json:', e);
+    logger.error('api', 'Ошибка сохранения inventory.json', { error: e.message });
     res.status(500).json({ error: e.message });
   }
 });
@@ -228,7 +229,7 @@ app.get('/api/logs', async (req, res) => {
     if (err.code === 'ENOENT') {
       return res.json([]); // Файл не найден, это нормально. Отдаем пустой массив.
     }
-    console.error('Error reading or parsing log file:', err);
+    logger.error('api', 'Error reading or parsing log file', { error: err.message });
     res.status(500).json({ error: 'Failed to read or parse log file' });
   }
 });
@@ -259,7 +260,7 @@ app.post('/api/ai-help', async (req, res) => {
           const content = await fs.readFile(filePath, 'utf8');
           contextDocs += `=== ${path.basename(file)} ===\n${content}\n\n`;
         } else {
-          console.warn(`Файл документации не найден: ${file}`);
+          logger.warn('ai', `Файл документации не найден: ${file}`);
         }
       }
 
@@ -274,7 +275,7 @@ app.post('/api/ai-help', async (req, res) => {
         }
       }
     } catch (e) {
-      console.warn('Ошибка чтения документации:', e.message);
+      logger.warn('ai', 'Ошибка чтения документации', { error: e.message });
     }
     
     // Формируем системный промпт
@@ -324,7 +325,7 @@ app.post('/api/ai-help', async (req, res) => {
     }
     
   } catch (error) {
-    console.error('Ошибка AI Help:', error);
+    logger.error('ai', 'Ошибка AI Help', { error: error.message });
     res.status(500).json({ 
       success: false, 
       error: `Ошибка обработки запроса: ${error.message}` 
@@ -389,7 +390,7 @@ app.post('/api/ws-terminal/:sessionId/command', (req, res) => {
       command,
       requireConfirmation
     }));
-    console.log(`[ws-bridge] Sent command ${commandId} to session ${sessionId}: "${command}"`);
+    logger.info('ws-bridge', 'Sent command to session', { commandId, sessionId, command });
   } catch (e) {
     delete pendingCommands[commandId];
     return res.status(500).json({ success: false, error: 'Failed to send command to terminal: ' + e.message });
@@ -495,7 +496,7 @@ app.delete('/api/ws-terminal/command/:commandId', (req, res) => {
         commandId
       }));
     } catch (e) {
-      console.warn(`[ws-bridge] Failed to send cancel to terminal: ${e.message}`);
+      logger.warn('ws-bridge', 'Failed to send cancel to terminal', { error: e.message });
     }
   }
 
@@ -517,8 +518,40 @@ const server = http.createServer(app);
 attachWsServer(server);
 
 server.listen(port, () => {
-  console.log(`UI: http://localhost:${port}`);
+  logger.info('server', `UI: http://localhost:${port}`);
   startScheduler();
 });
+
+// Graceful shutdown для логирования при pm2 restart
+function gracefulShutdown(signal) {
+  logger.warn('server', `Received ${signal}, shutting down gracefully...`);
+  
+  // Закрываем все WebSocket сессии
+  const sessionCount = Object.keys(wsSessions).length;
+  if (sessionCount > 0) {
+    logger.info('server', `Closing ${sessionCount} WebSocket sessions`);
+    for (const [sessionId, session] of Object.entries(wsSessions)) {
+      try {
+        session.ws.close(1001, 'Server shutting down');
+      } catch (e) {
+        logger.error('server', 'Error closing session', { sessionId, error: e.message });
+      }
+    }
+  }
+  
+  server.close(() => {
+    logger.info('server', 'HTTP server closed');
+    process.exit(0);
+  });
+  
+  // Force exit after 5 seconds
+  setTimeout(() => {
+    logger.warn('server', 'Forced shutdown after timeout');
+    process.exit(1);
+  }, 5000);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 

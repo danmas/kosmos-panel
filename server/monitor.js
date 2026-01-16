@@ -5,6 +5,7 @@ const tls = require('tls');
 const { Client } = require('ssh2');
 const { JSONPath } = require('jsonpath-plus');
 const dotenv = require('dotenv');
+const logger = require('./logger');
 
 const inventoryPath = path.join(process.cwd(), 'inventory.json');
 if (!fs.existsSync(inventoryPath)) {
@@ -22,7 +23,7 @@ function expandEnvPlaceholders(obj) {
         usedVars.add(name);
         const envValue = process.env[name];
         if (envValue === undefined) {
-          console.warn(`[Config] Переменная окружения ${name} не найдена`);
+          logger.warn('config', `Переменная окружения ${name} не найдена`);
         }
         return envValue ?? '';
       });
@@ -32,7 +33,7 @@ function expandEnvPlaceholders(obj) {
         usedVars.add(name);
         const envValue = process.env[name];
         if (envValue === undefined) {
-          console.warn(`[Config] Переменная окружения ${name} не найдена`);
+          logger.warn('config', `Переменная окружения ${name} не найдена`);
         }
         return envValue ?? '';
       });
@@ -58,7 +59,7 @@ function expandEnvPlaceholders(obj) {
   const result = processValue(obj);
   
   if (usedVars.size > 0) {
-    console.log(`[Config] Используемые переменные окружения: ${Array.from(usedVars).join(', ')}`);
+    logger.info('config', `Используемые переменные окружения: ${Array.from(usedVars).join(', ')}`);
   }
   
   return result;
@@ -87,7 +88,7 @@ function getCredential(credentialId) {
 function reloadInventory() {
   // Перечитываем .env файл, чтобы подхватить изменения без перезапуска
   dotenv.config({ path: path.join(process.cwd(), '.env'), override: true });
-  console.log('[Config] Переменные окружения из .env перезагружены.');
+  logger.info('config', 'Переменные окружения из .env перезагружены');
 
   const raw = fs.readFileSync(inventoryPath, 'utf8');
   const fresh = expandEnvPlaceholders(JSON.parse(raw));

@@ -1,7 +1,10 @@
+.crush.json
+
 .kosmos/
 inventory.json.backup.*
 terminal_log.json
 data/
+logs/
 
 # Node modules
 node_modules/
