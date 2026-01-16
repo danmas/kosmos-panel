@@ -121,7 +121,7 @@ function handleTerminal(ws, url) {
   console.log(`[ws] terminal: connecting to ${server.ssh.user}@${server.ssh.host}`);
   conn
     .on('ready', () => {
-      conn.shell({ term: 'xterm-color', cols, rows }, (err, stream) => {
+      conn.shell({ term: 'xterm-256color', cols, rows }, (err, stream) => {
         if (err) {
           try { ws.send(JSON.stringify({ type: 'fatal', error: 'shell error: ' + err.message })); } catch { }
           setTimeout(() => { try { ws.close(1011, 'shell error'); } catch { }; conn.end(); }, 10);
@@ -225,7 +225,7 @@ function handleTerminal(ws, url) {
             if (type === 'data') {
               stream.write(data);
             } else if (type === 'resize' && obj.cols && obj.rows) {
-              stream.setWindow(obj.rows, obj.cols, 600, 800);
+              stream.setWindow(Number(obj.rows), Number(obj.cols), 0, 0);
             } else if (type === 'close') {
               stream.end();
             } else if (type === 'command_log' && command) {
