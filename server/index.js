@@ -222,9 +222,17 @@ app.get('/api/test-ssh', async (req, res) => {
 
 app.get('/api/logs', async (req, res) => {
   const logFilePath = path.join(__dirname, '..', 'terminal_log.json');
+  const sessionId = req.query.sessionId;
   try {
     const data = await fs.readFile(logFilePath, 'utf8');
-    res.json(JSON.parse(data));
+    let logs = JSON.parse(data);
+    
+    // Фильтрация по sessionId если указан
+    if (sessionId) {
+      logs = logs.filter(log => log.sessionId === sessionId);
+    }
+    
+    res.json(logs);
   } catch (err) {
     if (err.code === 'ENOENT') {
       return res.json([]); // Файл не найден, это нормально. Отдаем пустой массив.
@@ -288,39 +296,46 @@ app.post('/api/ai-help', async (req, res) => {
 
     const systemPrompt = `${baseSystemPrompt}\n\nДокументация системы:\n${contextDocs}`;
     
-    // Отправляем запрос на AI сервер
-    const aiServerUrl = process.env.AI_SERVER_URL_HELP || process.env.AI_SERVER_URL || 'http://localhost:3002/api/send-request';
-    // const aiModel = process.env.AI_MODEL_HELP || process.env.AI_MODEL || 'moonshotai/kimi-dev-72b:free';
-    const aiModel = process.env.AI_MODEL;
-    // const aiProvider = process.env.AI_PROVIDER_HELP || process.env.AI_PROVIDER || 'openroute';
+    // OpenAI-совместимый API
+    const aiBaseUrl = process.env.AI_KOSMOS_MODEL_BASE_URL || 'http://localhost:3002/v1';
+    const aiServerUrl = `${aiBaseUrl}/chat/completions`;
+    const aiModel = process.env.AI_MODEL || 'CHEAP';
     
-    //TODO: переделать на OpenAI выриант
+    // OpenAI-совместимый формат запроса
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: query }
+    ];
+
     const aiResponse = await fetch(aiServerUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: aiModel,
-        // provider: aiProvider,
-        prompt: systemPrompt,
-        inputText: query
+        messages,
+        temperature: 0.7,
+        max_tokens: 2048
       })
     });
     
     if (!aiResponse.ok) {
-      throw new Error(`AI сервер вернул ошибку: ${aiResponse.status}`);
+      const errorData = await aiResponse.json().catch(() => ({}));
+      throw new Error(errorData.error?.message || `AI сервер вернул ошибку: ${aiResponse.status}`);
     }
     
     const aiResult = await aiResponse.json();
     
-    if (aiResult.success) {
+    // OpenAI-совместимый формат ответа
+    const aiContent = aiResult.choices?.[0]?.message?.content;
+    if (aiContent) {
       res.json({ 
         success: true, 
-        response: aiResult.content || 'Пустой ответ от AI' 
+        response: aiContent 
       });
     } else {
       res.json({ 
         success: false, 
-        error: aiResult.error || 'Неизвестная ошибка AI сервера' 
+        error: aiResult.error?.message || 'Пустой ответ от AI' 
       });
     }
     

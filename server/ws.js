@@ -304,12 +304,11 @@ function handleTerminal(ws, url) {
               // Сохраняем ID для связи с будущей stdin записью
               currentAiQueryId = aiQueryId;
 
-              //TODO: переделать на OpenAI выриант
+              // OpenAI-совместимый API
               try {
-                const aiServerUrl = process.env.AI_SERVER_URL || 'http://localhost:3002/api/send-request';
-                // const aiModel = process.env.AI_MODEL || 'moonshotai/kimi-dev-72b:free';
-                const aiModel = process.env.AI_MODEL;
-                //const aiProvider = process.env.AI_PROVIDER || 'openroute';
+                const aiBaseUrl = process.env.AI_KOSMOS_MODEL_BASE_URL || 'http://localhost:3002/v1';
+                const aiServerUrl = `${aiBaseUrl}/chat/completions`;
+                const aiModel = process.env.AI_MODEL || 'CHEAP';
                 const baseSystemPrompt = process.env.AI_SYSTEM_PROMPT || 'You are a Linux terminal AI assistant. Your task is to convert the user\'s request into a valid shell command, and return ONLY the shell command itself without any explanation.';
 
                 // --- START: Получение знаний ---
@@ -383,14 +382,20 @@ function handleTerminal(ws, url) {
                 const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 секунд
 
                 try {
+                  // OpenAI-совместимый формат запроса
+                  const messages = [
+                    { role: 'system', content: aiSystemPrompt },
+                    { role: 'user', content: aiPrompt }
+                  ];
+
                   const aiResponse = await fetch(aiServerUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                       model: aiModel,
-                      prompt: aiSystemPrompt,
-                      inputText: aiPrompt
-                      // provider: aiProvider
+                      messages,
+                      temperature: 0.3,
+                      max_tokens: 512
                     }),
                     signal: controller.signal
                   });
@@ -401,8 +406,10 @@ function handleTerminal(ws, url) {
                   const aiResult = await aiResponse.json();
                   logger.info('ai', 'Response received', { result: aiResult });
 
-                  if (aiResult.success && aiResult.content) {
-                    let commandToExecute = aiResult.content.trim();
+                  // OpenAI-совместимый формат ответа
+                  const aiContent = aiResult.choices?.[0]?.message?.content;
+                  if (aiContent) {
+                    let commandToExecute = aiContent.trim();
 
                     // Если AI вернул многострочный ответ, берем только первую строку
                     const lines = commandToExecute.split('\n');
@@ -432,7 +439,9 @@ function handleTerminal(ws, url) {
                     currentStdinId = stdinId;
                     currentAiQueryId = null; // Сбрасываем после использования
                   } else {
-                    throw new Error(aiResult.error || 'Invalid response from AI API');
+                    // OpenAI-совместимый формат ошибки
+                    const errorMsg = aiResult.error?.message || aiResult.error || 'Invalid response from AI API';
+                    throw new Error(errorMsg);
                   }
                 } catch (e) {
                   clearTimeout(timeoutId);
