@@ -50,14 +50,12 @@
 - **Перехват на клиенте**: `term.html` использует `attachCustomKeyEventHandler` для перехвата нажатий Enter.
 - **Обработка на сервере**: `ws.js` получает `ai_query`, очищает исходную команду (`\x15`) и отправляет в AI API.
 - **Конфигурация через .env**:
-  - `AI_SERVER_URL` — URL AI-сервера для терминальных команд (по умолчанию `http://localhost:3002/api/send-request`)
-  - `AI_SERVER_URL_HELP` — URL AI-сервера для системы помощи /api/ai-help (если не задан, используется `AI_SERVER_URL`)
-  - `AI_MODEL` — модель AI (обязательный параметр, например `moonshotai/kimi-dev-72b:free`)
-  - `AI_COMMAND_PREFIX` — префикс для AI-команд (по умолчанию `ai:`).
-    > **Важно:** На данный момент логика в `server/ws.js` оптимизирована под префикс `ai:`. Изменение этого параметра требует проверки обработки строк в backend.
-  - `AI_SYSTEM_PROMPT` — системный промпт для AI терминала.
-  - `AI_SYSTEM_PROMPT_HELP` — системный промпт для AI помощника (по умолчанию вшит в код, можно переопределить).
-  - `AI_HELP_CONTEXT_FILES` — список файлов (через запятую) для контекста AI-помощника. Пример: `README.md,KB/some_doc.md`. Если не задано, используются `README_AI.md`, `README_AUTH.md` и все файлы из `KB/*.md`.
+  - `AI_SERVER_URL` — URL AI-сервера (по умолчанию `http://localhost:3002/api/send-request`)
+  - `AI_MODEL` — модель AI (по умолчанию `moonshotai/kimi-dev-72b:free`)
+  - `AI_PROVIDER` — провайдер AI (по умолчанию `openroute`)
+  - `AI_COMMAND_PREFIX` — **(Новое)** префикс для AI-команд (по умолчанию `ai:`). Можно изменить, например, на `ask:`.
+  - `AI_SYSTEM_PROMPT` — системный промпт для AI
+  - `AI_HELP_CONTEXT_FILES` — **(Новое)** список файлов (через запятую) для контекста AI-помощника. Пример: `README.md,KB/some_doc.md`. Если не задано, используются `README_AI.md`, `README_AUTH.md` и все файлы из `KB/*.md`.
 - **Обратная связь**: Пользователь видит `Запрос к AI: ...` во время обработки.
 
 ### Подгрузка знаний для AI (RAG)
