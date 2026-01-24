@@ -188,13 +188,54 @@
       
       const fit = new window.FitAddon.FitAddon();
       term.loadAddon(fit); term.open(termDiv); setTimeout(()=>{ try{fit.fit()}catch{} },0);
+      
+      // ========== Resize Support для TUI (Bubble Tea, etc.) ==========
+      function sendResize() {
+        if (ws.readyState === WebSocket.OPEN && mode !== 'tail') {
+          const cols = term.cols;
+          const rows = term.rows;
+          ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+          console.log(`[resize] Sent: ${cols}x${rows}`);
+        }
+      }
+      
+      // Debounce для resize событий
+      let resizeTimeout;
+      function handleResize() {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+          try {
+            fit.fit();
+            sendResize();
+          } catch (e) {
+            console.error('[resize] Error:', e);
+          }
+        }, 100);
+      }
+      
+      // Слушаем изменение размера окна
+      window.addEventListener('resize', handleResize);
+      
+      // ResizeObserver для контейнера (более точное отслеживание)
+      if (typeof ResizeObserver !== 'undefined') {
+        const resizeObserver = new ResizeObserver(handleResize);
+        resizeObserver.observe(termDiv);
+      }
+      
       const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
       const wsUrl = mode === 'tail'
         ? `${wsProto}://${location.host}/ws/tail?serverId=${encodeURIComponent(serverId)}&path=${encodeURIComponent(path)}&lines=200`
         : `${wsProto}://${location.host}/ws/terminal?serverId=${encodeURIComponent(serverId)}&cols=120&rows=30`;
       const ws = new WebSocket(wsUrl);
       term.writeln(mode === 'tail' ? `[tail ${path}]` : '[подключение к SSH...]');
-      ws.onopen = () => term.writeln('[соединение установлено]');
+      ws.onopen = () => {
+        term.writeln('[соединение установлено]');
+        // Отправляем актуальный размер сразу после подключения
+        setTimeout(() => {
+          try { fit.fit(); } catch {}
+          sendResize();
+        }, 100);
+      };
       ws.onclose = ev => {
         console.warn('[ws] closed:', ev.code, ev.reason);
         term.writeln(`\r\n[соединение закрыто код ${ev.code}${ev.reason ? ' ' + ev.reason : ''}]`);
@@ -316,7 +357,7 @@
       }
 
       document.getElementById('close').onclick = () => { try { ws.close(); } catch {}; window.close(); };
-      document.getElementById('fit').onclick = () => { try { fit.fit(); } catch {} };
+      document.getElementById('fit').onclick = () => { try { fit.fit(); sendResize(); } catch {} };
       document.getElementById('reconnect').onclick = () => {
         location.reload(); // Перезагрузить страницу для переподключения
       };
