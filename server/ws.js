@@ -4,7 +4,6 @@ const { inventory } = require('./monitor');
 const fetch = require('node-fetch');
 const fs = require('fs').promises;
 const path = require('path');
-const os = require('os');
 const { v4: uuidv4 } = require('uuid');
 const { findServer, resolvePrivateKey } = require('./ws-utils');
 const logger = require('./logger');
@@ -312,66 +311,48 @@ function handleTerminal(ws, url) {
                 const baseSystemPrompt = process.env.AI_SYSTEM_PROMPT || 'You are a Linux terminal AI assistant. Your task is to convert the user\'s request into a valid shell command, and return ONLY the shell command itself without any explanation.';
 
                 // --- START: Получение знаний ---
-
-                // 1. С удаленной машины по SSH
+                // Приоритет: 1) ./.kosmos-panel/kosmos-panel.md  2) ~/.config/kosmos-panel/kosmos-panel.md
                 const getRemoteKnowledge = (sshConn) => new Promise((resolve) => {
-                  let content = '';
                   let commandTimeout;
-                  logger.debug('ai', 'Attempting to read remote knowledge file: ~/.kosmos/README_kosmos.md');
+                  const primaryPath = './.kosmos-panel/kosmos-panel.md';
+                  const fallbackPath = '~/.config/kosmos-panel/kosmos-panel.md';
+                  
+                  // Команда: попытаться прочитать primary, если не найден — fallback
+                  const cmd = `cat ${primaryPath} 2>/dev/null || cat ${fallbackPath} 2>/dev/null`;
+                  
+                  logger.debug('ai', 'Attempting to read remote knowledge', { primaryPath, fallbackPath });
 
                   commandTimeout = setTimeout(() => {
-                    logger.warn('ai', 'Remote command timed out');
+                    logger.warn('ai', 'Remote knowledge command timed out');
                     resolve('');
                   }, 5000); // 5 секунд таймаут
 
-                  sshConn.exec('cat ~/.kosmos/README_kosmos.md', (err, stream) => {
+                  let content = '';
+                  sshConn.exec(cmd, (err, stream) => {
                     if (err) {
                       clearTimeout(commandTimeout);
-                      logger.error('ai', 'Error executing remote command', { error: err.message });
-                      return resolve(''); // Ошибка создания канала, вернем пустоту
+                      logger.error('ai', 'Error executing remote knowledge command', { error: err.message });
+                      return resolve('');
                     }
                     stream.on('data', (data) => { content += data.toString(); });
-                    stream.stderr.on('data', (data) => {
-                      logger.warn('ai', 'Remote command stderr', { stderr: data.toString().trim() });
-                    });
                     stream.on('close', (code) => {
                       clearTimeout(commandTimeout);
-                      if (code === 0 && content) {
+                      if (content.trim()) {
                         logger.info('ai', 'Successfully read remote knowledge', { bytes: content.length });
                         resolve(content);
                       } else {
-                        logger.debug('ai', 'Remote knowledge file not found, empty, or command failed');
+                        logger.debug('ai', 'Remote knowledge files not found or empty');
                         resolve('');
                       }
                     });
                   });
                 });
 
-                // 2. С локального сервера панели
-                const getLocalKnowledge = async () => {
-                  const knowledgePath = path.join(process.cwd(), '.kosmos', 'README_kosmos_server.md');
-                  logger.debug('ai', `Attempting to read local knowledge file: ${knowledgePath}`);
-                  try {
-                    const content = await fs.readFile(knowledgePath, 'utf8');
-                    logger.info('ai', 'Successfully read local knowledge', { bytes: content.length });
-                    return content;
-                  } catch (e) {
-                    logger.debug('ai', 'Local knowledge file not found or could not be read');
-                    return '';
-                  } // Файл может не существовать
-                };
-
-                const [remoteKnowledge, localKnowledge] = await Promise.all([
-                  getRemoteKnowledge(conn),
-                  getLocalKnowledge()
-                ]);
+                const remoteKnowledge = await getRemoteKnowledge(conn);
 
                 let aiSystemPrompt = baseSystemPrompt;
                 if (remoteKnowledge.trim()) {
-                  aiSystemPrompt = `Context from remote system:\n${remoteKnowledge.trim()}\n\n---\n\n${aiSystemPrompt}`;
-                }
-                if (localKnowledge.trim()) {
-                  aiSystemPrompt = `Context from panel server:\n${localKnowledge.trim()}\n\n---\n\n${aiSystemPrompt}`;
+                  aiSystemPrompt = `System context:\n${remoteKnowledge.trim()}\n\n---\n\n${aiSystemPrompt}`;
                 }
 
                 // --- END: Получение знаний ---
