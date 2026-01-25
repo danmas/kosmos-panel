@@ -1,6 +1,6 @@
 .crush.json
 
-.kosmos/
+.kosmos-panel/
 inventory.json.backup.*
 terminal_log.json
 data/
