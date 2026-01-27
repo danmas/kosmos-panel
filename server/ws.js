@@ -323,6 +323,9 @@ function handleTerminal(ws, url) {
         let currentAiQueryId = null;
         let currentStdinId = null;
 
+        // Multi-step skill state
+        let activeSkill = null; // { name, messages: [], step: 0, maxSteps: 10, waitingForOutput: false, waitingForUser: false }
+
         // Информация о сервере для логирования
         const serverInfo = {
           serverId: serverId,
@@ -354,8 +357,9 @@ function handleTerminal(ws, url) {
             }
 
             // Записываем только вывод команды (без промпта)
+            let cleanOutput = '';
             if (commandOutput.trim()) {
-              const cleanOutput = stripAnsi(commandOutput).trim();
+              cleanOutput = stripAnsi(commandOutput).trim();
 
               // Фильтруем эхо ввода ai: команд
               if (cleanOutput && !cleanOutput.includes('ai:')) {
@@ -382,6 +386,27 @@ function handleTerminal(ws, url) {
 
             // Сбрасываем ID после записи stdout
             currentStdinId = null;
+
+            // ========== Multi-step Skill: продолжить после выполнения команды ==========
+            if (activeSkill && activeSkill.waitingForOutput) {
+              activeSkill.waitingForOutput = false;
+              const outputForAI = cleanOutput || '(no output)';
+              logger.debug('skills', 'Command output received, continuing skill', { 
+                step: activeSkill.step, 
+                outputLength: outputForAI.length 
+              });
+              
+              // Асинхронно продолжаем skill
+              setImmediate(async () => {
+                try {
+                  await activeSkill.sendNextRequest(`Command output:\n${outputForAI}`);
+                } catch (e) {
+                  logger.error('skills', 'Error continuing skill', { error: e.message });
+                  ws.send(JSON.stringify({ type: 'data', data: `\r\n\x1b[1;31m[Skill Error] ${e.message}\x1b[0m\r\n` }));
+                  activeSkill = null;
+                }
+              });
+            }
 
             // Очищаем буфер
             stdoutBuffer = '';
@@ -460,7 +485,7 @@ function handleTerminal(ws, url) {
                 ws.send(JSON.stringify({ type: 'skills_list', skills: [], error: e.message }));
               }
             } else if (type === 'skill_invoke' && obj.name) {
-              // Вызов конкретного skill
+              // ========== Multi-step Skill Invoke ==========
               const skillName = obj.name;
               const skillParams = obj.params || {};
               const userPrompt = obj.prompt || '';
@@ -468,52 +493,79 @@ function handleTerminal(ws, url) {
               try {
                 const skill = await getRemoteSkill(conn, skillName);
                 if (!skill) {
-                  ws.send(JSON.stringify({ 
-                    type: 'skill_error', 
-                    error: `Skill "${skillName}" not found` 
-                  }));
+                  ws.send(JSON.stringify({ type: 'skill_error', error: `Skill "${skillName}" not found` }));
                   return;
                 }
 
-                // Формируем промпт с инструкциями skill
                 const aiBaseUrl = process.env.AI_KOSMOS_MODEL_BASE_URL || 'http://localhost:3002/v1';
                 const aiServerUrl = `${aiBaseUrl}/chat/completions`;
                 const aiModel = process.env.AI_MODEL || 'CHEAP';
-                const baseSystemPrompt = process.env.AI_SYSTEM_PROMPT || 'You are a Linux terminal AI assistant. Your task is to convert the user\'s request into a valid shell command, and return ONLY the shell command itself without any explanation.';
+                
+                // Специальный системный промпт для multi-step skills
+                const skillSystemPrompt = `You are a Linux terminal AI assistant executing a multi-step skill.
 
-                // Получаем knowledge (как обычно)
+RESPONSE FORMAT - Use EXACTLY ONE of these formats per response:
+
+1. [CMD] command_here
+   Execute this shell command. You will receive the command output.
+
+2. [MESSAGE] your message here
+   Show this message to the user and wait for their response.
+   Use this to ask questions or request input (like commit messages).
+
+3. [DONE] final message here
+   The skill is complete. Show this final message to the user.
+
+RULES:
+- Always start your response with [CMD], [MESSAGE], or [DONE]
+- Only ONE format per response
+- For [CMD]: provide only the command, no explanations
+- For [MESSAGE]: ask clear, specific questions
+- For [DONE]: summarize what was accomplished`;
+
+                // Получаем knowledge
                 const getRemoteKnowledge = (sshConn) => new Promise((resolve) => {
-                  let commandTimeout;
-                  const primaryPath = './.kosmos-panel/kosmos-panel.md';
-                  const fallbackPath = '~/.config/kosmos-panel/kosmos-panel.md';
-                  const cmd = `cat ${primaryPath} 2>/dev/null || cat ${fallbackPath} 2>/dev/null`;
-                  
-                  commandTimeout = setTimeout(() => resolve(''), 5000);
+                  let commandTimeout = setTimeout(() => resolve(''), 5000);
+                  const cmd = `cat ./.kosmos-panel/kosmos-panel.md 2>/dev/null || cat ~/.config/kosmos-panel/kosmos-panel.md 2>/dev/null`;
                   let content = '';
-                  sshConn.exec(cmd, (err, stream) => {
+                  sshConn.exec(cmd, (err, execStream) => {
                     if (err) { clearTimeout(commandTimeout); return resolve(''); }
-                    stream.on('data', (data) => { content += data.toString(); });
-                    stream.on('close', () => {
-                      clearTimeout(commandTimeout);
-                      resolve(content.trim() || '');
-                    });
+                    execStream.on('data', (data) => { content += data.toString(); });
+                    execStream.on('close', () => { clearTimeout(commandTimeout); resolve(content.trim() || ''); });
                   });
                 });
 
                 const remoteKnowledge = await getRemoteKnowledge(conn);
 
-                // Формируем системный промпт с skill
-                let aiSystemPrompt = baseSystemPrompt;
+                // Формируем системный промпт
+                let fullSystemPrompt = skillSystemPrompt;
                 if (remoteKnowledge.trim()) {
-                  aiSystemPrompt = `System context:\n${remoteKnowledge.trim()}\n\n---\n\n${aiSystemPrompt}`;
+                  fullSystemPrompt += `\n\n--- System Context ---\n${remoteKnowledge.trim()}`;
                 }
-                aiSystemPrompt = `=== Active Skill: ${skill.name} ===\n${skill.content}\n\n---\n\n${aiSystemPrompt}`;
+                fullSystemPrompt += `\n\n--- Active Skill: ${skill.name} ---\n${skill.content}`;
 
-                // Формируем user prompt с параметрами
-                let finalUserPrompt = userPrompt || `Execute skill: ${skillName}`;
+                // Формируем первый user prompt
+                let firstUserPrompt = userPrompt || `Execute skill: ${skillName}`;
                 if (Object.keys(skillParams).length > 0) {
-                  finalUserPrompt += `\n\nParameters:\n${Object.entries(skillParams).map(([k, v]) => `- ${k}: ${v}`).join('\n')}`;
+                  firstUserPrompt += `\n\nParameters:\n${Object.entries(skillParams).map(([k, v]) => `- ${k}: ${v}`).join('\n')}`;
                 }
+                firstUserPrompt += `\n\n[Step 1 of 10]`;
+
+                // Инициализируем activeSkill
+                activeSkill = {
+                  name: skillName,
+                  description: skill.description,
+                  aiServerUrl,
+                  aiModel,
+                  messages: [
+                    { role: 'system', content: fullSystemPrompt },
+                    { role: 'user', content: firstUserPrompt }
+                  ],
+                  step: 1,
+                  maxSteps: 10,
+                  waitingForOutput: false,
+                  waitingForUser: false
+                };
 
                 // Логируем
                 const aiQueryId = uuidv4();
@@ -524,18 +576,140 @@ function handleTerminal(ws, url) {
                   type: 'skill_invoke',
                   skill_name: skillName,
                   skill_params: skillParams,
-                  user_prompt: finalUserPrompt,
+                  user_prompt: firstUserPrompt,
                   ...serverInfo
                 });
                 currentAiQueryId = aiQueryId;
 
-                // Отправляем в терминал уведомление
+                // Уведомление в терминал
                 ws.send(JSON.stringify({ 
                   type: 'data', 
                   data: `\r\n\x1b[1;36m[Skill: ${skillName}]\x1b[0m ${skill.description || ''}\r\n` 
                 }));
+                ws.send(JSON.stringify({ type: 'skill_step', step: 1, max: 10 }));
 
-                // Запрос к AI
+                // Функция обработки ответа AI
+                const processSkillResponse = async (aiContent) => {
+                  if (!activeSkill) return;
+
+                  const content = aiContent.trim();
+                  
+                  // Парсим формат ответа
+                  const cmdMatch = content.match(/^\[CMD\]\s*(.+)$/im);
+                  const msgMatch = content.match(/^\[MESSAGE\]\s*(.+)$/ims);
+                  const doneMatch = content.match(/^\[DONE\]\s*(.*)$/ims);
+
+                  if (cmdMatch) {
+                    // [CMD] - выполнить команду
+                    let command = cmdMatch[1].trim();
+                    command = command.replace(/^```[a-z]*\s*|\s*```$/g, '').trim();
+                    
+                    activeSkill.messages.push({ role: 'assistant', content: content });
+                    activeSkill.waitingForOutput = true;
+                    
+                    ws.send(JSON.stringify({ type: 'data', data: `\x1b[90m$ ${command}\x1b[0m\r\n` }));
+                    stream.write(command + '\r');
+
+                    const stdinId = uuidv4();
+                    appendToLog({
+                      id: stdinId,
+                      sessionId,
+                      timestamp: new Date().toISOString(),
+                      type: 'stdin',
+                      executed_command: command,
+                      skill_name: activeSkill.name,
+                      skill_step: activeSkill.step,
+                      ...serverInfo
+                    });
+                    currentStdinId = stdinId;
+
+                  } else if (msgMatch) {
+                    // [MESSAGE] - показать сообщение и ждать ввода
+                    const message = msgMatch[1].trim();
+                    
+                    activeSkill.messages.push({ role: 'assistant', content: content });
+                    activeSkill.waitingForUser = true;
+                    
+                    ws.send(JSON.stringify({ type: 'skill_message', text: message }));
+                    ws.send(JSON.stringify({ type: 'data', data: `\r\n\x1b[1;33m[Skill вопрос]\x1b[0m ${message}\r\n` }));
+
+                  } else if (doneMatch) {
+                    // [DONE] - skill завершён
+                    const finalMessage = doneMatch[1].trim() || 'Skill completed';
+                    
+                    ws.send(JSON.stringify({ type: 'skill_complete', text: finalMessage }));
+                    ws.send(JSON.stringify({ type: 'data', data: `\r\n\x1b[1;32m[Skill завершён]\x1b[0m ${finalMessage}\r\n` }));
+                    
+                    activeSkill = null;
+
+                  } else {
+                    // Неизвестный формат - пробуем выполнить как команду
+                    logger.warn('skills', 'Unknown response format, treating as command', { content: content.substring(0, 100) });
+                    
+                    let command = content.split('\n')[0].trim();
+                    command = command.replace(/^```[a-z]*\s*|\s*```$/g, '').trim();
+                    
+                    if (command) {
+                      activeSkill.messages.push({ role: 'assistant', content: `[CMD] ${command}` });
+                      activeSkill.waitingForOutput = true;
+                      
+                      ws.send(JSON.stringify({ type: 'data', data: `\x1b[90m$ ${command}\x1b[0m\r\n` }));
+                      stream.write(command + '\r');
+                    } else {
+                      throw new Error('Empty or invalid AI response');
+                    }
+                  }
+                };
+
+                // Сохраняем функцию в activeSkill для использования в других местах
+                activeSkill.processResponse = processSkillResponse;
+                activeSkill.sendNextRequest = async (userContent) => {
+                  if (!activeSkill) return;
+                  
+                  activeSkill.step++;
+                  if (activeSkill.step > activeSkill.maxSteps) {
+                    ws.send(JSON.stringify({ type: 'skill_complete', text: 'Maximum steps reached' }));
+                    ws.send(JSON.stringify({ type: 'data', data: `\r\n\x1b[1;33m[Skill]\x1b[0m Достигнут лимит шагов (${activeSkill.maxSteps})\r\n` }));
+                    activeSkill = null;
+                    return;
+                  }
+
+                  activeSkill.messages.push({ role: 'user', content: userContent + `\n\n[Step ${activeSkill.step} of ${activeSkill.maxSteps}]` });
+                  ws.send(JSON.stringify({ type: 'skill_step', step: activeSkill.step, max: activeSkill.maxSteps }));
+
+                  try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+                    const aiResponse = await fetch(activeSkill.aiServerUrl, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        model: activeSkill.aiModel,
+                        messages: activeSkill.messages,
+                        temperature: 0.3,
+                        max_tokens: 512
+                      }),
+                      signal: controller.signal
+                    });
+
+                    clearTimeout(timeoutId);
+                    const aiResult = await aiResponse.json();
+                    const aiContent = aiResult.choices?.[0]?.message?.content;
+
+                    if (aiContent) {
+                      await activeSkill.processResponse(aiContent);
+                    } else {
+                      throw new Error(aiResult.error?.message || 'Invalid AI response');
+                    }
+                  } catch (e) {
+                    logger.error('skills', 'Skill step error', { step: activeSkill.step, error: e.message });
+                    ws.send(JSON.stringify({ type: 'data', data: `\r\n\x1b[1;31m[Skill Error] ${e.message}\x1b[0m\r\n` }));
+                    activeSkill = null;
+                  }
+                };
+
+                // Первый запрос к AI
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 15000);
 
@@ -544,10 +718,7 @@ function handleTerminal(ws, url) {
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
                     model: aiModel,
-                    messages: [
-                      { role: 'system', content: aiSystemPrompt },
-                      { role: 'user', content: finalUserPrompt }
-                    ],
+                    messages: activeSkill.messages,
                     temperature: 0.3,
                     max_tokens: 512
                   }),
@@ -559,40 +730,33 @@ function handleTerminal(ws, url) {
                 const aiContent = aiResult.choices?.[0]?.message?.content;
 
                 if (aiContent) {
-                  let commandToExecute = aiContent.trim();
-                  const lines = commandToExecute.split('\n');
-                  if (lines.length > 1) {
-                    commandToExecute = lines[0].trim();
-                  }
-                  commandToExecute = commandToExecute.replace(/^```[a-z]*\s*|\s*```$/g, '').trim();
-
-                  stream.write(commandToExecute + '\r');
-
-                  const stdinId = uuidv4();
-                  appendToLog({
-                    id: stdinId,
-                    sessionId,
-                    timestamp: new Date().toISOString(),
-                    type: 'stdin',
-                    executed_command: commandToExecute,
-                    skill_name: skillName,
-                    ai_query_id: currentAiQueryId,
-                    ...serverInfo
-                  });
-                  currentStdinId = stdinId;
-                  currentAiQueryId = null;
+                  await processSkillResponse(aiContent);
                 } else {
-                  const errorMsg = aiResult.error?.message || 'Invalid AI response';
-                  throw new Error(errorMsg);
+                  throw new Error(aiResult.error?.message || 'Invalid AI response');
                 }
+
               } catch (e) {
                 logger.error('skills', 'Skill invoke error', { skillName, error: e.message });
-                ws.send(JSON.stringify({ 
-                  type: 'data', 
-                  data: `\r\n\x1b[1;31m[Skill Error] ${e.message}\x1b[0m\r\n` 
-                }));
-                stream.write('\r');
+                ws.send(JSON.stringify({ type: 'data', data: `\r\n\x1b[1;31m[Skill Error] ${e.message}\x1b[0m\r\n` }));
+                activeSkill = null;
               }
+            } else if (type === 'skill_user_input' && activeSkill && activeSkill.waitingForUser) {
+              // ========== User input for skill ==========
+              const userInput = obj.text || '';
+              activeSkill.waitingForUser = false;
+              
+              ws.send(JSON.stringify({ type: 'data', data: `\x1b[90m> ${userInput}\x1b[0m\r\n` }));
+              
+              await activeSkill.sendNextRequest(`User response: ${userInput}`);
+
+            } else if (type === 'skill_cancel') {
+              // ========== Cancel active skill ==========
+              if (activeSkill) {
+                ws.send(JSON.stringify({ type: 'data', data: `\r\n\x1b[1;33m[Skill отменён]\x1b[0m\r\n` }));
+                ws.send(JSON.stringify({ type: 'skill_complete', text: 'Cancelled by user' }));
+                activeSkill = null;
+              }
+
             } else if (type === 'ai_query' && prompt) {
               // Очищаем текущую строку в shell (удаляем команду ai:...)
               // Старый метод: stream.write('\x15'); // CTRL+U, не работает на Windows

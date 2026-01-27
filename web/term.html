@@ -259,6 +259,57 @@
       }
       .skill-execute-btn:hover { background: #16a34a; }
       
+      /* Skill input panel for multi-step skills */
+      .skill-input-panel {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(180deg, #1a2744 0%, #0e1322 100%);
+        border-top: 2px solid #22c55e;
+        padding: 12px 16px;
+        z-index: 1003;
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+        animation: slideUp 0.2s ease-out;
+      }
+      .skill-input-panel.hidden { display: none; }
+      .skill-input-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: #22c55e;
+        font-weight: 600;
+        margin-bottom: 10px;
+      }
+      .skill-input-badge {
+        background: #22c55e;
+        color: #000;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 10px;
+        text-transform: uppercase;
+      }
+      .skill-input-form {
+        display: flex;
+        gap: 8px;
+      }
+      .skill-input-form input {
+        flex: 1;
+        background: #000;
+        border: 1px solid #333;
+        color: #00ff00;
+        padding: 10px 12px;
+        border-radius: 6px;
+        font-family: monospace;
+        font-size: 14px;
+      }
+      .skill-input-form input:focus {
+        outline: none;
+        border-color: #22c55e;
+      }
+      .skill-execute-btn:hover { background: #16a34a; }
+      
       /* Skills button */
       .skills-btn {
         position: absolute;
@@ -311,7 +362,7 @@
         <!-- Skills popup -->
         <div id="skillsPopup" class="skills-popup hidden">
           <div class="skills-header">
-            <span>Skills</span>
+            <span>Skills <span id="skillProgress" style="font-weight:normal;font-size:12px;color:#888;"></span></span>
             <button class="skills-close" id="skillsClose">×</button>
           </div>
           <div class="skills-list" id="skillsList">
@@ -323,6 +374,19 @@
               <input type="text" id="skillParamsInput" placeholder="Введите параметры или сообщение...">
               <button class="skill-execute-btn" id="skillExecuteBtn">Выполнить</button>
             </div>
+          </div>
+        </div>
+        
+        <!-- Skill input panel (for multi-step skills) -->
+        <div id="skillInputPanel" class="skill-input-panel hidden">
+          <div class="skill-input-header">
+            <span class="skill-input-badge">Skill</span>
+            <span id="skillInputQuestion">Waiting for input...</span>
+          </div>
+          <div class="skill-input-form">
+            <input type="text" id="skillUserInput" placeholder="Введите ответ...">
+            <button class="btn-confirm" id="skillInputSend">Отправить</button>
+            <button class="btn-reject" id="skillInputCancel">Отмена</button>
           </div>
         </div>
       </div>
@@ -426,6 +490,19 @@
           if (m.type === 'skills_list') handleSkillsList(m.skills || [], m.error);
           if (m.type === 'skill_error') {
             term.writeln(`\r\n\x1b[1;31m[Skill Error] ${m.error}\x1b[0m`);
+            hideSkillsPopup();
+            skillActive = false;
+          }
+          if (m.type === 'skill_step') {
+            skillActive = true;
+            updateSkillProgress(m.step, m.max);
+          }
+          if (m.type === 'skill_message') {
+            showSkillInput(m.text);
+          }
+          if (m.type === 'skill_complete') {
+            skillActive = false;
+            hideSkillInput();
             hideSkillsPopup();
           }
         } catch (e) {
@@ -559,6 +636,43 @@
       // ========== Skills Functions ==========
       let availableSkills = [];
       let selectedSkill = null;
+      let skillActive = false;
+
+      function updateSkillProgress(step, max) {
+        const el = document.getElementById('skillProgress');
+        if (el) el.textContent = `(шаг ${step}/${max})`;
+      }
+
+      function showSkillInput(question) {
+        const panel = document.getElementById('skillInputPanel');
+        const questionEl = document.getElementById('skillInputQuestion');
+        const inputEl = document.getElementById('skillUserInput');
+        
+        questionEl.textContent = question;
+        inputEl.value = '';
+        panel.classList.remove('hidden');
+        inputEl.focus();
+      }
+
+      function hideSkillInput() {
+        document.getElementById('skillInputPanel').classList.add('hidden');
+        document.getElementById('skillProgress').textContent = '';
+      }
+
+      function sendSkillUserInput() {
+        const inputEl = document.getElementById('skillUserInput');
+        const text = inputEl.value.trim();
+        if (!text) return;
+        
+        ws.send(JSON.stringify({ type: 'skill_user_input', text }));
+        hideSkillInput();
+      }
+
+      function cancelSkill() {
+        ws.send(JSON.stringify({ type: 'skill_cancel' }));
+        hideSkillInput();
+        skillActive = false;
+      }
 
       function showSkillsPopup() {
         document.getElementById('skillsPopup').classList.remove('hidden');
@@ -657,8 +771,20 @@
         if (e.key === 'Enter') executeSelectedSkill();
         else if (e.key === 'Escape') hideSkillsPopup();
       };
+      
+      // Skill input panel event handlers
+      document.getElementById('skillInputSend').onclick = sendSkillUserInput;
+      document.getElementById('skillInputCancel').onclick = cancelSkill;
+      document.getElementById('skillUserInput').onkeydown = (e) => {
+        if (e.key === 'Enter') sendSkillUserInput();
+        else if (e.key === 'Escape') cancelSkill();
+      };
+      
       document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') hideSkillsPopup();
+        if (e.key === 'Escape') {
+          hideSkillsPopup();
+          if (skillActive) cancelSkill();
+        }
       });
     </script>
   </body>
