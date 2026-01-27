@@ -147,20 +147,22 @@
         background: #16a34a; 
       }
       
-      /* Skills popup */
+      /* Skills popup - draggable dialog */
       .skills-popup {
         position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 400px;
+        max-width: 90%;
+        max-height: 70%;
         background: linear-gradient(180deg, #1a2744 0%, #0e1322 100%);
-        border-top: 2px solid #4a9eff;
-        padding: 12px 16px;
+        border: 2px solid #4a9eff;
+        border-radius: 8px;
+        padding: 0;
         z-index: 1002;
-        max-height: 50%;
-        overflow-y: auto;
-        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
-        animation: slideUp 0.2s ease-out;
+        overflow: hidden;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
       }
       .skills-popup.hidden { display: none; }
       .skills-header {
@@ -171,7 +173,11 @@
         font-size: 14px;
         color: #4a9eff;
         font-weight: 600;
-        margin-bottom: 12px;
+        padding: 10px 16px;
+        background: #0e1322;
+        border-bottom: 1px solid #223055;
+        cursor: move;
+        user-select: none;
       }
       .skills-close {
         background: transparent;
@@ -182,6 +188,11 @@
         padding: 0 4px;
       }
       .skills-close:hover { color: #fff; }
+      .skills-body {
+        padding: 12px 16px;
+        max-height: 300px;
+        overflow-y: auto;
+      }
       .skills-list {
         display: flex;
         flex-direction: column;
@@ -310,11 +321,11 @@
       }
       .skill-execute-btn:hover { background: #16a34a; }
       
-      /* Skills button */
+      /* Skills button - под Session indicator */
       .skills-btn {
         position: absolute;
-        top: 8px;
-        right: 80px;
+        top: 32px;
+        right: 45px;
         background: #1b2544;
         border: 1px solid #4a9eff;
         color: #4a9eff;
@@ -359,20 +370,22 @@
           </div>
         </div>
         
-        <!-- Skills popup -->
+        <!-- Skills popup (draggable) -->
         <div id="skillsPopup" class="skills-popup hidden">
-          <div class="skills-header">
+          <div class="skills-header" id="skillsHeader">
             <span>Skills <span id="skillProgress" style="font-weight:normal;font-size:12px;color:#888;"></span></span>
             <button class="skills-close" id="skillsClose">×</button>
           </div>
-          <div class="skills-list" id="skillsList">
-            <div class="skills-loading">Загрузка skills...</div>
-          </div>
-          <div class="skill-params-form hidden" id="skillParamsForm">
-            <div class="skill-params-title">Параметры для <span id="skillParamsName"></span>:</div>
-            <div class="skill-param-input">
-              <input type="text" id="skillParamsInput" placeholder="Введите параметры или сообщение...">
-              <button class="skill-execute-btn" id="skillExecuteBtn">Выполнить</button>
+          <div class="skills-body">
+            <div class="skills-list" id="skillsList">
+              <div class="skills-loading">Загрузка skills...</div>
+            </div>
+            <div class="skill-params-form hidden" id="skillParamsForm">
+              <div class="skill-params-title">Параметры для <span id="skillParamsName"></span>:</div>
+              <div class="skill-param-input">
+                <input type="text" id="skillParamsInput" placeholder="Введите параметры или сообщение...">
+                <button class="skill-execute-btn" id="skillExecuteBtn">Выполнить</button>
+              </div>
             </div>
           </div>
         </div>
@@ -675,7 +688,12 @@
       }
 
       function showSkillsPopup() {
-        document.getElementById('skillsPopup').classList.remove('hidden');
+        const popup = document.getElementById('skillsPopup');
+        // Сбросить позицию на центр
+        popup.style.left = '50%';
+        popup.style.top = '50%';
+        popup.style.transform = 'translate(-50%, -50%)';
+        popup.classList.remove('hidden');
         document.getElementById('skillsList').innerHTML = '<div class="skills-loading">Загрузка skills...</div>';
         document.getElementById('skillParamsForm').classList.add('hidden');
         ws.send(JSON.stringify({ type: 'skills_list' }));
@@ -786,6 +804,41 @@
           if (skillActive) cancelSkill();
         }
       });
+
+      // ========== Draggable Skills Popup ==========
+      (function() {
+        const popup = document.getElementById('skillsPopup');
+        const header = document.getElementById('skillsHeader');
+        let isDragging = false;
+        let startX, startY, startLeft, startTop;
+
+        header.addEventListener('mousedown', (e) => {
+          if (e.target.closest('.skills-close')) return;
+          isDragging = true;
+          startX = e.clientX;
+          startY = e.clientY;
+          const rect = popup.getBoundingClientRect();
+          startLeft = rect.left;
+          startTop = rect.top;
+          popup.style.transform = 'none';
+          popup.style.left = startLeft + 'px';
+          popup.style.top = startTop + 'px';
+          document.body.style.userSelect = 'none';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+          if (!isDragging) return;
+          const dx = e.clientX - startX;
+          const dy = e.clientY - startY;
+          popup.style.left = Math.max(0, Math.min(window.innerWidth - popup.offsetWidth, startLeft + dx)) + 'px';
+          popup.style.top = Math.max(0, Math.min(window.innerHeight - popup.offsetHeight, startTop + dy)) + 'px';
+        });
+
+        document.addEventListener('mouseup', () => {
+          isDragging = false;
+          document.body.style.userSelect = '';
+        });
+      })();
     </script>
   </body>
 </html>
