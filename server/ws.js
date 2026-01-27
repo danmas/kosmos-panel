@@ -47,6 +47,167 @@ function stripAnsi(str) {
   return str.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
 }
 
+// --- START: Skills support ---
+
+/**
+ * Парсит YAML frontmatter из SKILL.md
+ * Формат:
+ * ---
+ * name: skill-name
+ * description: Описание skill
+ * params:
+ *   - name: param1
+ *     description: Описание параметра
+ *     required: false
+ * ---
+ * ## What I do
+ * ...
+ */
+function parseSkillFrontmatter(content, fallbackName = 'unknown') {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
+  if (!match) {
+    return { name: fallbackName, description: '', params: [], content: content.trim() };
+  }
+
+  const frontmatter = match[1];
+  const body = match[2].trim();
+
+  // Простой парсер YAML (без зависимостей)
+  const result = { name: fallbackName, description: '', params: [], content: body };
+
+  // Парсим name
+  const nameMatch = frontmatter.match(/^name:\s*(.+)$/m);
+  if (nameMatch) result.name = nameMatch[1].trim();
+
+  // Парсим description
+  const descMatch = frontmatter.match(/^description:\s*(.+)$/m);
+  if (descMatch) result.description = descMatch[1].trim();
+
+  // Парсим params (упрощённо — только имена)
+  const paramsMatch = frontmatter.match(/^params:\s*\n((?:\s+-[\s\S]*?(?=\n[^\s-]|$))+)/m);
+  if (paramsMatch) {
+    const paramsBlock = paramsMatch[1];
+    const paramMatches = paramsBlock.matchAll(/^\s+-\s*name:\s*(\S+)/gm);
+    for (const pm of paramMatches) {
+      result.params.push({ name: pm[1] });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Получает список всех skills с удалённого сервера
+ * @param {Object} sshConn - SSH connection (ssh2 Client)
+ * @returns {Promise<Array<{name, description, params}>>}
+ */
+function getRemoteSkills(sshConn) {
+  return new Promise((resolve) => {
+    const skillsPath = '~/.config/kosmos-panel/skills';
+    // Команда: для каждой директории в skills/ прочитать SKILL.md с маркером
+    const cmd = `for d in ${skillsPath}/*/; do 
+      if [ -f "$d/SKILL.md" ]; then 
+        echo "===SKILL:$(basename "$d")==="; 
+        cat "$d/SKILL.md"; 
+        echo "===END_SKILL===";
+      fi; 
+    done 2>/dev/null`;
+
+    const commandTimeout = setTimeout(() => {
+      logger.warn('skills', 'Remote skills command timed out');
+      resolve([]);
+    }, 5000);
+
+    let content = '';
+    sshConn.exec(cmd, (err, stream) => {
+      if (err) {
+        clearTimeout(commandTimeout);
+        logger.error('skills', 'Error executing remote skills command', { error: err.message });
+        return resolve([]);
+      }
+      stream.on('data', (data) => { content += data.toString(); });
+      stream.on('close', () => {
+        clearTimeout(commandTimeout);
+        
+        if (!content.trim()) {
+          logger.debug('skills', 'No skills found on remote server');
+          return resolve([]);
+        }
+
+        // Парсим skills по маркерам
+        const skills = [];
+        const skillBlocks = content.split('===SKILL:');
+        
+        for (const block of skillBlocks) {
+          if (!block.trim()) continue;
+          
+          const nameEndIdx = block.indexOf('===');
+          if (nameEndIdx === -1) continue;
+          
+          const skillName = block.substring(0, nameEndIdx).trim();
+          const endMarkerIdx = block.indexOf('===END_SKILL===');
+          const skillContent = endMarkerIdx !== -1 
+            ? block.substring(nameEndIdx + 3, endMarkerIdx).trim()
+            : block.substring(nameEndIdx + 3).trim();
+          
+          if (skillContent) {
+            const parsed = parseSkillFrontmatter(skillContent, skillName);
+            skills.push({
+              name: parsed.name,
+              description: parsed.description,
+              params: parsed.params
+            });
+          }
+        }
+
+        logger.info('skills', 'Successfully loaded remote skills', { count: skills.length });
+        resolve(skills);
+      });
+    });
+  });
+}
+
+/**
+ * Получает конкретный skill по имени с удалённого сервера
+ * @param {Object} sshConn - SSH connection (ssh2 Client)
+ * @param {string} skillName - Имя skill
+ * @returns {Promise<{name, description, params, content} | null>}
+ */
+function getRemoteSkill(sshConn, skillName) {
+  return new Promise((resolve) => {
+    const skillPath = `~/.config/kosmos-panel/skills/${skillName}/SKILL.md`;
+    const cmd = `cat ${skillPath} 2>/dev/null`;
+
+    const commandTimeout = setTimeout(() => {
+      logger.warn('skills', 'Remote skill command timed out', { skillName });
+      resolve(null);
+    }, 5000);
+
+    let content = '';
+    sshConn.exec(cmd, (err, stream) => {
+      if (err) {
+        clearTimeout(commandTimeout);
+        logger.error('skills', 'Error executing remote skill command', { skillName, error: err.message });
+        return resolve(null);
+      }
+      stream.on('data', (data) => { content += data.toString(); });
+      stream.on('close', () => {
+        clearTimeout(commandTimeout);
+        
+        if (!content.trim()) {
+          logger.debug('skills', 'Skill not found', { skillName });
+          return resolve(null);
+        }
+
+        const parsed = parseSkillFrontmatter(content, skillName);
+        logger.info('skills', 'Successfully loaded skill', { skillName, bytes: content.length });
+        resolve(parsed);
+      });
+    });
+  });
+}
+
+// --- END: Skills support ---
 
 function attachWsServer(httpServer) {
   const wss = new WebSocket.Server({ server: httpServer });
@@ -231,6 +392,11 @@ function handleTerminal(ws, url) {
           try {
             const obj = JSON.parse(msg.toString());
             const { type, data, prompt, command } = obj;
+            
+            // Логируем все входящие сообщения кроме data (слишком много)
+            if (type !== 'data') {
+              logger.info('ws', 'Received message', { type, hasPrompt: !!prompt, hasCommand: !!command });
+            }
 
             if (type === 'data') {
               stream.write(data);
@@ -281,6 +447,151 @@ function handleTerminal(ws, url) {
                 }
               } else {
                 logger.warn('ws', 'command_result for unknown commandId', { commandId: obj.commandId });
+              }
+            } else if (type === 'skills_list') {
+              // Получаем список skills с удалённого сервера
+              logger.info('skills', 'Received skills_list request');
+              try {
+                const skills = await getRemoteSkills(conn);
+                logger.info('skills', 'Sending skills_list response', { count: skills.length });
+                ws.send(JSON.stringify({ type: 'skills_list', skills }));
+              } catch (e) {
+                logger.error('skills', 'Error getting skills list', { error: e.message });
+                ws.send(JSON.stringify({ type: 'skills_list', skills: [], error: e.message }));
+              }
+            } else if (type === 'skill_invoke' && obj.name) {
+              // Вызов конкретного skill
+              const skillName = obj.name;
+              const skillParams = obj.params || {};
+              const userPrompt = obj.prompt || '';
+              
+              try {
+                const skill = await getRemoteSkill(conn, skillName);
+                if (!skill) {
+                  ws.send(JSON.stringify({ 
+                    type: 'skill_error', 
+                    error: `Skill "${skillName}" not found` 
+                  }));
+                  return;
+                }
+
+                // Формируем промпт с инструкциями skill
+                const aiBaseUrl = process.env.AI_KOSMOS_MODEL_BASE_URL || 'http://localhost:3002/v1';
+                const aiServerUrl = `${aiBaseUrl}/chat/completions`;
+                const aiModel = process.env.AI_MODEL || 'CHEAP';
+                const baseSystemPrompt = process.env.AI_SYSTEM_PROMPT || 'You are a Linux terminal AI assistant. Your task is to convert the user\'s request into a valid shell command, and return ONLY the shell command itself without any explanation.';
+
+                // Получаем knowledge (как обычно)
+                const getRemoteKnowledge = (sshConn) => new Promise((resolve) => {
+                  let commandTimeout;
+                  const primaryPath = './.kosmos-panel/kosmos-panel.md';
+                  const fallbackPath = '~/.config/kosmos-panel/kosmos-panel.md';
+                  const cmd = `cat ${primaryPath} 2>/dev/null || cat ${fallbackPath} 2>/dev/null`;
+                  
+                  commandTimeout = setTimeout(() => resolve(''), 5000);
+                  let content = '';
+                  sshConn.exec(cmd, (err, stream) => {
+                    if (err) { clearTimeout(commandTimeout); return resolve(''); }
+                    stream.on('data', (data) => { content += data.toString(); });
+                    stream.on('close', () => {
+                      clearTimeout(commandTimeout);
+                      resolve(content.trim() || '');
+                    });
+                  });
+                });
+
+                const remoteKnowledge = await getRemoteKnowledge(conn);
+
+                // Формируем системный промпт с skill
+                let aiSystemPrompt = baseSystemPrompt;
+                if (remoteKnowledge.trim()) {
+                  aiSystemPrompt = `System context:\n${remoteKnowledge.trim()}\n\n---\n\n${aiSystemPrompt}`;
+                }
+                aiSystemPrompt = `=== Active Skill: ${skill.name} ===\n${skill.content}\n\n---\n\n${aiSystemPrompt}`;
+
+                // Формируем user prompt с параметрами
+                let finalUserPrompt = userPrompt || `Execute skill: ${skillName}`;
+                if (Object.keys(skillParams).length > 0) {
+                  finalUserPrompt += `\n\nParameters:\n${Object.entries(skillParams).map(([k, v]) => `- ${k}: ${v}`).join('\n')}`;
+                }
+
+                // Логируем
+                const aiQueryId = uuidv4();
+                appendToLog({
+                  id: aiQueryId,
+                  sessionId,
+                  timestamp: new Date().toISOString(),
+                  type: 'skill_invoke',
+                  skill_name: skillName,
+                  skill_params: skillParams,
+                  user_prompt: finalUserPrompt,
+                  ...serverInfo
+                });
+                currentAiQueryId = aiQueryId;
+
+                // Отправляем в терминал уведомление
+                ws.send(JSON.stringify({ 
+                  type: 'data', 
+                  data: `\r\n\x1b[1;36m[Skill: ${skillName}]\x1b[0m ${skill.description || ''}\r\n` 
+                }));
+
+                // Запрос к AI
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+                const aiResponse = await fetch(aiServerUrl, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    model: aiModel,
+                    messages: [
+                      { role: 'system', content: aiSystemPrompt },
+                      { role: 'user', content: finalUserPrompt }
+                    ],
+                    temperature: 0.3,
+                    max_tokens: 512
+                  }),
+                  signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+                const aiResult = await aiResponse.json();
+                const aiContent = aiResult.choices?.[0]?.message?.content;
+
+                if (aiContent) {
+                  let commandToExecute = aiContent.trim();
+                  const lines = commandToExecute.split('\n');
+                  if (lines.length > 1) {
+                    commandToExecute = lines[0].trim();
+                  }
+                  commandToExecute = commandToExecute.replace(/^```[a-z]*\s*|\s*```$/g, '').trim();
+
+                  stream.write(commandToExecute + '\r');
+
+                  const stdinId = uuidv4();
+                  appendToLog({
+                    id: stdinId,
+                    sessionId,
+                    timestamp: new Date().toISOString(),
+                    type: 'stdin',
+                    executed_command: commandToExecute,
+                    skill_name: skillName,
+                    ai_query_id: currentAiQueryId,
+                    ...serverInfo
+                  });
+                  currentStdinId = stdinId;
+                  currentAiQueryId = null;
+                } else {
+                  const errorMsg = aiResult.error?.message || 'Invalid AI response';
+                  throw new Error(errorMsg);
+                }
+              } catch (e) {
+                logger.error('skills', 'Skill invoke error', { skillName, error: e.message });
+                ws.send(JSON.stringify({ 
+                  type: 'data', 
+                  data: `\r\n\x1b[1;31m[Skill Error] ${e.message}\x1b[0m\r\n` 
+                }));
+                stream.write('\r');
               }
             } else if (type === 'ai_query' && prompt) {
               // Очищаем текущую строку в shell (удаляем команду ai:...)

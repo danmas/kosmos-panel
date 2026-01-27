@@ -320,50 +320,53 @@ function openTerminal(server) {
   openOverlay(`${server.name} — терминал`);
   terminalEl.innerHTML = '';
   ensureTerm(); xterm.clear();
-  // fit после рендера
   setTimeout(() => { try { fitAddon.fit(); } catch {} }, 0);
   const wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws';
   const wsUrl = `${wsProto}://${window.location.host}/ws/terminal?serverId=${encodeURIComponent(server.id)}&cols=120&rows=30`;
   const ws = new WebSocket(wsUrl);
   currentWs = ws;
   xterm.writeln('[подключение к SSH...]');
-  ws.onopen = () => {
-    xterm.writeln('[соединение установлено]');
-  };
+  ws.onopen = () => xterm.writeln('[соединение установлено]');
+  ws.onclose = (ev) => xterm.writeln(`\r\n[соединение закрыто${ev.code ? ' код ' + ev.code : ''}]`);
+  
   ws.onmessage = (ev) => {
     try {
       const msg = JSON.parse(ev.data);
-      if (msg.type === 'fatal') {
-        xterm.writeln(`\r\n[FATAL] ${msg.error}`);
-        return;
+      if (msg.type === 'fatal') { xterm.writeln(`\r\n[FATAL] ${msg.error}`); return; }
+      if (msg.type === 'data' || msg.type === 'err') { xterm.write(msg.data); }
+      if (msg.type === 'skills_list') {
+        if (msg.skills && msg.skills.length > 0) {
+          xterm.writeln('\r\n\x1b[1;36m=== Доступные Skills ===\x1b[0m');
+          msg.skills.forEach(s => xterm.writeln(`  \x1b[32m${s.name}\x1b[0m - ${s.description || 'Без описания'}`));
+          xterm.writeln('\x1b[90mВызов: кнопка Skills или skill_invoke\x1b[0m\r\n');
+        } else {
+          xterm.writeln('\r\n\x1b[33mНет доступных skills.\x1b[0m');
+          xterm.writeln('\x1b[90mСоздайте ~/.config/kosmos-panel/skills/<name>/SKILL.md\x1b[0m\r\n');
+        }
       }
-      if (msg.type === 'data' || msg.type === 'err') {
-        xterm.write(msg.data);
-      }
+      if (msg.type === 'skill_error') { xterm.writeln(`\r\n\x1b[1;31m[Skill Error] ${msg.error}\x1b[0m`); }
     } catch {}
   };
-  ws.onclose = (ev) => {
-    xterm.writeln(`\r\n[соединение закрыто${ev.code ? ' код ' + ev.code : ''}]`);
-  };
 
-  xterm.onData((data) => {
-    // Для интерактивности, всегда отправляем данные на сервер
-    try { ws.send(JSON.stringify({ type: 'data', data })); } catch {}
+  // Простая передача данных на сервер
+  xterm.onData((d) => { 
+    try { ws.send(JSON.stringify({ type: 'data', data: d })); } catch {} 
   });
 
+  // Логирование команд
   xterm.attachCustomKeyEventHandler((arg) => {
     if (arg.code === 'Enter' && arg.type === 'keydown') {
       const buffer = xterm.buffer.active;
-      const commandLine = buffer.getLine(buffer.cursorY).translateToString(true).trim();
-
-      if (commandLine.startsWith('ai:')) {
-        ws.send(JSON.stringify({ type: 'ai_query', prompt: commandLine }));
-        return false; // Блокируем отправку Enter через onData
-      } else if (commandLine) {
-        ws.send(JSON.stringify({ type: 'command_log', command: commandLine }));
+      const line = buffer.getLine(buffer.cursorY).translateToString(true).trim();
+      const promptEnd = Math.max(line.lastIndexOf('$'), line.lastIndexOf('#'), line.lastIndexOf('>'));
+      if (promptEnd !== -1) {
+        const cmd = line.substring(promptEnd + 1).trim();
+        if (cmd && !cmd.startsWith('ai:') && !cmd.startsWith('ai :')) {
+          ws.send(JSON.stringify({ type: 'command_log', command: cmd }));
+        }
       }
     }
-    return true; // Разрешаем все остальные клавиши
+    return true;
   });
 }
 
@@ -411,6 +414,26 @@ function openTail(server, path) {
   window.addEventListener('mouseup', () => { dragging = false; document.body.style.userSelect = ''; });
 })();
 
+// Skills helper function
+function parseSkillParamsSimple(str) {
+  const params = {};
+  if (!str) return params;
+  
+  // Парсим --key value или --key "value with spaces"
+  const regex = /--(\w+)\s+(?:"([^"]+)"|(\S+))/g;
+  let match;
+  while ((match = regex.exec(str)) !== null) {
+    params[match[1]] = match[2] || match[3];
+  }
+  
+  // Если нет --key формата, весь текст как message
+  if (Object.keys(params).length === 0 && str) {
+    params.message = str;
+  }
+  
+  return params;
+}
+
 // Multi-window terminals
 let winCounter = 0;
 function openTerminalWindow(server, mode, arg) {
@@ -451,21 +474,27 @@ function openTerminalWindow(server, mode, arg) {
   closeBtn.onclick = () => { try { ws.close(); } catch {}; win.remove(); };
 
   if (mode === 'terminal') {
-    term.onData((d) => { try { ws.send(JSON.stringify({ type:'data', data:d })); } catch {} });
-
-    term.attachCustomKeyEventHandler((arg) => {
-      if (arg.code === 'Enter' && arg.type === 'keydown') {
-        const buffer = term.buffer.active;
-        const commandLine = buffer.getLine(buffer.cursorY).translateToString(true).trim();
-        
-        if (commandLine.startsWith('ai:')) {
-          ws.send(JSON.stringify({ type: 'ai_query', prompt: commandLine }));
-          return false; // Блокируем отправку Enter через onData
-        } else if (commandLine) {
-          ws.send(JSON.stringify({ type: 'command_log', command: commandLine }));
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data);
+        if (msg.type === 'data' || msg.type === 'err') term.write(msg.data);
+        if (msg.type === 'fatal') term.writeln(`\r\n[FATAL] ${msg.error}`);
+        if (msg.type === 'skills_list') {
+          if (msg.skills && msg.skills.length > 0) {
+            term.writeln('\r\n\x1b[1;36m=== Доступные Skills ===\x1b[0m');
+            msg.skills.forEach(s => term.writeln(`  \x1b[32m${s.name}\x1b[0m - ${s.description || 'Без описания'}`));
+            term.writeln('\r\n');
+          } else {
+            term.writeln('\r\n\x1b[33mНет доступных skills.\x1b[0m\r\n');
+          }
         }
-      }
-      return true; // Разрешаем все остальные клавиши
+        if (msg.type === 'skill_error') term.writeln(`\r\n\x1b[1;31m[Skill Error] ${msg.error}\x1b[0m`);
+      } catch {}
+    };
+    
+    // Простая передача данных
+    term.onData((d) => { 
+      try { ws.send(JSON.stringify({ type: 'data', data: d })); } catch {} 
     });
   }
 

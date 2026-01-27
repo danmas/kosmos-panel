@@ -146,6 +146,138 @@
       #reconnect:hover { 
         background: #16a34a; 
       }
+      
+      /* Skills popup */
+      .skills-popup {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(180deg, #1a2744 0%, #0e1322 100%);
+        border-top: 2px solid #4a9eff;
+        padding: 12px 16px;
+        z-index: 1002;
+        max-height: 50%;
+        overflow-y: auto;
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+        animation: slideUp 0.2s ease-out;
+      }
+      .skills-popup.hidden { display: none; }
+      .skills-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 14px;
+        color: #4a9eff;
+        font-weight: 600;
+        margin-bottom: 12px;
+      }
+      .skills-close {
+        background: transparent;
+        border: none;
+        color: #888;
+        font-size: 20px;
+        cursor: pointer;
+        padding: 0 4px;
+      }
+      .skills-close:hover { color: #fff; }
+      .skills-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .skill-item {
+        background: rgba(0, 0, 0, 0.4);
+        border: 1px solid #333;
+        border-radius: 6px;
+        padding: 10px 12px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      .skill-item:hover {
+        background: rgba(74, 158, 255, 0.2);
+        border-color: #4a9eff;
+      }
+      .skill-name {
+        font-weight: 600;
+        color: #00ff00;
+        font-family: monospace;
+        margin-bottom: 4px;
+      }
+      .skill-desc {
+        font-size: 12px;
+        color: #aaa;
+      }
+      .skills-empty {
+        color: #666;
+        text-align: center;
+        padding: 20px;
+      }
+      .skills-loading {
+        color: #4a9eff;
+        text-align: center;
+        padding: 20px;
+      }
+      .skill-params-form {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid #333;
+      }
+      .skill-params-form.hidden { display: none; }
+      .skill-params-title {
+        color: #4a9eff;
+        font-size: 12px;
+        margin-bottom: 8px;
+      }
+      .skill-param-input {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .skill-param-input input {
+        flex: 1;
+        background: #000;
+        border: 1px solid #333;
+        color: #00ff00;
+        padding: 8px 10px;
+        border-radius: 4px;
+        font-family: monospace;
+      }
+      .skill-param-input input:focus {
+        outline: none;
+        border-color: #4a9eff;
+      }
+      .skill-execute-btn {
+        background: #22c55e;
+        border: 1px solid #16a34a;
+        color: #fff;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .skill-execute-btn:hover { background: #16a34a; }
+      
+      /* Skills button */
+      .skills-btn {
+        position: absolute;
+        top: 8px;
+        right: 80px;
+        background: #1b2544;
+        border: 1px solid #4a9eff;
+        color: #4a9eff;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        cursor: pointer;
+        z-index: 10;
+        transition: all 0.15s ease;
+      }
+      .skills-btn:hover {
+        background: rgba(74, 158, 255, 0.2);
+        color: #fff;
+      }
     </style>
   </head>
   <body>
@@ -159,6 +291,7 @@
       <div class="term-container">
         <div id="term" class="term"></div>
         <div class="session-indicator" id="sessionIndicator" title="Session ID для REST API"></div>
+        <button class="skills-btn" id="skillsBtn" title="Показать доступные Skills">Skills</button>
         <div class="log-indicator" id="logIndicator" title="Показать лог команды">📋</div>
         
         <!-- Remote command confirmation panel -->
@@ -172,6 +305,24 @@
             <button class="btn-reject" id="confirmNo">Отклонить</button>
             <button class="btn-skip" id="confirmSkip">Выполнить без подтверждения</button>
             <button class="btn-confirm" id="confirmYes">Выполнить</button>
+          </div>
+        </div>
+        
+        <!-- Skills popup -->
+        <div id="skillsPopup" class="skills-popup hidden">
+          <div class="skills-header">
+            <span>Skills</span>
+            <button class="skills-close" id="skillsClose">×</button>
+          </div>
+          <div class="skills-list" id="skillsList">
+            <div class="skills-loading">Загрузка skills...</div>
+          </div>
+          <div class="skill-params-form hidden" id="skillParamsForm">
+            <div class="skill-params-title">Параметры для <span id="skillParamsName"></span>:</div>
+            <div class="skill-param-input">
+              <input type="text" id="skillParamsInput" placeholder="Введите параметры или сообщение...">
+              <button class="skill-execute-btn" id="skillExecuteBtn">Выполнить</button>
+            </div>
           </div>
         </div>
       </div>
@@ -189,37 +340,24 @@
       const fit = new window.FitAddon.FitAddon();
       term.loadAddon(fit); term.open(termDiv); setTimeout(()=>{ try{fit.fit()}catch{} },0);
       
-      // ========== Resize Support для TUI (Bubble Tea, etc.) ==========
+      // ========== Resize Support ==========
       function sendResize() {
         if (ws.readyState === WebSocket.OPEN && mode !== 'tail') {
-          const cols = term.cols;
-          const rows = term.rows;
-          ws.send(JSON.stringify({ type: 'resize', cols, rows }));
-          console.log(`[resize] Sent: ${cols}x${rows}`);
+          ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
         }
       }
       
-      // Debounce для resize событий
       let resizeTimeout;
       function handleResize() {
         clearTimeout(resizeTimeout);
         resizeTimeout = setTimeout(() => {
-          try {
-            fit.fit();
-            sendResize();
-          } catch (e) {
-            console.error('[resize] Error:', e);
-          }
+          try { fit.fit(); sendResize(); } catch (e) {}
         }, 100);
       }
       
-      // Слушаем изменение размера окна
       window.addEventListener('resize', handleResize);
-      
-      // ResizeObserver для контейнера (более точное отслеживание)
       if (typeof ResizeObserver !== 'undefined') {
-        const resizeObserver = new ResizeObserver(handleResize);
-        resizeObserver.observe(termDiv);
+        new ResizeObserver(handleResize).observe(termDiv);
       }
       
       const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -228,23 +366,16 @@
         : `${wsProto}://${location.host}/ws/terminal?serverId=${encodeURIComponent(serverId)}&cols=120&rows=30`;
       const ws = new WebSocket(wsUrl);
       term.writeln(mode === 'tail' ? `[tail ${path}]` : '[подключение к SSH...]');
+      
       ws.onopen = () => {
         term.writeln('[соединение установлено]');
-        // Отправляем актуальный размер сразу после подключения
-        setTimeout(() => {
-          try { fit.fit(); } catch {}
-          sendResize();
-        }, 100);
+        setTimeout(() => { try { fit.fit(); } catch {} sendResize(); }, 100);
       };
       ws.onclose = ev => {
-        console.warn('[ws] closed:', ev.code, ev.reason);
         term.writeln(`\r\n[соединение закрыто код ${ev.code}${ev.reason ? ' ' + ev.reason : ''}]`);
         document.getElementById('reconnect').style.display = 'inline-block';
       };
-      ws.onerror = err => {
-        console.error('[ws] error:', err);
-        term.writeln(`\r\n[ошибка соединения]`);
-      };
+      ws.onerror = () => term.writeln(`\r\n[ошибка соединения]`);
 
       // ========== REST Bridge Variables ==========
       let currentSessionId = null;
@@ -253,241 +384,163 @@
       let remoteCommandCollecting = false;
       const promptRegex = /\w+@[\w\-\.]+[^$#>]*[\$#>]\s*$/;
 
+      // ========== AI Config ==========
+      let aiCommandPrefix = 'ai:';
+      fetch('/api/config')
+        .then(res => res.json())
+        .then(config => { if (config.aiCommandPrefix) aiCommandPrefix = config.aiCommandPrefix; })
+        .catch(() => {});
+
       // ========== WebSocket Message Handler ==========
       ws.onmessage = ev => {
         try {
           const m = JSON.parse(ev.data);
           
-          // Обработка данных терминала
           if (m.type === 'data' || m.type === 'err') {
             term.write(m.data);
-            
-            // Сбор вывода для remote команды
             if (remoteCommandCollecting && pendingRemoteCommand) {
               remoteCommandBuffer += m.data;
               checkRemoteCommandCompletion();
             }
           }
           
-          // Fatal error
-          if (m.type === 'fatal') {
-            term.writeln(`\r\n[FATAL] ${m.error}`);
-          }
+          if (m.type === 'fatal') term.writeln(`\r\n[FATAL] ${m.error}`);
           
-          // Получение sessionId от сервера
           if (m.type === 'session' && m.sessionId) {
             currentSessionId = m.sessionId;
-            console.log('[REST Bridge] Session ID received:', currentSessionId);
             updateSessionIndicator();
           }
           
-          // Remote command от REST API
-          if (m.type === 'remote_command') {
-            handleRemoteCommand(m);
-          }
+          if (m.type === 'remote_command') handleRemoteCommand(m);
           
-          // Отмена команды
           if (m.type === 'cancel_command' && m.commandId) {
             if (pendingRemoteCommand && pendingRemoteCommand.commandId === m.commandId) {
-              console.log('[REST Bridge] Command cancelled:', m.commandId);
               hideCommandConfirm();
               pendingRemoteCommand = null;
               remoteCommandCollecting = false;
               remoteCommandBuffer = '';
             }
           }
+          
+          // Skills responses
+          if (m.type === 'skills_list') handleSkillsList(m.skills || [], m.error);
+          if (m.type === 'skill_error') {
+            term.writeln(`\r\n\x1b[1;31m[Skill Error] ${m.error}\x1b[0m`);
+            hideSkillsPopup();
+          }
         } catch (e) {
           console.error('[ws.onmessage] Error:', e);
         }
       };
-      
-      let aiCommandPrefix = 'ai:';
 
-      fetch('/api/config')
-        .then(res => res.json())
-        .then(config => {
-          if (config.aiCommandPrefix) {
-            aiCommandPrefix = config.aiCommandPrefix;
-          }
-        })
-        .catch(err => console.error('Failed to fetch AI config:', err));
-        
+      // ========== Terminal Input ==========
       if (mode !== 'tail') {
-        term.onData(d => { try { ws.send(JSON.stringify({ type:'data', data:d })); } catch {} });
+        term.onData(d => { 
+          try { ws.send(JSON.stringify({ type: 'data', data: d })); } catch {} 
+        });
         
         term.attachCustomKeyEventHandler((arg) => {
           if (arg.code === 'Enter' && arg.type === 'keydown') {
             const buffer = term.buffer.active;
-            
-            // Ищем последнюю строку с shell prompt
             for (let i = buffer.length - 1; i >= 0; i--) {
               const line = buffer.getLine(i).translateToString(true);
               const promptEndIndex = Math.max(line.lastIndexOf('$'), line.lastIndexOf('#'), line.lastIndexOf('>'));
-
               if (promptEndIndex !== -1) {
                 const commandPart = line.substring(promptEndIndex + 1).trim();
-                
-                // Убираем ANSI коды из команды
                 const cleanCommand = commandPart.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '').replace(/[\b\u0007]/g, '').trim();
                 
                 const prefixText = aiCommandPrefix.slice(0, -1);
                 const prefixSep = aiCommandPrefix.slice(-1);
                 const commandRegex = new RegExp(`(${prefixText}\\s*${prefixSep})`);
-                
                 const match = commandPart.match(commandRegex);
 
                 if (match) {
-                  // AI команда
                   const aiPrompt = commandPart.substring(match.index + match[0].length).trim();
-                  term.write('\r\n\x1b[1;33mЗапрос к AI: ' + aiPrompt + '\x1b[0m\r\n');
-                  
+                  // Визуальный feedback - желтый вывод AI запроса с новой строки
+                  setTimeout(() => {
+                    term.writeln(`\r\n\x1b[1;33m[AI] Запрос: ${aiPrompt}\x1b[0m`);
+                  }, 50);
                   ws.send(JSON.stringify({ type: 'ai_query', prompt: line }));
-                  return false; // Блокируем стандартную отправку Enter
+                  return true; // Разрешаем Enter для AI команд
                 } else if (cleanCommand) {
-                  // Обычная команда - логируем её
-                  console.log(`[DEBUG] Логируем обычную команду: "${cleanCommand}"`);
                   ws.send(JSON.stringify({ type: 'command_log', command: cleanCommand }));
                 }
-                break; // Нашли промпт, выходим
+                break;
               }
             }
           }
-          return true; // Разрешаем все остальные клавиши
+          return true;
         });
       }
 
+      // ========== UI Handlers ==========
       document.getElementById('close').onclick = () => { try { ws.close(); } catch {}; window.close(); };
       document.getElementById('fit').onclick = () => { try { fit.fit(); sendResize(); } catch {} };
-      document.getElementById('reconnect').onclick = () => {
-        location.reload(); // Перезагрузить страницу для переподключения
-      };
+      document.getElementById('reconnect').onclick = () => location.reload();
 
-      // Обработчик клика на иконку логов - открывает отдельное окно
       document.getElementById('logIndicator').onclick = () => {
         if (currentSessionId) {
-          const logsUrl = `/logs.html?sessionId=${encodeURIComponent(currentSessionId)}`;
-          window.open(logsUrl, 'terminal-logs', 'width=800,height=600');
+          window.open(`/logs.html?sessionId=${encodeURIComponent(currentSessionId)}`, 'terminal-logs', 'width=800,height=600');
         } else {
-          term.writeln('\r\n\x1b[1;33m[INFO] Session ID еще не получен, подождите подключения\x1b[0m');
+          term.writeln('\r\n\x1b[1;33m[INFO] Session ID еще не получен\x1b[0m');
         }
       };
 
       // ========== REST Bridge Functions ==========
-      
       function updateSessionIndicator() {
         const indicator = document.getElementById('sessionIndicator');
         if (indicator && currentSessionId) {
-          indicator.textContent = `🔗 Session: ${currentSessionId.substring(0, 8)}...`;
-          indicator.title = `Session ID для REST API:\n${currentSessionId}\n\nКликните для копирования`;
+          indicator.textContent = `Session: ${currentSessionId.substring(0, 8)}...`;
+          indicator.title = `Session ID: ${currentSessionId}\nКликните для копирования`;
           indicator.style.display = 'block';
           indicator.onclick = () => {
             navigator.clipboard.writeText(currentSessionId).then(() => {
               const original = indicator.textContent;
               indicator.textContent = '✓ Скопировано!';
               indicator.style.background = 'rgba(34, 197, 94, 0.3)';
-              setTimeout(() => {
-                indicator.textContent = original;
-                indicator.style.background = '';
-              }, 1500);
+              setTimeout(() => { indicator.textContent = original; indicator.style.background = ''; }, 1500);
             });
           };
-          
-          // Также показываем в терминале для удобства
           term.writeln(`\x1b[90m[Session ID: ${currentSessionId}]\x1b[0m`);
         }
       }
 
       function handleRemoteCommand(msg) {
-        console.log('[REST Bridge] Remote command received:', msg);
-        
-        // Визуальный индикатор получения команды
         term.writeln(`\r\n\x1b[1;45;97m ⚡ REST API COMMAND ⚡ \x1b[0m`);
-        term.writeln(`\x1b[1;35mCommand ID:\x1b[0m ${msg.commandId}`);
         term.writeln(`\x1b[1;35mCommand:\x1b[0m \x1b[1;33m${msg.command}\x1b[0m`);
-        term.writeln(`\x1b[1;35mConfirmation:\x1b[0m ${msg.requireConfirmation ? 'Required' : 'Not required'}`);
-        
-        pendingRemoteCommand = {
-          commandId: msg.commandId,
-          command: msg.command,
-          requireConfirmation: msg.requireConfirmation
-        };
-
-        if (msg.requireConfirmation) {
-          // Показываем панель подтверждения
-          showCommandConfirm(msg.command);
-        } else {
-          // Выполняем сразу
-          executeRemoteCommand(msg.command);
-        }
+        pendingRemoteCommand = { commandId: msg.commandId, command: msg.command, requireConfirmation: msg.requireConfirmation };
+        if (msg.requireConfirmation) showCommandConfirm(msg.command);
+        else executeRemoteCommand(msg.command);
       }
 
       function showCommandConfirm(command) {
-        const panel = document.getElementById('commandConfirm');
-        const textEl = document.getElementById('commandConfirmText');
-        
-        textEl.textContent = command;
-        panel.classList.remove('hidden');
-        
-        // Визуальный индикатор в терминале
-        term.writeln('\r\n\x1b[1;33m[REST API] Ожидается подтверждение команды...\x1b[0m');
+        document.getElementById('commandConfirmText').textContent = command;
+        document.getElementById('commandConfirm').classList.remove('hidden');
+        term.writeln('\r\n\x1b[1;33m[REST API] Ожидается подтверждение...\x1b[0m');
       }
 
       function hideCommandConfirm() {
-        const panel = document.getElementById('commandConfirm');
-        panel.classList.add('hidden');
+        document.getElementById('commandConfirm').classList.add('hidden');
       }
 
       function executeRemoteCommand(command) {
-        console.log('[REST Bridge] Executing command:', command);
-        
-        // Начинаем сбор вывода
         remoteCommandBuffer = '';
         remoteCommandCollecting = true;
-        
-        // Визуальный индикатор
         term.writeln(`\r\n\x1b[1;36m[REST API] Выполняется: ${command}\x1b[0m`);
-        
-        // Отправляем команду в терминал
-        try {
-          ws.send(JSON.stringify({ type: 'data', data: command + '\r' }));
-        } catch (e) {
-          console.error('[REST Bridge] Failed to send command:', e);
-          sendCommandResult('error', '', 'Failed to send command: ' + e.message, null);
-        }
+        try { ws.send(JSON.stringify({ type: 'data', data: command + '\r' })); } 
+        catch (e) { sendCommandResult('error', '', 'Failed: ' + e.message, null); }
       }
 
       function checkRemoteCommandCompletion() {
-        // Проверяем, появился ли новый промпт (команда завершилась)
-        const cleanBuffer = stripAnsiCodes(remoteCommandBuffer);
-        
+        const cleanBuffer = remoteCommandBuffer.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
         if (promptRegex.test(cleanBuffer)) {
-          // Команда завершилась
-          console.log('[REST Bridge] Command completed, prompt detected');
-          
-          // Извлекаем вывод (без последней строки с промптом)
           const lines = cleanBuffer.split('\n');
           let outputLines = [];
-          let foundPrompt = false;
-          
           for (let i = lines.length - 1; i >= 0; i--) {
-            if (promptRegex.test(lines[i])) {
-              foundPrompt = true;
-              // Пропускаем строку с промптом и все что после
-              outputLines = lines.slice(0, i);
-              break;
-            }
+            if (promptRegex.test(lines[i])) { outputLines = lines.slice(0, i); break; }
           }
-          
-          // Первая строка обычно эхо команды - пропускаем
-          if (outputLines.length > 0) {
-            outputLines = outputLines.slice(1);
-          }
-          
-          const stdout = outputLines.join('\n').trim();
-          
-          sendCommandResult('completed', stdout, '', 0);
-          
-          // Сбрасываем состояние
+          if (outputLines.length > 0) outputLines = outputLines.slice(1);
+          sendCommandResult('completed', outputLines.join('\n').trim(), '', 0);
           remoteCommandCollecting = false;
           remoteCommandBuffer = '';
           pendingRemoteCommand = null;
@@ -496,55 +549,117 @@
 
       function sendCommandResult(status, stdout, stderr, exitCode) {
         if (!pendingRemoteCommand) return;
-        
-        const result = {
-          type: 'command_result',
-          commandId: pendingRemoteCommand.commandId,
-          status: status,
-          stdout: stdout,
-          stderr: stderr,
-          exitCode: exitCode
-        };
-        
-        console.log('[REST Bridge] Sending result:', result);
-        
-        try {
-          ws.send(JSON.stringify(result));
-        } catch (e) {
-          console.error('[REST Bridge] Failed to send result:', e);
-        }
+        try { ws.send(JSON.stringify({ type: 'command_result', commandId: pendingRemoteCommand.commandId, status, stdout, stderr, exitCode })); } catch {}
       }
 
-      function stripAnsiCodes(str) {
-        return str.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
+      document.getElementById('confirmYes').onclick = () => { if (pendingRemoteCommand) { hideCommandConfirm(); executeRemoteCommand(pendingRemoteCommand.command); } };
+      document.getElementById('confirmNo').onclick = () => { if (pendingRemoteCommand) { term.writeln('\r\n\x1b[1;31m[REST API] Команда отклонена\x1b[0m'); sendCommandResult('rejected', '', 'Rejected by user', null); hideCommandConfirm(); pendingRemoteCommand = null; } };
+      document.getElementById('confirmSkip').onclick = () => { if (pendingRemoteCommand) { hideCommandConfirm(); executeRemoteCommand(pendingRemoteCommand.command); } };
+
+      // ========== Skills Functions ==========
+      let availableSkills = [];
+      let selectedSkill = null;
+
+      function showSkillsPopup() {
+        document.getElementById('skillsPopup').classList.remove('hidden');
+        document.getElementById('skillsList').innerHTML = '<div class="skills-loading">Загрузка skills...</div>';
+        document.getElementById('skillParamsForm').classList.add('hidden');
+        ws.send(JSON.stringify({ type: 'skills_list' }));
       }
 
-      // ========== Command Confirm Button Handlers ==========
-      document.getElementById('confirmYes').onclick = () => {
-        if (pendingRemoteCommand) {
-          hideCommandConfirm();
-          executeRemoteCommand(pendingRemoteCommand.command);
-        }
-      };
+      function hideSkillsPopup() {
+        document.getElementById('skillsPopup').classList.add('hidden');
+        document.getElementById('skillParamsForm').classList.add('hidden');
+        selectedSkill = null;
+      }
 
-      document.getElementById('confirmNo').onclick = () => {
-        if (pendingRemoteCommand) {
-          term.writeln('\r\n\x1b[1;31m[REST API] Команда отклонена пользователем\x1b[0m');
-          sendCommandResult('rejected', '', 'Command rejected by user', null);
-          hideCommandConfirm();
-          pendingRemoteCommand = null;
+      function handleSkillsList(skills, error) {
+        availableSkills = skills;
+        const listEl = document.getElementById('skillsList');
+        
+        if (error) {
+          listEl.innerHTML = `<div class="skills-empty">Ошибка: ${error}</div>`;
+          return;
         }
-      };
+        
+        if (skills.length === 0) {
+          listEl.innerHTML = `<div class="skills-empty">
+            Нет доступных skills.<br>
+            <small style="color:#666">Создайте ~/.config/kosmos-panel/skills/&lt;name&gt;/SKILL.md</small>
+          </div>`;
+          return;
+        }
+        
+        listEl.innerHTML = skills.map(skill => `
+          <div class="skill-item" data-skill="${skill.name}">
+            <div class="skill-name">${skill.name}</div>
+            <div class="skill-desc">${skill.description || 'Без описания'}</div>
+          </div>
+        `).join('');
+        
+        listEl.querySelectorAll('.skill-item').forEach(item => {
+          item.onclick = () => selectSkill(item.dataset.skill);
+        });
+      }
 
-      document.getElementById('confirmSkip').onclick = () => {
-        if (pendingRemoteCommand) {
-          hideCommandConfirm();
-          // Выполняем и запоминаем что подтверждение не нужно
-          executeRemoteCommand(pendingRemoteCommand.command);
+      function selectSkill(skillName) {
+        selectedSkill = availableSkills.find(s => s.name === skillName);
+        if (!selectedSkill) return;
+        
+        const paramsForm = document.getElementById('skillParamsForm');
+        document.getElementById('skillParamsName').textContent = skillName;
+        document.getElementById('skillParamsInput').value = '';
+        document.getElementById('skillParamsInput').placeholder = selectedSkill.params && selectedSkill.params.length > 0 
+          ? `Параметры: ${selectedSkill.params.map(p => p.name).join(', ')}`
+          : 'Дополнительные инструкции (опционально)';
+        
+        paramsForm.classList.remove('hidden');
+        document.getElementById('skillParamsInput').focus();
+      }
+
+      function executeSelectedSkill() {
+        if (!selectedSkill) return;
+        
+        const userInput = document.getElementById('skillParamsInput').value.trim();
+        
+        term.writeln(`\r\n\x1b[1;36m[Skill: ${selectedSkill.name}] ${selectedSkill.description || ''}\x1b[0m`);
+        
+        const params = parseSkillParams(userInput);
+        ws.send(JSON.stringify({ 
+          type: 'skill_invoke', 
+          name: selectedSkill.name, 
+          params: params,
+          prompt: userInput 
+        }));
+        
+        hideSkillsPopup();
+      }
+
+      function parseSkillParams(str) {
+        const params = {};
+        if (!str) return params;
+        const regex = /--(\w+)\s+(?:"([^"]+)"|(\S+))/g;
+        let match;
+        while ((match = regex.exec(str)) !== null) {
+          params[match[1]] = match[2] || match[3];
         }
+        if (Object.keys(params).length === 0 && str) {
+          params.message = str;
+        }
+        return params;
+      }
+
+      // Skills popup event handlers
+      document.getElementById('skillsBtn').onclick = showSkillsPopup;
+      document.getElementById('skillsClose').onclick = hideSkillsPopup;
+      document.getElementById('skillExecuteBtn').onclick = executeSelectedSkill;
+      document.getElementById('skillParamsInput').onkeydown = (e) => {
+        if (e.key === 'Enter') executeSelectedSkill();
+        else if (e.key === 'Escape') hideSkillsPopup();
       };
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') hideSkillsPopup();
+      });
     </script>
   </body>
 </html>
-
-

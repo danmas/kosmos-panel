@@ -74,6 +74,61 @@
 
 Файл необязателен. Если файл отсутствует или недоступен, он просто игнорируется, и AI работает с базовым системным промптом.
 
+### AI Skills (переиспользуемые сценарии)
+
+Skills — это переиспользуемые prompt-инструкции для AI, которые позволяют автоматизировать типовые задачи. Каждый skill представляет собой SKILL.md файл с инструкциями для AI.
+
+**Расположение skills на удалённом сервере:**
+```
+~/.config/kosmos-panel/skills/
+├── git-quick-commit/
+│   └── SKILL.md
+├── docker-logs/
+│   └── SKILL.md
+└── find-large-files/
+    └── SKILL.md
+```
+
+**Формат SKILL.md:**
+```markdown
+---
+name: git-quick-commit
+description: Проверить незакоммиченные изменения и закоммитить
+params:
+  - name: message
+    description: Сообщение коммита
+    required: false
+---
+## What I do
+
+Я выполняю следующие шаги:
+
+1. Запускаю `git status --porcelain`
+2. Если есть изменения, спрашиваю сообщение для коммита
+3. Выполняю `git add .` и `git commit -m "<сообщение>"`
+
+## When to use me
+
+Используй для быстрого коммита всех изменений.
+```
+
+**Команды в терминале:**
+- `ai: skills` — показать список доступных skills в терминале
+- `ai: skill <name>` — выполнить skill
+- `ai: skill <name> --message "текст"` — выполнить skill с параметрами
+- `ai: skill <name> какой-то текст` — текст передаётся как параметр `message`
+
+**Технические детали:**
+- Skills читаются с удалённого сервера через SSH при каждом вызове
+- Таймаут чтения: 5 секунд
+- Содержимое SKILL.md добавляется в системный промпт AI
+- WS-сообщения: `{type: "skills_list"}`, `{type: "skill_invoke", name, params, prompt}`
+- AI команды перехватываются на клиенте и НЕ отправляются в shell
+
+**Реализация:**
+- Backend: `server/ws.js` — функции `getRemoteSkills()`, `getRemoteSkill()`, `parseSkillFrontmatter()`
+- Frontend: `web/term.html`, `web/app.js` — вывод списка skills в терминал, буферизация ввода
+
 ## Известные места/долги
 - Нет auth в веб‑панели (при необходимости — JWT + роли).
 - Нужен whitelist/confirm для опасных экшенов.
