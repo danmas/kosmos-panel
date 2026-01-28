@@ -198,6 +198,16 @@
         flex-direction: column;
         gap: 8px;
       }
+      .skill-dir {
+        color: #7aa2ff;
+        font-size: 12px;
+        letter-spacing: 0.2px;
+        margin-top: 6px;
+      }
+      .skill-root {
+        color: #9fb8dd;
+        font-weight: 600;
+      }
       .skill-item {
         background: rgba(0, 0, 0, 0.4);
         border: 1px solid #333;
@@ -706,7 +716,10 @@
       }
 
       function handleSkillsList(skills, error) {
-        availableSkills = skills;
+        availableSkills = skills.map(s => ({
+          ...s,
+          id: s.id || `${s.source || 'remote'}:${s.path || s.name}`
+        }));
         const listEl = document.getElementById('skillsList');
         
         if (error) {
@@ -717,25 +730,71 @@
         if (skills.length === 0) {
           listEl.innerHTML = `<div class="skills-empty">
             Нет доступных skills.<br>
-            <small style="color:#666">Создайте ~/.config/kosmos-panel/skills/&lt;name&gt;/SKILL.md</small>
+            <small style="color:#666">Проверьте:</small><br>
+            <small style="color:#666">1) /kosmos-panel/skills/&lt;path&gt;/SKILL.md</small><br>
+            <small style="color:#666">2) ~/.config/kosmos-panel/skills/&lt;path&gt;/SKILL.md</small>
           </div>`;
           return;
         }
-        
-        listEl.innerHTML = skills.map(skill => `
-          <div class="skill-item" data-skill="${skill.name}">
-            <div class="skill-name">${skill.name}</div>
-            <div class="skill-desc">${skill.description || 'Без описания'}</div>
-          </div>
-        `).join('');
-        
+
+        const rootMap = new Map();
+        const ensureRoot = (source) => {
+          if (rootMap.has(source)) return rootMap.get(source);
+          const label = source === 'project'
+            ? 'Project: /kosmos-panel/skills'
+            : 'Remote: ~/.config/kosmos-panel/skills';
+          const node = { type: 'dir', name: label, children: [], root: true };
+          rootMap.set(source, node);
+          return node;
+        };
+
+        for (const skill of availableSkills) {
+          const root = ensureRoot(skill.source || 'remote');
+          const rawPath = (skill.path || skill.name || '').replace(/^\/+|\/+$/g, '');
+          const parts = rawPath ? rawPath.split('/') : [skill.name || 'skill'];
+          let current = root;
+          for (let i = 0; i < parts.length; i++) {
+            const part = parts[i];
+            const isLeaf = i === parts.length - 1;
+            if (isLeaf) {
+              current.children.push({ type: 'skill', name: part, skill });
+            } else {
+              let next = current.children.find(c => c.type === 'dir' && c.name === part);
+              if (!next) {
+                next = { type: 'dir', name: part, children: [] };
+                current.children.push(next);
+              }
+              current = next;
+            }
+          }
+        }
+
+        const renderNodes = (nodes, depth = 0) => {
+          return nodes.map(node => {
+            if (node.type === 'dir') {
+              const cls = node.root ? 'skill-dir skill-root' : 'skill-dir';
+              const html = `<div class="${cls}" style="padding-left:${depth * 12}px">📁 ${node.name}</div>`;
+              return html + renderNodes(node.children, depth + 1);
+            }
+            const skill = node.skill;
+            return `
+              <div class="skill-item" data-skill="${skill.id}" style="margin-left:${depth * 12}px">
+                <div class="skill-name">${node.name}</div>
+                <div class="skill-desc">${skill.description || 'Без описания'}</div>
+              </div>
+            `;
+          }).join('');
+        };
+
+        const roots = Array.from(rootMap.values());
+        listEl.innerHTML = renderNodes(roots, 0);
         listEl.querySelectorAll('.skill-item').forEach(item => {
           item.onclick = () => selectSkill(item.dataset.skill);
         });
       }
 
       function selectSkill(skillName) {
-        selectedSkill = availableSkills.find(s => s.name === skillName);
+        selectedSkill = availableSkills.find(s => s.id === skillName);
         if (!selectedSkill) return;
         
         const paramsForm = document.getElementById('skillParamsForm');
@@ -759,7 +818,9 @@
         const params = parseSkillParams(userInput);
         ws.send(JSON.stringify({ 
           type: 'skill_invoke', 
-          name: selectedSkill.name, 
+          name: selectedSkill.name,
+          path: selectedSkill.path,
+          source: selectedSkill.source,
           params: params,
           prompt: userInput 
         }));

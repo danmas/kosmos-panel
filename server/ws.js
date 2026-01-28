@@ -97,21 +97,22 @@ function parseSkillFrontmatter(content, fallbackName = 'unknown') {
 }
 
 /**
- * Получает список всех skills с удалённого сервера
+ * Получает список всех skills с удалённого сервера (рекурсивно)
  * @param {Object} sshConn - SSH connection (ssh2 Client)
- * @returns {Promise<Array<{name, description, params}>>}
+ * @param {string} remoteOS - 'linux' или 'windows'
+ * @returns {Promise<Array<{id, name, description, params, path, source}>>}
  */
 function getRemoteSkills(sshConn, remoteOS = 'linux') {
   return new Promise((resolve) => {
     let cmd;
-    
+
     if (remoteOS === 'windows') {
-      // PowerShell команда для Windows с UTF-8
-      cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $skillsDir = Join-Path $env:USERPROFILE '.config/kosmos-panel/skills'; if (Test-Path $skillsDir) { Get-ChildItem -Path $skillsDir -Directory | ForEach-Object { $skillFile = Join-Path $_.FullName 'SKILL.md'; if (Test-Path $skillFile) { Write-Host '===SKILL:' $_.Name '==='; Get-Content $skillFile -Raw -Encoding UTF8; Write-Host '===END_SKILL===' } } }"`;
+      // PowerShell команда для Windows с UTF-8 (рекурсивно)
+      cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $skillsDir = Join-Path $env:USERPROFILE '.config/kosmos-panel/skills'; if (Test-Path $skillsDir) { Get-ChildItem -Path $skillsDir -Recurse -Filter SKILL.md | ForEach-Object { $rel = $_.FullName.Substring($skillsDir.Length + 1); $relDir = $rel -replace '\\\\SKILL.md$', ''; $relDir = $relDir -replace '\\\\','/'; Write-Host '===SKILL:' $relDir '==='; Get-Content $_.FullName -Raw -Encoding UTF8; Write-Host '===END_SKILL===' } }"`;
     } else {
-      // Bash команда для Linux/macOS
+      // Bash команда для Linux/macOS (рекурсивно)
       const skillsPath = '$HOME/.config/kosmos-panel/skills';
-      cmd = `for d in ${skillsPath}/*/; do if [ -f "$d/SKILL.md" ]; then echo "===SKILL:$(basename "$d")==="; cat "$d/SKILL.md"; echo "===END_SKILL==="; fi; done 2>/dev/null`;
+      cmd = `skills_dir="${skillsPath}"; if [ -d "$skills_dir" ]; then find "$skills_dir" -type f -name SKILL.md -print 2>/dev/null | while read -r f; do rel="\${f#"$skills_dir"/}"; rel_dir="\${rel%/SKILL.md}"; echo "===SKILL:\${rel_dir}==="; cat "$f"; echo "===END_SKILL==="; done; fi`;
     }
 
     const commandTimeout = setTimeout(() => {
@@ -147,18 +148,23 @@ function getRemoteSkills(sshConn, remoteOS = 'linux') {
           const nameEndIdx = block.indexOf('===');
           if (nameEndIdx === -1) continue;
           
-          const skillName = block.substring(0, nameEndIdx).trim();
+          const skillPath = block.substring(0, nameEndIdx).trim();
           const endMarkerIdx = block.indexOf('===END_SKILL===');
           const skillContent = endMarkerIdx !== -1 
             ? block.substring(nameEndIdx + 3, endMarkerIdx).trim()
             : block.substring(nameEndIdx + 3).trim();
           
           if (skillContent) {
-            const parsed = parseSkillFrontmatter(skillContent, skillName);
+            const normalizedPath = skillPath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+            const fallbackName = normalizedPath.split('/').filter(Boolean).pop() || skillPath;
+            const parsed = parseSkillFrontmatter(skillContent, fallbackName);
             skills.push({
+              id: `remote:${normalizedPath || parsed.name}`,
               name: parsed.name,
               description: parsed.description,
-              params: parsed.params
+              params: parsed.params,
+              path: normalizedPath || parsed.name,
+              source: 'remote'
             });
           }
         }
@@ -171,21 +177,93 @@ function getRemoteSkills(sshConn, remoteOS = 'linux') {
 }
 
 /**
+ * Получает список skills из локального проекта (./skills)
+ * @returns {Promise<Array<{id, name, description, params, path, source}>>}
+ */
+async function getProjectSkills() {
+  const projectRoot = path.resolve(__dirname, '..');
+  const skillsRoot = path.join(projectRoot, 'skills');
+
+  const collectSkillFiles = async (dir, acc = []) => {
+    let entries;
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch (e) {
+      return acc;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await collectSkillFiles(full, acc);
+      } else if (entry.isFile() && entry.name.toLowerCase() === 'skill.md') {
+        acc.push(full);
+      }
+    }
+    return acc;
+  };
+
+  const files = await collectSkillFiles(skillsRoot);
+  const skills = [];
+  for (const filePath of files) {
+    const relDir = path.relative(skillsRoot, path.dirname(filePath)).replace(/\\/g, '/');
+    const fallbackName = relDir.split('/').filter(Boolean).pop() || 'unknown';
+    let content;
+    try {
+      content = await fs.readFile(filePath, 'utf8');
+    } catch (e) {
+      continue;
+    }
+    const parsed = parseSkillFrontmatter(content, fallbackName);
+    skills.push({
+      id: `project:${relDir || parsed.name}`,
+      name: parsed.name,
+      description: parsed.description,
+      params: parsed.params,
+      path: relDir || parsed.name,
+      source: 'project'
+    });
+  }
+  return skills;
+}
+
+/**
+ * Получает конкретный skill из локального проекта по относительному пути
+ * @param {string} skillPath
+ * @returns {Promise<{name, description, params, content} | null>}
+ */
+async function getProjectSkill(skillPath) {
+  const projectRoot = path.resolve(__dirname, '..');
+  const skillsRoot = path.join(projectRoot, 'skills');
+  const relPath = (skillPath || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+  const filePath = path.join(skillsRoot, ...relPath.split('/'), 'SKILL.md');
+  let content;
+  try {
+    content = await fs.readFile(filePath, 'utf8');
+  } catch (e) {
+    return null;
+  }
+  const fallbackName = relPath.split('/').filter(Boolean).pop() || 'unknown';
+  return parseSkillFrontmatter(content, fallbackName);
+}
+
+/**
  * Получает конкретный skill по имени с удалённого сервера
  * @param {Object} sshConn - SSH connection (ssh2 Client)
  * @param {string} skillName - Имя skill
  * @param {string} remoteOS - 'linux' или 'windows'
  * @returns {Promise<{name, description, params, content} | null>}
  */
-function getRemoteSkill(sshConn, skillName, remoteOS = 'linux') {
+function getRemoteSkill(sshConn, skillName, remoteOS = 'linux', skillPath = null) {
   return new Promise((resolve) => {
     let cmd;
-    
+    const relPath = (skillPath || skillName || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+
     if (remoteOS === 'windows') {
-      cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content (Join-Path $env:USERPROFILE '.config/kosmos-panel/skills/${skillName}/SKILL.md') -Raw -Encoding UTF8 -ErrorAction SilentlyContinue"`;
+      const winRel = relPath.replace(/\//g, '\\');
+      cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content (Join-Path $env:USERPROFILE '.config/kosmos-panel/skills\\${winRel}\\SKILL.md') -Raw -Encoding UTF8 -ErrorAction SilentlyContinue"`;
     } else {
-      const skillPath = `~/.config/kosmos-panel/skills/${skillName}/SKILL.md`;
-      cmd = `cat ${skillPath} 2>/dev/null`;
+      const fullPath = `~/.config/kosmos-panel/skills/${relPath}/SKILL.md`;
+      cmd = `cat ${fullPath} 2>/dev/null`;
     }
 
     const commandTimeout = setTimeout(() => {
@@ -523,21 +601,29 @@ function handleTerminal(ws, url) {
               // Получаем список skills с удалённого сервера
               logger.info('skills', 'Received skills_list request', { remoteOS });
               try {
-                const skills = await getRemoteSkills(conn, remoteOS);
-                logger.info('skills', 'Sending skills_list response', { count: skills.length });
+                const [projectSkills, remoteSkills] = await Promise.all([
+                  getProjectSkills(),
+                  getRemoteSkills(conn, remoteOS)
+                ]);
+                const skills = [...projectSkills, ...remoteSkills];
+                logger.info('skills', 'Sending skills_list response', { count: skills.length, project: projectSkills.length, remote: remoteSkills.length });
                 ws.send(JSON.stringify({ type: 'skills_list', skills }));
               } catch (e) {
                 logger.error('skills', 'Error getting skills list', { error: e.message });
                 ws.send(JSON.stringify({ type: 'skills_list', skills: [], error: e.message }));
               }
-            } else if (type === 'skill_invoke' && obj.name) {
+            } else if (type === 'skill_invoke' && (obj.name || obj.path)) {
               // ========== Multi-step Skill Invoke ==========
               const skillName = obj.name;
+              const skillSource = obj.source || 'remote';
+              const skillPath = obj.path || obj.name;
               const skillParams = obj.params || {};
               const userPrompt = obj.prompt || '';
               
               try {
-                const skill = await getRemoteSkill(conn, skillName, remoteOS);
+                const skill = skillSource === 'project'
+                  ? await getProjectSkill(skillPath)
+                  : await getRemoteSkill(conn, skillName, remoteOS, skillPath);
                 if (!skill) {
                   ws.send(JSON.stringify({ type: 'skill_error', error: `Skill "${skillName}" not found` }));
                   return;
@@ -593,10 +679,11 @@ RULES:
                 if (remoteKnowledge.trim()) {
                   fullSystemPrompt += `\n\n--- System Context ---\n${remoteKnowledge.trim()}`;
                 }
-                fullSystemPrompt += `\n\n--- Active Skill: ${skill.name} ---\n${skill.content}`;
+                const activeSkillName = skill.name || skillName || skillPath || 'skill';
+                fullSystemPrompt += `\n\n--- Active Skill: ${activeSkillName} ---\n${skill.content}`;
 
                 // Формируем первый user prompt
-                let firstUserPrompt = userPrompt || `Execute skill: ${skillName}`;
+                let firstUserPrompt = userPrompt || `Execute skill: ${activeSkillName}`;
                 if (Object.keys(skillParams).length > 0) {
                   firstUserPrompt += `\n\nParameters:\n${Object.entries(skillParams).map(([k, v]) => `- ${k}: ${v}`).join('\n')}`;
                 }
