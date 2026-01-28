@@ -101,17 +101,18 @@ function parseSkillFrontmatter(content, fallbackName = 'unknown') {
  * @param {Object} sshConn - SSH connection (ssh2 Client)
  * @returns {Promise<Array<{name, description, params}>>}
  */
-function getRemoteSkills(sshConn) {
+function getRemoteSkills(sshConn, remoteOS = 'linux') {
   return new Promise((resolve) => {
-    const skillsPath = '~/.config/kosmos-panel/skills';
-    // Команда: для каждой директории в skills/ прочитать SKILL.md с маркером
-    const cmd = `for d in ${skillsPath}/*/; do 
-      if [ -f "$d/SKILL.md" ]; then 
-        echo "===SKILL:$(basename "$d")==="; 
-        cat "$d/SKILL.md"; 
-        echo "===END_SKILL===";
-      fi; 
-    done 2>/dev/null`;
+    let cmd;
+    
+    if (remoteOS === 'windows') {
+      // PowerShell команда для Windows с UTF-8
+      cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $skillsDir = Join-Path $env:USERPROFILE '.config/kosmos-panel/skills'; if (Test-Path $skillsDir) { Get-ChildItem -Path $skillsDir -Directory | ForEach-Object { $skillFile = Join-Path $_.FullName 'SKILL.md'; if (Test-Path $skillFile) { Write-Host '===SKILL:' $_.Name '==='; Get-Content $skillFile -Raw -Encoding UTF8; Write-Host '===END_SKILL===' } } }"`;
+    } else {
+      // Bash команда для Linux/macOS
+      const skillsPath = '$HOME/.config/kosmos-panel/skills';
+      cmd = `for d in ${skillsPath}/*/; do if [ -f "$d/SKILL.md" ]; then echo "===SKILL:$(basename "$d")==="; cat "$d/SKILL.md"; echo "===END_SKILL==="; fi; done 2>/dev/null`;
+    }
 
     const commandTimeout = setTimeout(() => {
       logger.warn('skills', 'Remote skills command timed out');
@@ -126,11 +127,13 @@ function getRemoteSkills(sshConn) {
         return resolve([]);
       }
       stream.on('data', (data) => { content += data.toString(); });
+      stream.stderr.on('data', (data) => { logger.info('skills', 'stderr: ' + data.toString()); });
       stream.on('close', () => {
         clearTimeout(commandTimeout);
+        logger.info('skills', 'Raw skills output', { content: content.substring(0, 500), remoteOS });
         
-        if (!content.trim()) {
-          logger.debug('skills', 'No skills found on remote server');
+        if (!content.includes('===SKILL:')) {
+          logger.info('skills', 'No skills found - no ===SKILL: marker in output');
           return resolve([]);
         }
 
@@ -171,12 +174,19 @@ function getRemoteSkills(sshConn) {
  * Получает конкретный skill по имени с удалённого сервера
  * @param {Object} sshConn - SSH connection (ssh2 Client)
  * @param {string} skillName - Имя skill
+ * @param {string} remoteOS - 'linux' или 'windows'
  * @returns {Promise<{name, description, params, content} | null>}
  */
-function getRemoteSkill(sshConn, skillName) {
+function getRemoteSkill(sshConn, skillName, remoteOS = 'linux') {
   return new Promise((resolve) => {
-    const skillPath = `~/.config/kosmos-panel/skills/${skillName}/SKILL.md`;
-    const cmd = `cat ${skillPath} 2>/dev/null`;
+    let cmd;
+    
+    if (remoteOS === 'windows') {
+      cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content (Join-Path $env:USERPROFILE '.config/kosmos-panel/skills/${skillName}/SKILL.md') -Raw -Encoding UTF8 -ErrorAction SilentlyContinue"`;
+    } else {
+      const skillPath = `~/.config/kosmos-panel/skills/${skillName}/SKILL.md`;
+      cmd = `cat ${skillPath} 2>/dev/null`;
+    }
 
     const commandTimeout = setTimeout(() => {
       logger.warn('skills', 'Remote skill command timed out', { skillName });
@@ -299,13 +309,45 @@ function handleTerminal(ws, url) {
           return;
         }
 
+        // Определяем ОС удалённого сервера
+        let remoteOS = 'linux'; // по умолчанию
+        let osDetectionDone = false;
+        const detectOS = () => new Promise((resolve) => {
+          conn.exec('uname -s 2>&1', (err, osStream) => {
+            if (err) return resolve('linux');
+            let osOut = '';
+            let osErr = '';
+            osStream.on('data', (d) => { osOut += d.toString(); });
+            osStream.stderr.on('data', (d) => { osErr += d.toString(); });
+            osStream.on('close', () => {
+              const combined = (osOut + osErr).toUpperCase();
+              // Windows SSH вернёт ошибку "not recognized" для uname
+              if (combined.includes('NOT RECOGNIZED') || combined.includes('WINDOWS')) {
+                resolve('windows');
+              } else if (combined.includes('LINUX') || combined.includes('DARWIN') || combined.includes('FREEBSD')) {
+                resolve('linux');
+              } else {
+                resolve('linux'); // по умолчанию
+              }
+            });
+          });
+        });
+        detectOS().then(os => {
+          remoteOS = os;
+          osDetectionDone = true;
+          logger.info('ws', `Detected remote OS: ${remoteOS}`);
+          // Отправляем клиенту информацию об ОС
+          try { ws.send(JSON.stringify({ type: 'os_detected', os: remoteOS })); } catch {}
+        });
+
         // Сохраняем сессию для REST API bridge
         wsSessions[sessionId] = {
           ws,
           stream,
           serverId,
           serverName: server.name || serverId,
-          connectedAt: new Date().toISOString()
+          connectedAt: new Date().toISOString(),
+          getOS: () => remoteOS
         };
         logger.info('ws', `Session registered for REST bridge`, { sessionId });
 
@@ -474,10 +516,14 @@ function handleTerminal(ws, url) {
                 logger.warn('ws', 'command_result for unknown commandId', { commandId: obj.commandId });
               }
             } else if (type === 'skills_list') {
+              // Ждём определения ОС если ещё не завершено
+              if (!osDetectionDone) {
+                await new Promise(r => setTimeout(r, 500));
+              }
               // Получаем список skills с удалённого сервера
-              logger.info('skills', 'Received skills_list request');
+              logger.info('skills', 'Received skills_list request', { remoteOS });
               try {
-                const skills = await getRemoteSkills(conn);
+                const skills = await getRemoteSkills(conn, remoteOS);
                 logger.info('skills', 'Sending skills_list response', { count: skills.length });
                 ws.send(JSON.stringify({ type: 'skills_list', skills }));
               } catch (e) {
@@ -491,7 +537,7 @@ function handleTerminal(ws, url) {
               const userPrompt = obj.prompt || '';
               
               try {
-                const skill = await getRemoteSkill(conn, skillName);
+                const skill = await getRemoteSkill(conn, skillName, remoteOS);
                 if (!skill) {
                   ws.send(JSON.stringify({ type: 'skill_error', error: `Skill "${skillName}" not found` }));
                   return;
@@ -526,7 +572,12 @@ RULES:
                 // Получаем knowledge
                 const getRemoteKnowledge = (sshConn) => new Promise((resolve) => {
                   let commandTimeout = setTimeout(() => resolve(''), 5000);
-                  const cmd = `cat ./.kosmos-panel/kosmos-panel.md 2>/dev/null || cat ~/.config/kosmos-panel/kosmos-panel.md 2>/dev/null`;
+                  let cmd;
+                  if (remoteOS === 'windows') {
+                    cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p1 = './.kosmos-panel/kosmos-panel.md'; $p2 = Join-Path $env:USERPROFILE '.config/kosmos-panel/kosmos-panel.md'; if (Test-Path $p1) { Get-Content $p1 -Raw -Encoding UTF8 } elseif (Test-Path $p2) { Get-Content $p2 -Raw -Encoding UTF8 }"`;
+                  } else {
+                    cmd = `cat ./.kosmos-panel/kosmos-panel.md 2>/dev/null || cat ~/.config/kosmos-panel/kosmos-panel.md 2>/dev/null`;
+                  }
                   let content = '';
                   sshConn.exec(cmd, (err, execStream) => {
                     if (err) { clearTimeout(commandTimeout); return resolve(''); }
@@ -789,13 +840,17 @@ RULES:
                 // Приоритет: 1) ./.kosmos-panel/kosmos-panel.md  2) ~/.config/kosmos-panel/kosmos-panel.md
                 const getRemoteKnowledge = (sshConn) => new Promise((resolve) => {
                   let commandTimeout;
-                  const primaryPath = './.kosmos-panel/kosmos-panel.md';
-                  const fallbackPath = '~/.config/kosmos-panel/kosmos-panel.md';
+                  let cmd;
                   
-                  // Команда: попытаться прочитать primary, если не найден — fallback
-                  const cmd = `cat ${primaryPath} 2>/dev/null || cat ${fallbackPath} 2>/dev/null`;
+                  if (remoteOS === 'windows') {
+                    cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p1 = './.kosmos-panel/kosmos-panel.md'; $p2 = Join-Path $env:USERPROFILE '.config/kosmos-panel/kosmos-panel.md'; if (Test-Path $p1) { Get-Content $p1 -Raw -Encoding UTF8 } elseif (Test-Path $p2) { Get-Content $p2 -Raw -Encoding UTF8 }"`;
+                  } else {
+                    const primaryPath = './.kosmos-panel/kosmos-panel.md';
+                    const fallbackPath = '~/.config/kosmos-panel/kosmos-panel.md';
+                    cmd = `cat ${primaryPath} 2>/dev/null || cat ${fallbackPath} 2>/dev/null`;
+                  }
                   
-                  logger.debug('ai', 'Attempting to read remote knowledge', { primaryPath, fallbackPath });
+                  logger.debug('ai', 'Attempting to read remote knowledge', { remoteOS });
 
                   commandTimeout = setTimeout(() => {
                     logger.warn('ai', 'Remote knowledge command timed out');
