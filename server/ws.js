@@ -182,7 +182,7 @@ function getRemoteSkills(sshConn, remoteOS = 'linux') {
  */
 async function getProjectSkills() {
   const projectRoot = path.resolve(__dirname, '..');
-  const skillsRoot = path.join(projectRoot, 'skills');
+  const skillsRoot = path.join(projectRoot, '.kosmos-panel', 'skills');
 
   const collectSkillFiles = async (dir, acc = []) => {
     let entries;
@@ -233,7 +233,7 @@ async function getProjectSkills() {
  */
 async function getProjectSkill(skillPath) {
   const projectRoot = path.resolve(__dirname, '..');
-  const skillsRoot = path.join(projectRoot, 'skills');
+  const skillsRoot = path.join(projectRoot, '.kosmos-panel', 'skills');
   const relPath = (skillPath || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
   const filePath = path.join(skillsRoot, ...relPath.split('/'), 'SKILL.md');
   let content;
@@ -893,6 +893,171 @@ RULES:
                 ws.send(JSON.stringify({ type: 'data', data: `\r\n\x1b[1;33m[Skill отменён]\x1b[0m\r\n` }));
                 ws.send(JSON.stringify({ type: 'skill_complete', text: 'Cancelled by user' }));
                 activeSkill = null;
+              }
+
+            } else if (type === 'skill_get_content') {
+              // ========== Get skill content for editing ==========
+              const { source, path: skillPath } = obj;
+              logger.info('skills', 'Received skill_get_content request', { source, skillPath });
+              
+              try {
+                let content = null;
+                
+                if (source === 'project') {
+                  // Читаем из локального проекта
+                  const projectRoot = path.resolve(__dirname, '..');
+                  const skillsRoot = path.join(projectRoot, '.kosmos-panel', 'skills');
+                  const relPath = (skillPath || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+                  const filePath = path.join(skillsRoot, ...relPath.split('/'), 'SKILL.md');
+                  
+                  try {
+                    content = await fs.readFile(filePath, 'utf8');
+                  } catch (e) {
+                    ws.send(JSON.stringify({ type: 'skill_content', error: `Файл не найден: ${e.message}` }));
+                    return;
+                  }
+                } else {
+                  // Читаем с удалённого сервера
+                  const relPath = (skillPath || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+                  const remotePath = `~/.config/kosmos-panel/skills/${relPath}/SKILL.md`;
+                  
+                  let cmd;
+                  if (remoteOS === 'windows') {
+                    const winPath = remotePath.replace('~', '$env:USERPROFILE').replace(/\//g, '\\');
+                    cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content '${winPath}' -Raw -Encoding UTF8"`;
+                  } else {
+                    cmd = `cat "${remotePath}"`;
+                  }
+                  
+                  await new Promise((resolve) => {
+                    conn.exec(cmd, (err, execStream) => {
+                      if (err) {
+                        ws.send(JSON.stringify({ type: 'skill_content', error: err.message }));
+                        resolve();
+                        return;
+                      }
+                      
+                      let stdout = '';
+                      let stderr = '';
+                      execStream.on('data', (d) => { stdout += d.toString(); });
+                      execStream.stderr.on('data', (d) => { stderr += d.toString(); });
+                      execStream.on('close', (code) => {
+                        if (code === 0 && stdout) {
+                          ws.send(JSON.stringify({ type: 'skill_content', content: stdout }));
+                        } else {
+                          ws.send(JSON.stringify({ type: 'skill_content', error: stderr || 'Файл не найден' }));
+                        }
+                        resolve();
+                      });
+                    });
+                  });
+                  return;
+                }
+                
+                ws.send(JSON.stringify({ type: 'skill_content', content }));
+              } catch (e) {
+                logger.error('skills', 'Error getting skill content', { error: e.message });
+                ws.send(JSON.stringify({ type: 'skill_content', error: e.message }));
+              }
+
+            } else if (type === 'skill_create') {
+              // ========== Create new skill ==========
+              const { source, path: skillPath, name, content } = obj;
+              logger.info('skills', 'Received skill_create request', { source, skillPath, name, contentLength: content?.length });
+              
+              if (!name || !content) {
+                logger.warn('skills', 'skill_create missing name or content');
+                ws.send(JSON.stringify({ type: 'skill_create_result', success: false, error: 'Имя и содержимое обязательны' }));
+                return;
+              }
+
+              try {
+                if (source === 'project') {
+                  logger.info('skills', 'Creating project skill...');
+                  // Создание в локальном проекте
+                  const projectRoot = path.resolve(__dirname, '..');
+                  const skillsRoot = path.join(projectRoot, '.kosmos-panel', 'skills');
+                  const relPath = skillPath ? skillPath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') : '';
+                  const fullDir = relPath 
+                    ? path.join(skillsRoot, ...relPath.split('/'), name)
+                    : path.join(skillsRoot, name);
+                  const fullFile = path.join(fullDir, 'SKILL.md');
+                  
+                  // Создаём директорию
+                  await fs.mkdir(fullDir, { recursive: true });
+                  // Записываем файл
+                  await fs.writeFile(fullFile, content, 'utf8');
+                  
+                  logger.info('skills', 'Created project skill', { path: fullFile });
+                  ws.send(JSON.stringify({ type: 'skill_create_result', success: true }));
+                } else {
+                  // Создание на удалённом сервере через SSH
+                  logger.info('skills', 'Creating remote skill...', { remoteOS });
+                  const relPath = skillPath ? skillPath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') : '';
+                  const remotePath = relPath 
+                    ? `~/.config/kosmos-panel/skills/${relPath}/${name}`
+                    : `~/.config/kosmos-panel/skills/${name}`;
+                  
+                  // Кодируем контент в base64 для безопасной передачи
+                  const base64Content = Buffer.from(content, 'utf8').toString('base64');
+                  
+                  let cmd;
+                  if (remoteOS === 'windows') {
+                    // PowerShell команда для Windows с base64
+                    const winPath = remotePath.replace('~', '$env:USERPROFILE').replace(/\//g, '\\');
+                    cmd = `powershell -Command "$dir = '${winPath}'; New-Item -ItemType Directory -Force -Path $dir | Out-Null; [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${base64Content}')) | Out-File -FilePath (Join-Path $dir 'SKILL.md') -Encoding UTF8 -NoNewline"`;
+                    logger.info('skills', 'PowerShell command prepared (base64)', { remotePath: winPath });
+                  } else {
+                    // Bash команда для Linux с base64
+                    cmd = `mkdir -p "${remotePath}" && echo "${base64Content}" | base64 -d > "${remotePath}/SKILL.md"`;
+                  }
+                  
+                  logger.info('skills', 'Executing remote command...');
+                  
+                  // Timeout для команды
+                  let responded = false;
+                  const timeout = setTimeout(() => {
+                    if (!responded) {
+                      responded = true;
+                      logger.error('skills', 'Remote skill create command timed out');
+                      ws.send(JSON.stringify({ type: 'skill_create_result', success: false, error: 'Timeout: команда не завершилась за 30 секунд' }));
+                    }
+                  }, 30000);
+                  
+                  conn.exec(cmd, (err, execStream) => {
+                    if (err) {
+                      clearTimeout(timeout);
+                      if (!responded) {
+                        responded = true;
+                        logger.error('skills', 'Error creating remote skill (exec)', { error: err.message });
+                        ws.send(JSON.stringify({ type: 'skill_create_result', success: false, error: err.message }));
+                      }
+                      return;
+                    }
+                    
+                    let stderr = '';
+                    let stdout = '';
+                    execStream.on('data', (d) => { stdout += d.toString(); });
+                    execStream.stderr.on('data', (d) => { stderr += d.toString(); });
+                    execStream.on('close', (code) => {
+                      clearTimeout(timeout);
+                      if (responded) return;
+                      responded = true;
+                      
+                      logger.info('skills', 'Remote command completed', { code, stdout: stdout.substring(0, 200), stderr: stderr.substring(0, 200) });
+                      if (code === 0) {
+                        logger.info('skills', 'Created remote skill', { path: remotePath });
+                        ws.send(JSON.stringify({ type: 'skill_create_result', success: true }));
+                      } else {
+                        logger.error('skills', 'Failed to create remote skill', { code, stderr });
+                        ws.send(JSON.stringify({ type: 'skill_create_result', success: false, error: stderr || `Exit code: ${code}` }));
+                      }
+                    });
+                  });
+                }
+              } catch (e) {
+                logger.error('skills', 'Error creating skill', { error: e.message });
+                ws.send(JSON.stringify({ type: 'skill_create_result', success: false, error: e.message }));
               }
 
             } else if (type === 'ai_query' && prompt) {
