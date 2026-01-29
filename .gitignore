@@ -4,6 +4,7 @@ inventory.json.backup.*
 terminal_log.json
 data/
 logs/
+backup/
 
 # Node modules
 node_modules/

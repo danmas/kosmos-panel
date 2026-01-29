@@ -163,9 +163,11 @@ app.post('/api/inventory', async (req, res) => {
       return res.status(400).json({ error: `Дублирующиеся ID учетных данных: ${duplicateCredIds.join(', ')}` });
     }
     
-    // Создаем резервную копию
-    const backupPath = `${inventoryPath}.backup.${Date.now()}`;
+    // Создаем резервную копию в папке backup
+    const backupDir = path.join(process.cwd(), 'backup');
+    const backupPath = path.join(backupDir, `inventory.json.backup.${Date.now()}`);
     try {
+      await fs.mkdir(backupDir, { recursive: true });
       await fs.copyFile(inventoryPath, backupPath);
     } catch (e) {
       // Игнорируем ошибку если исходный файл не существует
