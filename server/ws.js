@@ -1,7 +1,6 @@
 const WebSocket = require('ws');
 const { Client } = require('ssh2');
 const { inventory } = require('./monitor');
-const fetch = require('node-fetch');
 const fs = require('fs').promises;
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');

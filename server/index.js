@@ -529,44 +529,76 @@ app.delete('/api/ws-terminal/command/:commandId', (req, res) => {
 app.use('/', express.static(path.join(process.cwd(), 'web')));
 
 const port = process.env.PORT ? Number(process.env.PORT) : 3000;
-const server = http.createServer(app);
-attachWsServer(server);
+const net = require('net');
 
-server.listen(port, () => {
-  logger.info('server', `UI: http://localhost:${port}`);
-  startScheduler();
-});
-
-// Graceful shutdown для логирования при pm2 restart
-function gracefulShutdown(signal) {
-  logger.warn('server', `Received ${signal}, shutting down gracefully...`);
-  
-  // Закрываем все WebSocket сессии
-  const sessionCount = Object.keys(wsSessions).length;
-  if (sessionCount > 0) {
-    logger.info('server', `Closing ${sessionCount} WebSocket sessions`);
-    for (const [sessionId, session] of Object.entries(wsSessions)) {
-      try {
-        session.ws.close(1001, 'Server shutting down');
-      } catch (e) {
-        logger.error('server', 'Error closing session', { sessionId, error: e.message });
-      }
-    }
-  }
-  
-  server.close(() => {
-    logger.info('server', 'HTTP server closed');
-    process.exit(0);
+// Проверка доступности порта перед запуском
+function checkPort(port) {
+  return new Promise((resolve) => {
+    const tester = net.createServer()
+      .once('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+          resolve(false);
+        } else {
+          resolve(false);
+        }
+      })
+      .once('listening', () => {
+        tester.close(() => resolve(true));
+      })
+      .listen(port);
   });
-  
-  // Force exit after 5 seconds
-  setTimeout(() => {
-    logger.warn('server', 'Forced shutdown after timeout');
-    process.exit(1);
-  }, 5000);
 }
 
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+(async () => {
+  const portAvailable = await checkPort(port);
+  if (!portAvailable) {
+    logger.error('server', `Порт ${port} уже занят. Остановите другой процесс или используйте другой порт (PORT=3001 bun run start)`);
+    process.exit(1);
+  }
 
+  const server = http.createServer(app);
+  attachWsServer(server);
+
+  server.on('error', (err) => {
+    logger.error('server', 'Ошибка сервера', { error: err.message });
+    process.exit(1);
+  });
+
+  server.listen(port, () => {
+    logger.info('server', `UI: http://localhost:${port}`);
+    startScheduler();
+  });
+
+  // Graceful shutdown для логирования при pm2 restart
+  function gracefulShutdown(signal) {
+    logger.warn('server', `Received ${signal}, shutting down gracefully...`);
+    
+    // Закрываем все WebSocket сессии
+    const sessionCount = Object.keys(wsSessions).length;
+    if (sessionCount > 0) {
+      logger.info('server', `Closing ${sessionCount} WebSocket sessions`);
+      for (const [sessionId, session] of Object.entries(wsSessions)) {
+        try {
+          session.ws.close(1001, 'Server shutting down');
+        } catch (e) {
+          logger.error('server', 'Error closing session', { sessionId, error: e.message });
+        }
+      }
+    }
+    
+    server.close(() => {
+      logger.info('server', 'HTTP server closed');
+      process.exit(0);
+    });
+    
+    // Force exit after 5 seconds
+    setTimeout(() => {
+      logger.warn('server', 'Forced shutdown after timeout');
+      process.exit(1);
+    }, 5000);
+  }
+
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+})();
 

@@ -9,7 +9,10 @@ logs/
 node_modules/
 
 # Configuration files with private data
+inventory/
 inventory.json
+
+bun.lock
 
 # Logs
 logs

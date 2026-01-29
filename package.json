@@ -2,21 +2,18 @@
   "name": "kosmos-panel",
   "version": "0.1.0",
   "private": true,
-  "description": "Prototype: SSH-based server status panel (Node.js + vanilla JS)",
+  "description": "Prototype: SSH-based server status panel (Bun + vanilla JS)",
   "main": "server/index.js",
   "scripts": {
-    "start": "node server/index.js"
-  },
-  "engines": {
-    "node": ">=18"
+    "start": "bun run server/index.js",
+    "start:node": "node server/index.js",
+    "dev": "bun --watch run server/index.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "jsonpath-plus": "^10.3.0",
-    "node-fetch": "^2.7.0",
     "ssh2": "^1.15.0",
-    "undici": "^6.19.8",
     "uuid": "^11.1.0",
     "ws": "^8.17.1"
   }

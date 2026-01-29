@@ -1,4 +1,4 @@
-const fetch = require('node-fetch');
+// Bun/Node 18+ имеет встроенный fetch
 
 const BASE_URL = 'http://localhost:3000/api/v2/terminal';
 const SERVER_ID = 'usa';
