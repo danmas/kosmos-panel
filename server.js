@@ -223,7 +223,7 @@ app.get('/api/test-ssh', async (req, res) => {
 });
 
 app.get('/api/logs', async (req, res) => {
-  const logFilePath = path.join(__dirname, 'terminal_log.json');
+  const logFilePath = path.join(__dirname, 'logs', 'terminal', 'terminal_log.json');
   const sessionId = req.query.sessionId;
   try {
     const data = await fs.readFile(logFilePath, 'utf8');

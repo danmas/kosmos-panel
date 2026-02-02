@@ -44,6 +44,34 @@
         border-radius: 4px;
         border: 1px solid rgba(74, 158, 255, 0.3);
       }
+      .session-filter {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .session-filter label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: #a0aec0;
+        cursor: pointer;
+        user-select: none;
+      }
+      .session-filter input[type="checkbox"] {
+        cursor: pointer;
+      }
+      .log-entry-session {
+        font-size: 11px;
+        color: #666;
+        margin-bottom: 4px;
+      }
+      .log-entry-session span {
+        background: rgba(74, 158, 255, 0.15);
+        padding: 2px 6px;
+        border-radius: 4px;
+        margin-right: 6px;
+      }
       .filters {
         display: flex;
         gap: 8px;
@@ -128,7 +156,13 @@
       <div class="header">
         <div class="header-left">
           <div class="header-title">📋 Лог команд терминала</div>
-          <div class="session-info" id="sessionInfo">Session: ...</div>
+          <div class="session-filter">
+            <div class="session-info" id="sessionInfo">Session: ...</div>
+            <label title="Показать логи всех сессий">
+              <input type="checkbox" id="showAllSessions" />
+              All
+            </label>
+          </div>
         </div>
         <div class="filters">
           <button class="filter-btn active" data-type="all">Все</button>
@@ -148,7 +182,6 @@
       const sessionId = params.get('sessionId');
       
       if (!sessionId) {
-        document.getElementById('content').innerHTML = '<div class="empty">Session ID не указан</div>';
         document.getElementById('sessionInfo').textContent = 'Session: не указан';
       } else {
         document.getElementById('sessionInfo').textContent = `Session: ${sessionId.substring(0, 8)}...`;
@@ -157,20 +190,23 @@
       let allLogs = [];
       let currentFilter = 'all';
       let lastUpdate = 0;
+      let showAllSessions = false;
       
       function stripAnsi(str) {
         return str.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
       }
       
       async function loadLogs() {
-        if (!sessionId) return;
+        if (!showAllSessions && !sessionId) return;
         
         try {
-          const response = await fetch(`/api/logs?sessionId=${encodeURIComponent(sessionId)}&t=${Date.now()}`);
+          const url = showAllSessions
+            ? `/api/logs?t=${Date.now()}`
+            : `/api/logs?sessionId=${encodeURIComponent(sessionId)}&t=${Date.now()}`;
+          const response = await fetch(url);
           const logs = await response.json();
           
-          // Обновляем только если есть новые данные
-          if (logs.length !== allLogs.length || logs.length > 0 && logs[logs.length - 1].id !== allLogs[allLogs.length - 1]?.id) {
+          if (logs.length !== allLogs.length || (logs.length > 0 && logs[logs.length - 1].id !== allLogs[allLogs.length - 1]?.id)) {
             allLogs = logs;
             lastUpdate = Date.now();
             renderLogs();
@@ -194,8 +230,17 @@
         return allLogs.filter(log => log.type === currentFilter);
       }
       
+      function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+      
       function renderLogs() {
         const contentEl = document.getElementById('content');
+        if (!showAllSessions && !sessionId) {
+          contentEl.innerHTML = '<div class="empty">Укажите sessionId в URL или включите All для просмотра логов</div>';
+          return;
+        }
         const logs = getFilteredLogs();
         
         if (logs.length === 0) {
@@ -233,11 +278,13 @@
           
           // HTML escaping
           content = content.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-          
           const timestamp = log.timestamp ? new Date(log.timestamp).toLocaleString('ru-RU') : '';
-          
+          const sessionBadge = showAllSessions && (log.serverName || log.sessionId)
+            ? `<div class="log-entry-session"><span>${escapeHtml(log.serverName || log.serverId || '')}</span><span>${escapeHtml((log.sessionId || '').substring(0, 8))}…</span></div>`
+            : '';
           return `
             <div class="log-entry ${className}">
+              ${sessionBadge}
               <div class="log-entry-type">
                 ${typeLabel}
                 ${timestamp ? `<span class="timestamp">${timestamp}</span>` : ''}
@@ -256,7 +303,13 @@
         }
       }
       
-      // Фильтры
+      // Чекбокс All — переключение текущая сессия / все сессии
+      document.getElementById('showAllSessions').addEventListener('change', function() {
+        showAllSessions = this.checked;
+        loadLogs();
+      });
+      
+      // Фильтры по типу
       document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.onclick = () => {
           document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
@@ -267,7 +320,8 @@
         };
       });
       
-      // Загружаем логи сразу и затем каждые 2 секунды
+      // Первый рендер (сообщение при отсутствии sessionId) и загрузка
+      renderLogs();
       loadLogs();
       const intervalId = setInterval(loadLogs, 2000);
       

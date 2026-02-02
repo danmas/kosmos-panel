@@ -7,7 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 const { findServer, resolvePrivateKey } = require('./ws-utils');
 const logger = require('./logger');
 
-const LOG_FILE_PATH = path.join(__dirname, '..', 'terminal_log.json');
+const LOG_FILE_PATH = path.join(__dirname, '..', 'logs', 'terminal', 'terminal_log.json');
 
 let logQueue = Promise.resolve();
 
@@ -31,6 +31,7 @@ function appendToLog(logEntry) {
         }
       }
       logs.push(logEntry);
+      await fs.mkdir(path.dirname(LOG_FILE_PATH), { recursive: true });
       await fs.writeFile(LOG_FILE_PATH, JSON.stringify(logs, null, 2));
     } catch (writeErr) {
       logger.error('terminal', 'Error writing to log file', { error: writeErr.message });

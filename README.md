@@ -162,7 +162,7 @@ http://localhost:3000/inventory-editor.html
 }
 ```
 
-**Примечание:** Все записи в `terminal_log.json` автоматически содержат информацию о сервере (`serverId`, `serverName`, `serverHost`) для различения команд от разных серверов.
+**Примечание:** Все записи в `logs/terminal/terminal_log.json` автоматически содержат информацию о сервере (`serverId`, `serverName`, `serverHost`) для различения команд от разных серверов.
 
 ## Известные проблемы и решения
 
