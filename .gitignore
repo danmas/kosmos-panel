@@ -8,6 +8,7 @@ backup/
 
 # Node modules
 node_modules/
+package-lock.json
 
 # Configuration files with private data
 inventory/

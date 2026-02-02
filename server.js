@@ -4,11 +4,11 @@ const express = require('express');
 const http = require('http');
 const path = require('path');
 const fs = require('fs').promises;
-const { startScheduler, getSnapshot, inventory, reloadInventory, sshExec } = require('./monitor');
-const { attachWsServer, wsSessions, pendingCommands } = require('./ws');
+const { startScheduler, getSnapshot, inventory, reloadInventory, sshExec } = require('./server/monitor');
+const { attachWsServer, wsSessions, pendingCommands } = require('./server/ws');
 const { v4: uuidv4 } = require('uuid');
-const { createSession, executeCommand, closeSession, createSessionV2, executeCommandV2, closeSessionV2 } = require('./terminal');
-const logger = require('./logger');
+const { createSession, executeCommand, closeSession, createSessionV2, executeCommandV2, closeSessionV2 } = require('./server/terminal');
+const logger = require('./server/logger');
 
 const app = express();
 app.use(express.json());
@@ -223,7 +223,7 @@ app.get('/api/test-ssh', async (req, res) => {
 });
 
 app.get('/api/logs', async (req, res) => {
-  const logFilePath = path.join(__dirname, '..', 'terminal_log.json');
+  const logFilePath = path.join(__dirname, 'terminal_log.json');
   const sessionId = req.query.sessionId;
   try {
     const data = await fs.readFile(logFilePath, 'utf8');
@@ -603,4 +603,3 @@ function checkPort(port) {
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 })();
-

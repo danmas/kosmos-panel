@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "description": "Prototype: SSH-based server status panel (Bun + vanilla JS)",
-  "main": "server/index.js",
+  "main": "server.js",
   "scripts": {
-    "start": "bun run server/index.js",
-    "start:node": "node server/index.js",
-    "dev": "bun --watch run server/index.js"
+    "start": "bun run server.js",
+    "start:node": "node server.js",
+    "dev": "bun --watch run server.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

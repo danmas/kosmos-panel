@@ -103,7 +103,7 @@ AI_SYSTEM_PROMPT=You are a Linux terminal AI assistant. Your task is to convert 
 - **Стабильный порядок серверов**: плитки серверов отображаются в том же порядке, что определен в `inventory.json`
 
 📖 **Подробная документация**:
-- **Терминал**: [README_terminal.md](README_terminal.md)  
+- **Терминал**: [KB/README_terminal.md](KB/README_terminal.md)  
 - **Логирование команд**: [KB/README_TERMINAL_LOGGING.md](KB/README_TERMINAL_LOGGING.md)
 
 ### Редактор inventory.json
