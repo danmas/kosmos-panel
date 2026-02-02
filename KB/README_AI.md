@@ -226,4 +226,4 @@ npm start
 ## Где смотреть при сбоях
 - SSH/WS: `server/ws.js` (логи `[ws] ...`) и `[FATAL]` в UI.
 - Reload конфига: `server/monitor.js` (fs.watchFile), `/api/reload`.
-- Вёрстка/fit xterm: `web/styles.css`, `web/app.js`.
+- Вёрстка/fit xterm: `web/styles.css`, `web/app.js` .
