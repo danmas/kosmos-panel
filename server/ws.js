@@ -634,7 +634,7 @@ function handleTerminal(ws, url) {
                 const aiModel = process.env.AI_MODEL || 'CHEAP';
                 
                 // Специальный системный промпт для multi-step skills
-                const skillSystemPrompt = `You are a Linux terminal AI assistant executing a multi-step skill.
+                const skillSystemPrompt = `You are a terminal AI assistant executing a multi-step skill.
 
 RESPONSE FORMAT - Use EXACTLY ONE of these formats per response:
 
@@ -1086,7 +1086,7 @@ RULES:
                 const aiBaseUrl = process.env.AI_KOSMOS_MODEL_BASE_URL || 'http://localhost:3002/v1';
                 const aiServerUrl = `${aiBaseUrl}/chat/completions`;
                 const aiModel = process.env.AI_MODEL || 'CHEAP';
-                const baseSystemPrompt = process.env.AI_SYSTEM_PROMPT || 'You are a Linux terminal AI assistant. Your task is to convert the user\'s request into a valid shell command, and return ONLY the shell command itself without any explanation.';
+                const baseSystemPrompt = process.env.AI_SYSTEM_PROMPT || 'You are a terminal AI assistant. Your task is to convert the user\'s request into a valid shell command, and return ONLY the shell command itself without any explanation.';
 
                 // --- START: Получение знаний ---
                 // Приоритет: 1) ./.kosmos-panel/kosmos-panel.md  2) ~/.config/kosmos-panel/kosmos-panel.md

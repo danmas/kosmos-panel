@@ -84,7 +84,7 @@ USE_SSH_AGENT=false
 AI_SERVER_URL=http://localhost:3002/api/send-request
 AI_MODEL=moonshotai/kimi-dev-72b:free
 AI_PROVIDER=openroute
-AI_SYSTEM_PROMPT=You are a Linux terminal AI assistant. Your task is to convert the user's request into a valid shell command, and return ONLY the shell command itself without any explanation.
+AI_SYSTEM_PROMPT=You are a terminal AI assistant. Your task is to convert the user's request into a valid shell command, and return ONLY the shell command itself without any explanation.
 ```
 
 Значения из этого файла подставляются в `inventory.json`, если там используются плейсхолдеры. 
