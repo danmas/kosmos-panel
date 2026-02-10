@@ -687,7 +687,7 @@ RULES:
                 if (Object.keys(skillParams).length > 0) {
                   firstUserPrompt += `\n\nParameters:\n${Object.entries(skillParams).map(([k, v]) => `- ${k}: ${v}`).join('\n')}`;
                 }
-                firstUserPrompt += `\n\n[Step 1 of 10]`;
+                firstUserPrompt += `\n\n[Step 1 of 100]`;
 
                 // Инициализируем activeSkill
                 activeSkill = {
@@ -700,7 +700,7 @@ RULES:
                     { role: 'user', content: firstUserPrompt }
                   ],
                   step: 1,
-                  maxSteps: 10,
+                  maxSteps: 100,
                   waitingForOutput: false,
                   waitingForUser: false
                 };
@@ -724,7 +724,7 @@ RULES:
                   type: 'data', 
                   data: `\r\n\x1b[1;36m[Skill: ${skillName}]\x1b[0m ${skill.description || ''}\r\n` 
                 }));
-                ws.send(JSON.stringify({ type: 'skill_step', step: 1, max: 10 }));
+                ws.send(JSON.stringify({ type: 'skill_step', step: 1, max: 100 }));
 
                 // Функция обработки ответа AI
                 const processSkillResponse = async (aiContent) => {
