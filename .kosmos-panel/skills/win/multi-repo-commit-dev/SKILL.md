@@ -6,7 +6,7 @@ params: []
 
 ## What I do
 
-Я работаю с тремя фиксированными папками:
+Я работаю со следующимия фиксированными папками:
 - C:\ERV\projects-ex\kosmos-model
 - C:\ERV\projects-ex\kosmos-panel
 - C:\ERV\projects-ex\kosmos-vector
