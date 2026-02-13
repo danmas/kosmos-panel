@@ -554,6 +554,294 @@
         background: rgba(74, 158, 255, 0.2);
         color: #fff;
       }
+      
+      /* ========== Skill Dialog Window (floating) ========== */
+      .skill-dialog {
+        position: absolute;
+        top: 80px;
+        right: 20px;
+        width: 420px;
+        height: 450px;
+        min-width: 320px;
+        min-height: 280px;
+        background: linear-gradient(180deg, #1a2744 0%, #0e1322 100%);
+        border: 2px solid #22c55e;
+        border-radius: 8px;
+        z-index: 1005;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+        resize: both;
+        overflow: hidden;
+      }
+      .skill-dialog.hidden { display: none; }
+      
+      .skill-dialog-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 14px;
+        background: #0e1322;
+        border-bottom: 1px solid #223055;
+        cursor: move;
+        user-select: none;
+      }
+      .skill-dialog-title {
+        color: #22c55e;
+        font-weight: 600;
+        font-size: 14px;
+      }
+      .skill-dialog-title span {
+        color: #fff;
+      }
+      .skill-dialog-header-buttons {
+        display: flex;
+        gap: 6px;
+      }
+      .skill-dialog-history-btn {
+        background: transparent;
+        border: 1px solid #444;
+        color: #888;
+        width: 26px;
+        height: 26px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .skill-dialog-history-btn:hover {
+        background: rgba(74, 158, 255, 0.2);
+        color: #fff;
+        border-color: #4a9eff;
+      }
+      .skill-dialog-close {
+        background: transparent;
+        border: none;
+        color: #888;
+        font-size: 22px;
+        cursor: pointer;
+        padding: 0 4px;
+        line-height: 1;
+      }
+      .skill-dialog-close:hover { color: #ff4444; }
+      
+      .skill-dialog-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 10px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      
+      /* Message types */
+      .skill-msg {
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 13px;
+        line-height: 1.4;
+        word-wrap: break-word;
+      }
+      .skill-msg-ai {
+        background: #1e3a5f;
+        border-left: 3px solid #4a9eff;
+        color: #e6ecff;
+      }
+      .skill-msg-user {
+        background: #2d4a3e;
+        border-left: 3px solid #22c55e;
+        color: #e6ecff;
+      }
+      .skill-msg-cmd {
+        background: #3d2e1f;
+        border-left: 3px solid #ffa500;
+        color: #ffd700;
+      }
+      .skill-msg-cmd code {
+        display: block;
+        margin-top: 4px;
+        padding: 6px 8px;
+        background: #000;
+        border-radius: 4px;
+        font-family: monospace;
+        color: #00ff00;
+        font-size: 12px;
+      }
+      .skill-msg-output {
+        background: #1a1a2e;
+        border-left: 3px solid #666;
+        font-family: monospace;
+        font-size: 11px;
+        color: #aaa;
+        white-space: pre-wrap;
+      }
+      .skill-msg-system {
+        background: transparent;
+        color: #888;
+        font-style: italic;
+        font-size: 12px;
+        text-align: center;
+        border-left: none;
+        padding: 4px;
+      }
+      .skill-msg-done {
+        background: #1f4a2d;
+        border-left: 3px solid #22c55e;
+        color: #88ff88;
+      }
+      .skill-msg-error {
+        background: #4a1f1f;
+        border-left: 3px solid #ff4444;
+        color: #ff8888;
+      }
+      
+      .skill-dialog-footer {
+        padding: 10px 12px;
+        background: #0e1322;
+        border-top: 1px solid #223055;
+      }
+      
+      .skill-quick-actions {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 8px;
+        flex-wrap: wrap;
+      }
+      .skill-quick-actions button {
+        background: #1b2544;
+        border: 1px solid #333;
+        color: #aaa;
+        padding: 4px 10px;
+        border-radius: 4px;
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .skill-quick-actions button:hover {
+        background: #2a3654;
+        color: #fff;
+        border-color: #4a9eff;
+      }
+      
+      .skill-dialog-input-row {
+        display: flex;
+        gap: 8px;
+      }
+      .skill-dialog-input-row input {
+        flex: 1;
+        background: #000;
+        border: 1px solid #333;
+        color: #00ff00;
+        padding: 8px 10px;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 13px;
+      }
+      .skill-dialog-input-row input:focus {
+        outline: none;
+        border-color: #22c55e;
+      }
+      .skill-dialog-input-row button {
+        background: #22c55e;
+        border: 1px solid #16a34a;
+        color: #fff;
+        padding: 8px 14px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 12px;
+      }
+      .skill-dialog-input-row button:hover {
+        background: #16a34a;
+      }
+      
+      .skill-cmd-done-btn {
+        width: 100%;
+        margin-top: 8px;
+        background: #ffa500;
+        border: 1px solid #cc8400;
+        color: #000;
+        padding: 10px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 13px;
+      }
+      .skill-cmd-done-btn:hover {
+        background: #ffb733;
+      }
+      .skill-cmd-done-btn.hidden { display: none; }
+      
+      /* Skills History Dropdown */
+      .skill-history-dropdown {
+        position: absolute;
+        top: 120px;
+        right: 450px;
+        width: 280px;
+        max-height: 350px;
+        background: linear-gradient(180deg, #1a2744 0%, #0e1322 100%);
+        border: 1px solid #4a9eff;
+        border-radius: 6px;
+        z-index: 1006;
+        overflow: hidden;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+      }
+      .skill-history-dropdown.hidden { display: none; }
+      
+      .skill-history-header {
+        padding: 10px 12px;
+        background: #0e1322;
+        color: #4a9eff;
+        font-weight: 600;
+        font-size: 13px;
+        border-bottom: 1px solid #223055;
+      }
+      .skill-history-list {
+        max-height: 300px;
+        overflow-y: auto;
+      }
+      .skill-history-item {
+        padding: 10px 12px;
+        border-bottom: 1px solid #223055;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .skill-history-item:hover {
+        background: rgba(74, 158, 255, 0.1);
+      }
+      .skill-history-item-name {
+        color: #22c55e;
+        font-weight: 600;
+        font-size: 12px;
+      }
+      .skill-history-item-date {
+        color: #666;
+        font-size: 10px;
+        margin-top: 2px;
+      }
+      .skill-history-item-status {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 9px;
+        margin-left: 6px;
+      }
+      .skill-history-item-status.completed {
+        background: #1f4a2d;
+        color: #22c55e;
+      }
+      .skill-history-item-status.cancelled {
+        background: #4a1f1f;
+        color: #ff6666;
+      }
+      .skill-history-empty {
+        padding: 20px;
+        text-align: center;
+        color: #666;
+        font-size: 12px;
+      }
     </style>
   </head>
   <body>
@@ -650,6 +938,41 @@ description: Описание skill
             <button class="btn-confirm" id="skillInputSend">Отправить</button>
             <button class="btn-reject" id="skillInputCancel">Отмена</button>
           </div>
+        </div>
+        
+        <!-- Skills Dialog Window (floating, draggable, resizable) -->
+        <div id="skillDialog" class="skill-dialog hidden">
+          <div class="skill-dialog-header" id="skillDialogHeader">
+            <span class="skill-dialog-title">Skill: <span id="skillDialogName">-</span></span>
+            <div class="skill-dialog-header-buttons">
+              <button class="skill-dialog-history-btn" id="skillDialogHistoryBtn" title="История">📋</button>
+              <button class="skill-dialog-close" id="skillDialogClose">×</button>
+            </div>
+          </div>
+          <div class="skill-dialog-body" id="skillDialogBody">
+            <!-- Scrollable message history -->
+          </div>
+          <div class="skill-dialog-footer">
+            <div class="skill-quick-actions" id="skillQuickActions">
+              <button onclick="sendSkillQuickReply('Да')">Да</button>
+              <button onclick="sendSkillQuickReply('Нет')">Нет</button>
+              <button onclick="skillSkipCommand()">Skip</button>
+              <button onclick="skillCancel()">Cancel</button>
+            </div>
+            <div class="skill-dialog-input-row">
+              <input type="text" id="skillDialogInput" placeholder="Введите ответ...">
+              <button id="skillDialogSendBtn" onclick="sendSkillMessage()">Отправить</button>
+            </div>
+            <button id="skillCommandDoneBtn" class="skill-cmd-done-btn hidden" onclick="skillCommandDone()">
+              Я выполнил команду
+            </button>
+          </div>
+        </div>
+        
+        <!-- Skills History Dropdown -->
+        <div id="skillHistoryDropdown" class="skill-history-dropdown hidden">
+          <div class="skill-history-header">История Skills</div>
+          <div class="skill-history-list" id="skillHistoryList"></div>
         </div>
       </div>
     </div>
@@ -793,6 +1116,41 @@ description: Описание skill
               if (promptEndIndex !== -1) {
                 const commandPart = line.substring(promptEndIndex + 1).trim();
                 const cleanCommand = commandPart.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '').replace(/[\b\u0007]/g, '').trim();
+                
+                // Check for skill:skip command
+                if (cleanCommand === 'skill:skip') {
+                  // Intercept - don't send to shell
+                  clearTerminalLine();
+                  term.writeln('\r\n\x1b[1;33m[Skill] Команда пропущена\x1b[0m');
+                  skillSkipCommand();
+                  return false; // Prevent Enter from being sent
+                }
+                
+                // Check for skill:cancel command
+                if (cleanCommand === 'skill:cancel') {
+                  // Intercept - don't send to shell
+                  clearTerminalLine();
+                  term.writeln('\r\n\x1b[1;31m[Skill] Отменён\x1b[0m');
+                  skillCancel();
+                  return false; // Prevent Enter from being sent
+                }
+                
+                // Check if pending skill command matches
+                if (skillDialogState.state === 'waiting_cmd' && skillDialogState.pendingCommand) {
+                  const pendingNormalized = normalizeCommand(skillDialogState.pendingCommand);
+                  const currentNormalized = normalizeCommand(cleanCommand);
+                  
+                  if (pendingNormalized === currentNormalized) {
+                    // Command matches - will be executed, track it
+                    skillDialogState.commandMatched = true;
+                    document.getElementById('skillCommandDoneBtn').classList.add('hidden');
+                    // After command executed, wait for output and notify (1.5s for slow commands)
+                    setTimeout(() => onSkillCommandExecuted(), 1500);
+                  } else if (cleanCommand.length > 0) {
+                    // Command was modified - show manual confirm button
+                    document.getElementById('skillCommandDoneBtn').classList.remove('hidden');
+                  }
+                }
                 
                 const prefixText = aiCommandPrefix.slice(0, -1);
                 const prefixSep = aiCommandPrefix.slice(-1);
@@ -1071,22 +1429,8 @@ description: Описание skill
 
       function executeSelectedSkill() {
         if (!selectedSkill) return;
-        
-        const userInput = document.getElementById('skillParamsInput').value.trim();
-        
-        term.writeln(`\r\n\x1b[1;36m[Skill: ${selectedSkill.name}] ${selectedSkill.description || ''}\x1b[0m`);
-        
-        const params = parseSkillParams(userInput);
-        ws.send(JSON.stringify({ 
-          type: 'skill_invoke', 
-          name: selectedSkill.name,
-          path: selectedSkill.path,
-          source: selectedSkill.source,
-          params: params,
-          prompt: userInput 
-        }));
-        
-        hideSkillsPopup();
+        // Use the new REST-based skill dialog
+        startSkillDialog(selectedSkill);
       }
 
       function parseSkillParams(str) {
@@ -1102,6 +1446,489 @@ description: Описание skill
         }
         return params;
       }
+
+      // ========== NEW: Skill Dialog (REST API based) ==========
+      const skillDialogState = {
+        sessionId: null,           // skill session ID (от сервера)
+        terminalSessionId: null,   // привязка к терминалу (currentSessionId)
+        skillName: '',
+        pendingCommand: null,      // команда ожидающая выполнения
+        commandMatched: false,     // флаг для отслеживания выполнения
+        state: 'idle',             // 'idle' | 'waiting_cmd' | 'waiting_user' | 'done'
+        messages: [],              // история сообщений
+        startedAt: null
+      };
+
+      function showSkillDialog() {
+        document.getElementById('skillDialog').classList.remove('hidden');
+      }
+
+      function hideSkillDialog() {
+        document.getElementById('skillDialog').classList.add('hidden');
+      }
+
+      function closeSkillDialog() {
+        if (skillDialogState.sessionId && skillDialogState.state !== 'done') {
+          skillCancel();
+        } else {
+          hideSkillDialog();
+          resetSkillDialogState();
+        }
+      }
+
+      function resetSkillDialogState() {
+        skillDialogState.sessionId = null;
+        skillDialogState.pendingCommand = null;
+        skillDialogState.commandMatched = false;
+        skillDialogState.state = 'idle';
+        skillDialogState.messages = [];
+        document.getElementById('skillDialogBody').innerHTML = '';
+        document.getElementById('skillDialogInput').value = '';
+        document.getElementById('skillCommandDoneBtn').classList.add('hidden');
+      }
+
+      function addSkillMessage(type, content) {
+        const body = document.getElementById('skillDialogBody');
+        const msg = document.createElement('div');
+        msg.className = `skill-msg skill-msg-${type}`;
+        
+        if (type === 'cmd') {
+          msg.innerHTML = `Предложена команда:<code>${escapeHtml(content)}</code>`;
+        } else if (type === 'output') {
+          msg.textContent = content;
+        } else {
+          msg.textContent = content;
+        }
+        
+        body.appendChild(msg);
+        body.scrollTop = body.scrollHeight;
+        
+        // Сохраняем в историю
+        skillDialogState.messages.push({ type, content, timestamp: new Date().toISOString() });
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      async function startSkillDialog(skill) {
+        if (!currentSessionId) {
+          term.writeln('\r\n\x1b[1;31m[Ошибка] Session ID ещё не получен\x1b[0m');
+          return;
+        }
+
+        // Сбрасываем состояние
+        resetSkillDialogState();
+        skillDialogState.terminalSessionId = currentSessionId;
+        skillDialogState.skillName = skill.name;
+        skillDialogState.startedAt = new Date().toISOString();
+
+        // Показываем окно
+        document.getElementById('skillDialogName').textContent = skill.name;
+        showSkillDialog();
+        addSkillMessage('system', 'Запуск skill...');
+
+        // Закрываем popup выбора skills
+        hideSkillsPopup();
+
+        // Получаем параметры
+        const userInput = document.getElementById('skillParamsInput').value.trim();
+        const params = parseSkillParams(userInput);
+
+        try {
+          const resp = await fetch('/api/skills/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              terminalSessionId: currentSessionId,
+              skillId: skill.id,
+              skillPath: skill.path,
+              skillSource: skill.source,
+              params,
+              prompt: userInput
+            })
+          });
+
+          const data = await resp.json();
+          if (!data.success) {
+            throw new Error(data.error || 'Failed to start skill');
+          }
+
+          skillDialogState.sessionId = data.data.skillSessionId;
+          
+          // Обрабатываем ответ AI
+          handleSkillAIResponse(data.data.aiResponse);
+
+        } catch (e) {
+          addSkillMessage('error', `Ошибка: ${e.message}`);
+          skillDialogState.state = 'done';
+        }
+      }
+
+      function handleSkillAIResponse(aiResponse) {
+        if (!aiResponse) return;
+
+        const { type, content, command } = aiResponse;
+
+        if (type === 'CMD') {
+          skillDialogState.state = 'waiting_cmd';
+          skillDialogState.pendingCommand = command;
+          addSkillMessage('cmd', command);
+          addSkillMessage('system', 'Нажмите Enter для выполнения или отредактируйте команду');
+          // Вставляем команду в терминал
+          insertCommandToTerminal(command);
+          // Скрываем quick actions, показываем инпут для skip/cancel
+          updateSkillDialogFooter('waiting_cmd');
+
+        } else if (type === 'MESSAGE') {
+          skillDialogState.state = 'waiting_user';
+          skillDialogState.pendingCommand = null;
+          addSkillMessage('ai', content);
+          updateSkillDialogFooter('waiting_user');
+          document.getElementById('skillDialogInput').focus();
+
+        } else if (type === 'DONE') {
+          skillDialogState.state = 'done';
+          skillDialogState.pendingCommand = null;
+          addSkillMessage('done', content);
+          updateSkillDialogFooter('done');
+          saveSkillToHistory('completed');
+        }
+      }
+
+      function updateSkillDialogFooter(state) {
+        const quickActions = document.getElementById('skillQuickActions');
+        const inputRow = document.querySelector('.skill-dialog-input-row');
+        const doneBtn = document.getElementById('skillCommandDoneBtn');
+
+        if (state === 'waiting_cmd') {
+          quickActions.style.display = 'flex';
+          inputRow.style.display = 'none';
+          doneBtn.classList.add('hidden');
+        } else if (state === 'waiting_user') {
+          quickActions.style.display = 'flex';
+          inputRow.style.display = 'flex';
+          doneBtn.classList.add('hidden');
+        } else if (state === 'done') {
+          quickActions.style.display = 'none';
+          inputRow.style.display = 'none';
+          doneBtn.classList.add('hidden');
+        }
+      }
+
+      function insertCommandToTerminal(command) {
+        // Вставляем команду в терминал через paste
+        term.paste(command);
+        term.focus();
+      }
+
+      async function sendSkillMessage() {
+        const input = document.getElementById('skillDialogInput');
+        const text = input.value.trim();
+        if (!text || skillDialogState.state !== 'waiting_user') return;
+
+        addSkillMessage('user', text);
+        input.value = '';
+
+        try {
+          const resp = await fetch(`/api/skills/${skillDialogState.sessionId}/message`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userMessage: text })
+          });
+
+          const data = await resp.json();
+          if (!data.success) {
+            throw new Error(data.error || 'Failed to send message');
+          }
+
+          handleSkillAIResponse(data.data.aiResponse);
+
+        } catch (e) {
+          addSkillMessage('error', `Ошибка: ${e.message}`);
+        }
+      }
+
+      function sendSkillQuickReply(text) {
+        document.getElementById('skillDialogInput').value = text;
+        sendSkillMessage();
+      }
+
+      async function skillSkipCommand() {
+        if (!skillDialogState.sessionId || skillDialogState.state !== 'waiting_cmd') return;
+
+        addSkillMessage('system', 'Команда пропущена');
+        skillDialogState.pendingCommand = null;
+        document.getElementById('skillCommandDoneBtn').classList.add('hidden');
+
+        try {
+          const resp = await fetch(`/api/skills/${skillDialogState.sessionId}/command-result`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ skipped: true })
+          });
+
+          const data = await resp.json();
+          if (!data.success) {
+            throw new Error(data.error || 'Failed to skip command');
+          }
+
+          handleSkillAIResponse(data.data.aiResponse);
+
+        } catch (e) {
+          addSkillMessage('error', `Ошибка: ${e.message}`);
+        }
+      }
+
+      async function skillCancel() {
+        if (!skillDialogState.sessionId) {
+          hideSkillDialog();
+          resetSkillDialogState();
+          return;
+        }
+
+        try {
+          await fetch(`/api/skills/${skillDialogState.sessionId}`, { method: 'DELETE' });
+        } catch (e) {
+          console.error('Error cancelling skill:', e);
+        }
+
+        addSkillMessage('system', 'Skill отменён');
+        skillDialogState.state = 'done';
+        saveSkillToHistory('cancelled');
+        updateSkillDialogFooter('done');
+      }
+
+      async function skillCommandDone() {
+        // Вызывается когда пользователь изменил команду и явно говорит "выполнил"
+        if (!skillDialogState.sessionId || skillDialogState.state !== 'waiting_cmd') return;
+
+        addSkillMessage('system', 'Команда выполнена (изменённая)');
+        skillDialogState.pendingCommand = null;
+        document.getElementById('skillCommandDoneBtn').classList.add('hidden');
+
+        // Получаем output с сервера
+        try {
+          const outputResp = await fetch(`/api/skills/${skillDialogState.sessionId}/output`);
+          const outputData = await outputResp.json();
+          if (outputData.success && outputData.data.lastOutput) {
+            addSkillMessage('output', outputData.data.lastOutput);
+          }
+
+          const resp = await fetch(`/api/skills/${skillDialogState.sessionId}/command-result`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ skipped: false })
+          });
+
+          const data = await resp.json();
+          if (!data.success) {
+            throw new Error(data.error || 'Failed to report command result');
+          }
+
+          handleSkillAIResponse(data.data.aiResponse);
+
+        } catch (e) {
+          addSkillMessage('error', `Ошибка: ${e.message}`);
+        }
+      }
+
+      // Функция для обработки выполнения команды из терминала
+      async function onSkillCommandExecuted() {
+        if (!skillDialogState.sessionId || skillDialogState.state !== 'waiting_cmd') return;
+        if (!skillDialogState.commandMatched) return;
+
+        skillDialogState.commandMatched = false;
+        addSkillMessage('system', 'Команда выполнена');
+        skillDialogState.pendingCommand = null;
+        document.getElementById('skillCommandDoneBtn').classList.add('hidden');
+
+        // Ждём немного для сбора output
+        await new Promise(r => setTimeout(r, 500));
+
+        try {
+          // Получаем output
+          const outputResp = await fetch(`/api/skills/${skillDialogState.sessionId}/output`);
+          const outputData = await outputResp.json();
+          if (outputData.success && outputData.data.lastOutput) {
+            addSkillMessage('output', outputData.data.lastOutput);
+          }
+
+          // Отправляем результат
+          const resp = await fetch(`/api/skills/${skillDialogState.sessionId}/command-result`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ skipped: false })
+          });
+
+          const data = await resp.json();
+          if (!data.success) {
+            throw new Error(data.error || 'Failed to report command result');
+          }
+
+          handleSkillAIResponse(data.data.aiResponse);
+
+        } catch (e) {
+          addSkillMessage('error', `Ошибка: ${e.message}`);
+        }
+      }
+
+      // Получить текущую строку терминала
+      function getCurrentTerminalLine() {
+        const buffer = term.buffer.active;
+        for (let i = buffer.length - 1; i >= 0; i--) {
+          const line = buffer.getLine(i);
+          if (line) {
+            const text = line.translateToString(true);
+            const promptEndIndex = Math.max(text.lastIndexOf('$'), text.lastIndexOf('#'), text.lastIndexOf('>'));
+            if (promptEndIndex !== -1) {
+              return text.substring(promptEndIndex + 1).trim()
+                .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')
+                .replace(/[\b\u0007]/g, '')
+                .trim();
+            }
+          }
+        }
+        return '';
+      }
+
+      // Нормализация команды для сравнения
+      function normalizeCommand(cmd) {
+        return (cmd || '').trim().replace(/\s+/g, ' ');
+      }
+
+      // Очистить текущую строку терминала (Ctrl+U)
+      function clearTerminalLine() {
+        ws.send(JSON.stringify({ type: 'data', data: '\x15' })); // Ctrl+U
+      }
+
+      // ========== localStorage History Management ==========
+      const SKILL_HISTORY_KEY = 'kosmos_skill_history';
+      const SKILL_HISTORY_MAX_SESSIONS = 20;
+      const SKILL_HISTORY_MAX_MSG_LENGTH = 500;
+
+      function loadSkillHistory() {
+        try {
+          const data = localStorage.getItem(SKILL_HISTORY_KEY);
+          return data ? JSON.parse(data) : { sessions: [] };
+        } catch (e) {
+          console.error('[Skill History] Load error:', e);
+          return { sessions: [] };
+        }
+      }
+
+      function saveSkillToHistory(status) {
+        try {
+          const history = loadSkillHistory();
+          
+          // Truncate messages content
+          const truncatedMessages = skillDialogState.messages.map(m => ({
+            ...m,
+            content: m.content && m.content.length > SKILL_HISTORY_MAX_MSG_LENGTH 
+              ? m.content.substring(0, SKILL_HISTORY_MAX_MSG_LENGTH) + '...' 
+              : m.content
+          }));
+          
+          const session = {
+            id: skillDialogState.sessionId,
+            skillName: skillDialogState.skillName,
+            terminalSessionId: skillDialogState.terminalSessionId,
+            startedAt: skillDialogState.startedAt,
+            status: status,
+            messages: truncatedMessages
+          };
+          
+          // Remove existing session with same id
+          history.sessions = history.sessions.filter(s => s.id !== session.id);
+          
+          // Add new session at the beginning
+          history.sessions.unshift(session);
+          
+          // Limit to max sessions
+          if (history.sessions.length > SKILL_HISTORY_MAX_SESSIONS) {
+            history.sessions = history.sessions.slice(0, SKILL_HISTORY_MAX_SESSIONS);
+          }
+          
+          localStorage.setItem(SKILL_HISTORY_KEY, JSON.stringify(history));
+        } catch (e) {
+          console.error('[Skill History] Save error:', e);
+        }
+      }
+
+      function toggleSkillHistory() {
+        const dropdown = document.getElementById('skillHistoryDropdown');
+        if (dropdown.classList.contains('hidden')) {
+          renderSkillHistory();
+          dropdown.classList.remove('hidden');
+        } else {
+          dropdown.classList.add('hidden');
+        }
+      }
+
+      function renderSkillHistory() {
+        const history = loadSkillHistory();
+        const listEl = document.getElementById('skillHistoryList');
+        
+        if (history.sessions.length === 0) {
+          listEl.innerHTML = '<div class="skill-history-empty">Нет записей в истории</div>';
+          return;
+        }
+        
+        listEl.innerHTML = history.sessions.map(session => {
+          const date = new Date(session.startedAt).toLocaleString('ru-RU');
+          const statusClass = session.status === 'completed' ? 'completed' : 'cancelled';
+          const statusText = session.status === 'completed' ? 'Завершён' : 'Отменён';
+          
+          return `
+            <div class="skill-history-item" data-session-id="${session.id}">
+              <span class="skill-history-item-name">${escapeHtml(session.skillName)}</span>
+              <span class="skill-history-item-status ${statusClass}">${statusText}</span>
+              <div class="skill-history-item-date">${date}</div>
+            </div>
+          `;
+        }).join('');
+        
+        // Add click handlers to view history
+        listEl.querySelectorAll('.skill-history-item').forEach(item => {
+          item.onclick = () => viewHistorySession(item.dataset.sessionId);
+        });
+      }
+
+      function viewHistorySession(sessionId) {
+        const history = loadSkillHistory();
+        const session = history.sessions.find(s => s.id === sessionId);
+        if (!session) return;
+        
+        // Close history dropdown
+        document.getElementById('skillHistoryDropdown').classList.add('hidden');
+        
+        // Reset and populate dialog
+        resetSkillDialogState();
+        skillDialogState.sessionId = session.id;
+        skillDialogState.skillName = session.skillName;
+        skillDialogState.state = 'done';
+        
+        document.getElementById('skillDialogName').textContent = session.skillName + ' (история)';
+        showSkillDialog();
+        
+        // Render messages
+        session.messages.forEach(m => {
+          addSkillMessage(m.type, m.content);
+        });
+        
+        updateSkillDialogFooter('done');
+      }
+
+      // Close history dropdown when clicking outside
+      document.addEventListener('click', (e) => {
+        const dropdown = document.getElementById('skillHistoryDropdown');
+        const historyBtn = document.getElementById('skillDialogHistoryBtn');
+        if (!dropdown.contains(e.target) && e.target !== historyBtn && !dropdown.classList.contains('hidden')) {
+          dropdown.classList.add('hidden');
+        }
+      });
 
       // ========== Create/Edit Skill Dialog ==========
       let createSkillSource = 'remote';
@@ -1328,6 +2155,15 @@ description:
         });
       })();
 
+      // ========== Skills Dialog Event Handlers ==========
+      document.getElementById('skillDialogClose').onclick = closeSkillDialog;
+      document.getElementById('skillDialogSendBtn').onclick = sendSkillMessage;
+      document.getElementById('skillDialogInput').onkeydown = (e) => {
+        if (e.key === 'Enter') sendSkillMessage();
+        else if (e.key === 'Escape') closeSkillDialog();
+      };
+      document.getElementById('skillDialogHistoryBtn').onclick = toggleSkillHistory;
+
       // Skills popup event handlers
       document.getElementById('skillsBtn').onclick = showSkillsPopup;
       document.getElementById('skillsClose').onclick = hideSkillsPopup;
@@ -1385,6 +2221,41 @@ description:
         document.addEventListener('mouseup', () => {
           isDragging = false;
           document.body.style.userSelect = '';
+        });
+      })();
+
+      // ========== Draggable Skills Dialog ==========
+      (function() {
+        const dialog = document.getElementById('skillDialog');
+        const header = document.getElementById('skillDialogHeader');
+        let isDragging = false;
+        let startX, startY, startLeft, startTop;
+
+        header.addEventListener('mousedown', (e) => {
+          if (e.target.closest('.skill-dialog-close') || e.target.closest('.skill-dialog-history-btn')) return;
+          isDragging = true;
+          startX = e.clientX;
+          startY = e.clientY;
+          const rect = dialog.getBoundingClientRect();
+          startLeft = rect.left;
+          startTop = rect.top;
+          document.body.style.userSelect = 'none';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+          if (!isDragging) return;
+          const dx = e.clientX - startX;
+          const dy = e.clientY - startY;
+          dialog.style.left = Math.max(0, Math.min(window.innerWidth - dialog.offsetWidth, startLeft + dx)) + 'px';
+          dialog.style.top = Math.max(0, Math.min(window.innerHeight - dialog.offsetHeight, startTop + dy)) + 'px';
+          dialog.style.right = 'auto';
+        });
+
+        document.addEventListener('mouseup', () => {
+          if (isDragging) {
+            isDragging = false;
+            document.body.style.userSelect = '';
+          }
         });
       })();
     </script>

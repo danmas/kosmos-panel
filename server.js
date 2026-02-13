@@ -9,9 +9,13 @@ const { attachWsServer, wsSessions, pendingCommands } = require('./server/ws');
 const { v4: uuidv4 } = require('uuid');
 const { createSession, executeCommand, closeSession, createSessionV2, executeCommandV2, closeSessionV2 } = require('./server/terminal');
 const logger = require('./server/logger');
+const skillsRouter = require('./server/skills');
 
 const app = express();
 app.use(express.json());
+
+// Skills REST API
+app.use('/api/skills', skillsRouter);
 
 // Terminal API v1 routes
 app.post('/api/v1/terminal/sessions', createSession);

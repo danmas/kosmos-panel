@@ -7,6 +7,19 @@ const { v4: uuidv4 } = require('uuid');
 const { findServer, resolvePrivateKey } = require('./ws-utils');
 const logger = require('./logger');
 
+// Lazy load skills module to avoid circular dependency
+let skillsModule = null;
+function getSkillsModule() {
+  if (!skillsModule) {
+    try {
+      skillsModule = require('./skills');
+    } catch (e) {
+      // Module not yet loaded
+    }
+  }
+  return skillsModule;
+}
+
 const LOG_FILE_PATH = path.join(__dirname, '..', 'logs', 'terminal', 'terminal_log.json');
 
 let logQueue = Promise.resolve();
@@ -422,6 +435,7 @@ function handleTerminal(ws, url) {
         wsSessions[sessionId] = {
           ws,
           stream,
+          conn,  // SSH connection for skills REST API
           serverId,
           serverName: server.name || serverId,
           connectedAt: new Date().toISOString(),
@@ -506,6 +520,12 @@ function handleTerminal(ws, url) {
 
             // Сбрасываем ID после записи stdout
             currentStdinId = null;
+
+            // ========== Notify Skills REST API subscribers ==========
+            const skills = getSkillsModule();
+            if (skills && skills.notifyOutputSubscribers && cleanOutput) {
+              skills.notifyOutputSubscribers(sessionId, cleanOutput);
+            }
 
             // ========== Multi-step Skill: продолжить после выполнения команды ==========
             if (activeSkill && activeSkill.waitingForOutput) {
