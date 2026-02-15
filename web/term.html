@@ -147,21 +147,25 @@
         background: #16a34a; 
       }
       
-      /* Skills popup - draggable dialog */
+      /* Skills popup - draggable, resizable dialog */
       .skills-popup {
         position: absolute;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
         width: 400px;
-        max-width: 90%;
-        max-height: 70%;
+        height: 420px;
+        min-width: 320px;
+        min-height: 280px;
+        max-width: 95vw;
+        max-height: 85vh;
         background: linear-gradient(180deg, #1a2744 0%, #0e1322 100%);
         border: 2px solid #4a9eff;
         border-radius: 8px;
         padding: 0;
         z-index: 1002;
-        overflow: hidden;
+        overflow: auto;
+        resize: both;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
       }
       .skills-popup.hidden { display: none; }
@@ -433,6 +437,7 @@
       .skill-desc {
         font-size: 12px;
         color: #aaa;
+        font-family: "Comic Sans MS", "Comic Sans", cursive;
       }
       .skills-empty {
         color: #666;
@@ -2204,9 +2209,9 @@ description:
           const rect = popup.getBoundingClientRect();
           startLeft = rect.left;
           startTop = rect.top;
-          popup.style.transform = 'none';
           popup.style.left = startLeft + 'px';
           popup.style.top = startTop + 'px';
+          popup.style.transform = 'none';
           document.body.style.userSelect = 'none';
         });
 
