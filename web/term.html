@@ -646,8 +646,9 @@
         padding: 8px 12px;
         border-radius: 6px;
         font-size: 13px;
-        line-height: 1.4;
+        line-height: 1.5;
         word-wrap: break-word;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
       }
       .skill-msg-ai {
         background: #1e3a5f;
@@ -1519,7 +1520,9 @@ description: Описание skill
         } else if (type === 'output') {
           msg.textContent = content;
         } else {
-          msg.textContent = content;
+          // Преобразуем \n в <br> для красивого отображения
+          const contentWithBreaks = escapeHtml(content).replace(/\n/g, '<br>');
+          msg.innerHTML = contentWithBreaks;
         }
         
         body.appendChild(msg);
