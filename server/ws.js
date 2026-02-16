@@ -148,7 +148,7 @@ function getRemoteSkills(sshConn, remoteOS = 'linux') {
 
     if (remoteOS === 'windows') {
       // PowerShell команда для Windows с UTF-8 (рекурсивно)
-      cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $skillsDir = Join-Path $env:USERPROFILE '.config/kosmos-panel/skills'; if (Test-Path $skillsDir) { Get-ChildItem -Path $skillsDir -Recurse -Filter SKILL.md | ForEach-Object { $rel = $_.FullName.Substring($skillsDir.Length + 1); $relDir = $rel -replace '\\\\SKILL.md$', ''; $relDir = $relDir -replace '\\\\','/'; Write-Host '===SKILL:' $relDir '==='; Get-Content $_.FullName -Raw -Encoding UTF8; Write-Host '===END_SKILL===' } }"`;
+      cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $skillsDir = Join-Path $env:USERPROFILE '.config/kosmos-panel/skills'; if (Test-Path $skillsDir) { Get-ChildItem -Path $skillsDir -Recurse -Filter SKILL.md | ForEach-Object { $rel = $_.FullName.Substring($skillsDir.Length + 1); $relDir = $rel -replace '\\\\SKILL.md$', ''; $relDir = $relDir -replace '\\\\','/'; Write-Host '===SKILL:' $relDir '==='; Get-Content $_.FullName -Encoding UTF8 | Out-String; Write-Host '===END_SKILL===' } }"`;
     } else {
       // Bash команда для Linux/macOS (рекурсивно)
       const skillsPath = '$HOME/.config/kosmos-panel/skills';
@@ -299,8 +299,8 @@ function getRemoteSkill(sshConn, skillName, remoteOS = 'linux', skillPath = null
     const relPath = (skillPath || skillName || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
 
     if (remoteOS === 'windows') {
-      const winRel = relPath.replace(/\//g, '\\');
-      cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content (Join-Path $env:USERPROFILE '.config/kosmos-panel/skills\\${winRel}\\SKILL.md') -Raw -Encoding UTF8 -ErrorAction SilentlyContinue"`;
+      const relPathEsc = relPath.replace(/'/g, "''");
+      cmd = `powershell -Command "$rel = '${relPathEsc}' -replace '/','\\\\'; $dir = Join-Path $env:USERPROFILE '.config\\kosmos-panel\\skills'; $full = Join-Path (Join-Path $dir $rel) 'SKILL.md'; if (Test-Path $full) { [System.IO.File]::ReadAllText($full, [System.Text.Encoding]::UTF8) }"`;
     } else {
       const fullPath = `~/.config/kosmos-panel/skills/${relPath}/SKILL.md`;
       cmd = `cat ${fullPath} 2>/dev/null`;
@@ -707,7 +707,7 @@ RULES:
                   let commandTimeout = setTimeout(() => resolve(''), 5000);
                   let cmd;
                   if (remoteOS === 'windows') {
-                    cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p1 = './.kosmos-panel/kosmos-panel.md'; $p2 = Join-Path $env:USERPROFILE '.config/kosmos-panel/kosmos-panel.md'; if (Test-Path $p1) { Get-Content $p1 -Raw -Encoding UTF8 } elseif (Test-Path $p2) { Get-Content $p2 -Raw -Encoding UTF8 }"`;
+                    cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p1 = './.kosmos-panel/kosmos-panel.md'; $p2 = Join-Path $env:USERPROFILE '.config/kosmos-panel/kosmos-panel.md'; if (Test-Path $p1) { Get-Content $p1 -Encoding UTF8 | Out-String } elseif (Test-Path $p2) { Get-Content $p2 -Encoding UTF8 | Out-String }"`;
                   } else {
                     cmd = `cat ./.kosmos-panel/kosmos-panel.md 2>/dev/null || cat ~/.config/kosmos-panel/kosmos-panel.md 2>/dev/null`;
                   }
@@ -1042,8 +1042,8 @@ RULES:
                   
                   let cmd;
                   if (remoteOS === 'windows') {
-                    const winPath = remotePath.replace('~', '$env:USERPROFILE').replace(/\//g, '\\');
-                    cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content '${winPath}' -Raw -Encoding UTF8"`;
+                    const relPathEsc = relPath.replace(/'/g, "''");
+                    cmd = `powershell -Command "$rel = '${relPathEsc}'; $dir = Join-Path $env:USERPROFILE '.config\\kosmos-panel\\skills'; $full = Join-Path (Join-Path $dir $rel) 'SKILL.md'; if (Test-Path $full) { [System.IO.File]::ReadAllText($full, [System.Text.Encoding]::UTF8) }"`;
                   } else {
                     cmd = `cat "${remotePath}"`;
                   }
@@ -1214,7 +1214,7 @@ RULES:
                   let cmd;
                   
                   if (remoteOS === 'windows') {
-                    cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p1 = './.kosmos-panel/kosmos-panel.md'; $p2 = Join-Path $env:USERPROFILE '.config/kosmos-panel/kosmos-panel.md'; if (Test-Path $p1) { Get-Content $p1 -Raw -Encoding UTF8 } elseif (Test-Path $p2) { Get-Content $p2 -Raw -Encoding UTF8 }"`;
+                    cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p1 = './.kosmos-panel/kosmos-panel.md'; $p2 = Join-Path $env:USERPROFILE '.config/kosmos-panel/kosmos-panel.md'; if (Test-Path $p1) { Get-Content $p1 -Encoding UTF8 | Out-String } elseif (Test-Path $p2) { Get-Content $p2 -Encoding UTF8 | Out-String }"`;
                   } else {
                     const primaryPath = './.kosmos-panel/kosmos-panel.md';
                     const fallbackPath = '~/.config/kosmos-panel/kosmos-panel.md';

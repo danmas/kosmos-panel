@@ -13,19 +13,31 @@ RESPONSE FORMAT - Use EXACTLY ONE of these formats per response:
 1. [CMD] command_here
    Execute this shell command. You will receive the command output.
 
-2. [MESSAGE] your message here
-   Show this message to the user and wait for their response.
-   Use this to ask questions or request input (like commit messages).
+2. [ASK] question here
+   Ask the user a question and WAIT for their required response.
+   Use this when you MUST have user input (commit message, confirmation, choice).
+   Examples: "Введи сообщение коммита:", "Продолжить? (yes/no):"
 
-3. [DONE] final message here
+3. [ASK:optional] question here
+   Ask the user an optional question. They can skip by pressing Enter.
+   Example: "Хочешь добавить тег? (оставь пустым для пропуска):"
+
+4. [MESSAGE] informational text here
+   Show an informational message and CONTINUE immediately without waiting.
+   Use for progress updates, status messages, warnings.
+   Examples: "Обрабатываю папку 1 из 3...", "Проверяю ветку dev..."
+
+5. [DONE] final message here
    The skill is complete. Show this final message to the user.
 
 RULES:
-- Always start your response with [CMD], [MESSAGE], or [DONE]
+- Always start your response with [CMD], [ASK], [ASK:optional], [MESSAGE], or [DONE]
 - Only ONE format per response
-- For [CMD]: provide only the command, no explanations
-- For [MESSAGE]: ask clear, specific questions
-- For [DONE]: summarize what was accomplished`;
+- [CMD]: provide only the command, no explanations
+- [ASK]: BLOCKS execution - user MUST respond (required input)
+- [ASK:optional]: BLOCKS execution - user CAN respond or skip (optional input)
+- [MESSAGE]: does NOT block - execution continues automatically (info only)
+- [DONE]: summarize what was accomplished`;
 
 /**
  * Build full system prompt for a skill
@@ -85,30 +97,59 @@ async function callSkillAI(messages, options = {}) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
+  // Подготовка запроса
+  const requestBody = {
+    model: aiModel,
+    messages,
+    temperature,
+    max_tokens: maxTokens
+  };
+  
+  // Логируем запрос к AI
+  logger.info('skill-ai', 'AI request', {
+    url: aiServerUrl,
+    model: aiModel,
+    messagesCount: messages.length,
+    lastUserMessage: messages.filter(m => m.role === 'user').pop()?.content?.substring(0, 100),
+    temperature,
+    maxTokens
+  });
+
   try {
+    const startTime = Date.now();
     const response = await fetch(aiServerUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: aiModel,
-        messages,
-        temperature,
-        max_tokens: maxTokens
-      }),
+      body: JSON.stringify(requestBody),
       signal: controller.signal
     });
 
     clearTimeout(timeoutId);
+    const duration = Date.now() - startTime;
     const result = await response.json();
     const content = result.choices?.[0]?.message?.content;
 
     if (!content) {
+      logger.error('skill-ai', 'Invalid AI response', { error: result.error?.message, result });
       throw new Error(result.error?.message || 'Invalid AI response');
     }
+
+    // Логируем успешный ответ
+    logger.info('skill-ai', 'AI response received', {
+      duration: `${duration}ms`,
+      contentLength: content.length,
+      contentPreview: content.substring(0, 150),
+      usage: result.usage
+    });
 
     return content;
   } catch (e) {
     clearTimeout(timeoutId);
+    logger.error('skill-ai', 'AI request failed', { 
+      error: e.message, 
+      timeout: e.name === 'AbortError',
+      url: aiServerUrl 
+    });
     if (e.name === 'AbortError') {
       throw new Error('AI request timed out');
     }
@@ -119,13 +160,15 @@ async function callSkillAI(messages, options = {}) {
 /**
  * Parse AI response to extract type and content
  * @param {string} aiContent - Raw AI response
- * @returns {Object} { type: 'CMD'|'MESSAGE'|'DONE'|'UNKNOWN', content: string, command?: string }
+ * @returns {Object} { type: 'CMD'|'ASK'|'MESSAGE'|'DONE'|'UNKNOWN', content: string, ... }
  */
 function parseSkillResponse(aiContent) {
   const content = aiContent.trim();
   
   // Парсим формат ответа
   const cmdMatch = content.match(/^\[CMD\]\s*(.+)$/im);
+  const askOptionalMatch = content.match(/^\[ASK:optional\]\s*(.+)$/ims);
+  const askMatch = content.match(/^\[ASK\]\s*(.+)$/ims);
   const msgMatch = content.match(/^\[MESSAGE\]\s*(.+)$/ims);
   const doneMatch = content.match(/^\[DONE\]\s*(.*)$/ims);
 
@@ -137,6 +180,25 @@ function parseSkillResponse(aiContent) {
       type: 'CMD',
       content: content,
       command: command
+    };
+  }
+  
+  // Проверяем [ASK:optional] ПЕРЕД [ASK] (более специфичный паттерн)
+  if (askOptionalMatch) {
+    return {
+      type: 'ASK',
+      content: content,
+      question: askOptionalMatch[1].trim(),
+      required: false
+    };
+  }
+  
+  if (askMatch) {
+    return {
+      type: 'ASK',
+      content: content,
+      question: askMatch[1].trim(),
+      required: true
     };
   }
   
@@ -188,7 +250,7 @@ async function getRemoteKnowledge(sshConn, remoteOS) {
     let cmd;
     
     if (remoteOS === 'windows') {
-      cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p1 = './.kosmos-panel/kosmos-panel.md'; $p2 = Join-Path $env:USERPROFILE '.config/kosmos-panel/kosmos-panel.md'; if (Test-Path $p1) { Get-Content $p1 -Raw -Encoding UTF8 } elseif (Test-Path $p2) { Get-Content $p2 -Raw -Encoding UTF8 }"`;
+      cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p1 = './.kosmos-panel/kosmos-panel.md'; $p2 = Join-Path $env:USERPROFILE '.config/kosmos-panel/kosmos-panel.md'; if (Test-Path $p1) { Get-Content $p1 -Encoding UTF8 | Out-String } elseif (Test-Path $p2) { Get-Content $p2 -Encoding UTF8 | Out-String }"`;
     } else {
       cmd = `cat ./.kosmos-panel/kosmos-panel.md 2>/dev/null || cat ~/.config/kosmos-panel/kosmos-panel.md 2>/dev/null`;
     }

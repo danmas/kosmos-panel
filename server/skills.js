@@ -173,8 +173,8 @@ function getRemoteSkill(sshConn, skillName, remoteOS = 'linux', skillPath = null
     let cmd;
 
     if (remoteOS === 'windows') {
-      const winRel = relPath.replace(/\//g, '\\');
-      cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content (Join-Path $env:USERPROFILE '.config/kosmos-panel/skills\\${winRel}\\SKILL.md') -Raw -Encoding UTF8 -ErrorAction SilentlyContinue"`;
+      const relPathEsc = relPath.replace(/'/g, "''");
+      cmd = `powershell -Command "$rel = '${relPathEsc}' -replace '/','\\\\'; $dir = Join-Path $env:USERPROFILE '.config\\kosmos-panel\\skills'; $full = Join-Path (Join-Path $dir $rel) 'SKILL.md'; if (Test-Path $full) { [System.IO.File]::ReadAllText($full, [System.Text.Encoding]::UTF8) }"`;
     } else {
       const fullPath = `~/.config/kosmos-panel/skills/${relPath}/SKILL.md`;
       cmd = `cat ${fullPath} 2>/dev/null`;
@@ -304,6 +304,21 @@ router.post('/start', async (req, res) => {
         serverId,
         serverName
       });
+    } else if (parsed.type === 'ASK') {
+      appendToSkillsLog({
+        id: uuidv4(),
+        skill_log_id: skillSessionId,
+        session_id: terminalSessionId,
+        timestamp: new Date().toISOString(),
+        type: 'skill_ask',
+        skill_name: activeSkillName,
+        step: 1,
+        question: parsed.question,
+        required: parsed.required,
+        ai_response: parsed.content,
+        serverId,
+        serverName
+      });
     } else if (parsed.type === 'MESSAGE') {
       appendToSkillsLog({
         id: uuidv4(),
@@ -338,8 +353,10 @@ router.post('/start', async (req, res) => {
     let state = 'idle';
     if (parsed.type === 'CMD') {
       state = 'waiting_cmd';
-    } else if (parsed.type === 'MESSAGE') {
+    } else if (parsed.type === 'ASK') {
       state = 'waiting_user';
+    } else if (parsed.type === 'MESSAGE') {
+      state = 'idle';  // MESSAGE не блокирует
     } else if (parsed.type === 'DONE') {
       state = 'done';
     }
@@ -388,10 +405,13 @@ router.post('/start', async (req, res) => {
         skillDescription: skill.description || '',
         aiResponse: {
           type: parsed.type,
-          content: parsed.type === 'MESSAGE' ? parsed.message : 
+          content: parsed.type === 'ASK' ? parsed.question :
+                   parsed.type === 'MESSAGE' ? parsed.message : 
                    parsed.type === 'DONE' ? parsed.message : 
                    parsed.content,
-          command: parsed.command || null
+          command: parsed.command || null,
+          question: parsed.question || null,
+          required: parsed.required !== undefined ? parsed.required : null
         }
       }
     });
@@ -475,6 +495,21 @@ router.post('/:skillSessionId/message', async (req, res) => {
         serverId: session.serverId,
         serverName: session.serverName
       });
+    } else if (parsed.type === 'ASK') {
+      appendToSkillsLog({
+        id: uuidv4(),
+        skill_log_id: skillSessionId,
+        session_id: session.terminalSessionId,
+        timestamp: new Date().toISOString(),
+        type: 'skill_ask',
+        skill_name: session.skillName,
+        step: session.step,
+        question: parsed.question,
+        required: parsed.required,
+        ai_response: parsed.content,
+        serverId: session.serverId,
+        serverName: session.serverName
+      });
     } else if (parsed.type === 'MESSAGE') {
       appendToSkillsLog({
         id: uuidv4(),
@@ -513,8 +548,10 @@ router.post('/:skillSessionId/message', async (req, res) => {
         const lines = output.split('\n').filter(l => l.trim());
         session.outputBuffer = lines.slice(-7);
       });
-    } else if (parsed.type === 'MESSAGE') {
+    } else if (parsed.type === 'ASK') {
       session.state = 'waiting_user';
+    } else if (parsed.type === 'MESSAGE') {
+      session.state = 'idle';  // MESSAGE не блокирует
     } else if (parsed.type === 'DONE') {
       session.state = 'done';
       unsubscribeFromOutput(session.terminalSessionId, skillSessionId);
@@ -528,10 +565,13 @@ router.post('/:skillSessionId/message', async (req, res) => {
         step: session.step,
         aiResponse: {
           type: parsed.type,
-          content: parsed.type === 'MESSAGE' ? parsed.message : 
+          content: parsed.type === 'ASK' ? parsed.question :
+                   parsed.type === 'MESSAGE' ? parsed.message : 
                    parsed.type === 'DONE' ? parsed.message : 
                    parsed.content,
-          command: parsed.command || null
+          command: parsed.command || null,
+          question: parsed.question || null,
+          required: parsed.required !== undefined ? parsed.required : null
         }
       }
     });
@@ -616,6 +656,21 @@ router.post('/:skillSessionId/command-result', async (req, res) => {
         serverId: session.serverId,
         serverName: session.serverName
       });
+    } else if (parsed.type === 'ASK') {
+      appendToSkillsLog({
+        id: uuidv4(),
+        skill_log_id: skillSessionId,
+        session_id: session.terminalSessionId,
+        timestamp: new Date().toISOString(),
+        type: 'skill_ask',
+        skill_name: session.skillName,
+        step: session.step,
+        question: parsed.question,
+        required: parsed.required,
+        ai_response: parsed.content,
+        serverId: session.serverId,
+        serverName: session.serverName
+      });
     } else if (parsed.type === 'MESSAGE') {
       appendToSkillsLog({
         id: uuidv4(),
@@ -654,8 +709,10 @@ router.post('/:skillSessionId/command-result', async (req, res) => {
         const lines = output.split('\n').filter(l => l.trim());
         session.outputBuffer = lines.slice(-7);
       });
-    } else if (parsed.type === 'MESSAGE') {
+    } else if (parsed.type === 'ASK') {
       session.state = 'waiting_user';
+    } else if (parsed.type === 'MESSAGE') {
+      session.state = 'idle';  // MESSAGE не блокирует
     } else if (parsed.type === 'DONE') {
       session.state = 'done';
     }
@@ -668,10 +725,13 @@ router.post('/:skillSessionId/command-result', async (req, res) => {
         step: session.step,
         aiResponse: {
           type: parsed.type,
-          content: parsed.type === 'MESSAGE' ? parsed.message : 
+          content: parsed.type === 'ASK' ? parsed.question :
+                   parsed.type === 'MESSAGE' ? parsed.message : 
                    parsed.type === 'DONE' ? parsed.message : 
                    parsed.content,
-          command: parsed.command || null
+          command: parsed.command || null,
+          question: parsed.question || null,
+          required: parsed.required !== undefined ? parsed.required : null
         }
       }
     });
