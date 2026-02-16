@@ -170,8 +170,12 @@
       .log-skill-command .log-entry-type { color: #8b5cf6; }
       .log-skill-message { border-left-color: #f59e0b; }
       .log-skill-message .log-entry-type { color: #f59e0b; }
-      .log-skill-user-input { border-left-color: #06b6d4; }
-      .log-skill-user-input .log-entry-type { color: #06b6d4; }
+      .log-skill-command-output { border-left-color: #06b6d4; }
+      .log-skill-command-output .log-entry-type { color: #06b6d4; }
+      .log-skill-user-input { border-left-color: #ec4899; }
+      .log-skill-user-input .log-entry-type { color: #ec4899; }
+      .log-skill-ask { border-left-color: #a855f7; }
+      .log-skill-ask .log-entry-type { color: #a855f7; }
       .log-skill-complete { border-left-color: #22c55e; }
       .log-skill-complete .log-entry-type { color: #22c55e; }
       .empty {
@@ -217,7 +221,9 @@
           <button class="filter-btn active" data-type="all">Все</button>
           <button class="filter-btn" data-type="skill_start">Запуск</button>
           <button class="filter-btn" data-type="skill_command">Команды</button>
-          <button class="filter-btn" data-type="skill_message">Вопросы</button>
+          <button class="filter-btn" data-type="skill_command_output">Output</button>
+          <button class="filter-btn" data-type="skill_message">Инфо</button>
+          <button class="filter-btn" data-type="skill_ask">Вопросы</button>
           <button class="filter-btn" data-type="skill_user_input">Ответы</button>
           <button class="filter-btn" data-type="skill_complete">Завершение</button>
         </div>
@@ -369,17 +375,60 @@
           case 'skill_start':
             typeLabel = '✨ Запуск Skill';
             content = `Skill: ${log.skill_name}\n${log.skill_description || ''}\n\nПараметры: ${JSON.stringify(log.skill_params, null, 2)}`;
+            // Добавляем AI контекст
+            if (log.ai_system_prompt) {
+              content += `\n\n--- AI System Prompt (preview) ---\n${log.ai_system_prompt}`;
+            }
             className = 'log-skill-start';
             break;
           case 'skill_command':
             typeLabel = '🐚 Команда';
             content = log.command || '';
+            // Добавляем user content который был отправлен AI
+            if (log.user_content_sent_to_ai) {
+              content += `\n\n--- User Content Sent to AI ---\n${log.user_content_sent_to_ai}`;
+            }
+            // Добавляем AI response
+            if (log.ai_full_response) {
+              content += `\n\n--- AI Full Response ---\n${log.ai_full_response}`;
+            }
+            // Добавляем messages history
+            if (log.ai_messages_history && log.ai_messages_history.length > 0) {
+              content += `\n\n--- AI Messages History (${log.ai_messages_history.length} messages) ---\n`;
+              log.ai_messages_history.forEach((m, i) => {
+                content += `\n[${i+1}] ${m.role}: ${m.content}`;
+              });
+            }
             className = 'log-skill-command';
             extraInfo = `Шаг: ${log.step}`;
             break;
+          case 'skill_command_output':
+            typeLabel = '📤 Command Output';
+            // Показываем и сырой и очищенный output
+            content = '';
+            if (log.command_output_cleaned) {
+              content += `--- Cleaned (sent to AI) ---\n${log.command_output_cleaned}`;
+            }
+            if (log.command_output_raw) {
+              content += `\n\n--- Raw Output ---\n${log.command_output_raw}`;
+            }
+            // Старый формат (fallback)
+            if (!content && log.command_output) {
+              content = log.command_output;
+            }
+            content = content || '(no output)';
+            className = 'log-skill-command-output';
+            extraInfo = `Шаг: ${log.step} | Source: ${log.output_source || 'unknown'}`;
+            break;
           case 'skill_message':
-            typeLabel = '❓ Вопрос AI';
+            typeLabel = 'ℹ️ Инфо сообщение';
             content = log.message || '';
+            if (log.user_content_sent_to_ai) {
+              content += `\n\n--- User Content Sent to AI ---\n${log.user_content_sent_to_ai}`;
+            }
+            if (log.ai_full_response) {
+              content += `\n\n--- AI Full Response ---\n${log.ai_full_response}`;
+            }
             className = 'log-skill-message';
             extraInfo = `Шаг: ${log.step}`;
             break;
@@ -389,9 +438,30 @@
             className = 'log-skill-user-input';
             extraInfo = `Шаг: ${log.step}`;
             break;
+          case 'skill_ask':
+            typeLabel = '❓ Вопрос AI';
+            content = log.question || '';
+            if (log.required === false) {
+              content += ' (опциональный)';
+            }
+            if (log.user_content_sent_to_ai) {
+              content += `\n\n--- User Content Sent to AI ---\n${log.user_content_sent_to_ai}`;
+            }
+            if (log.ai_full_response) {
+              content += `\n\n--- AI Full Response ---\n${log.ai_full_response}`;
+            }
+            className = 'log-skill-ask';
+            extraInfo = `Шаг: ${log.step}`;
+            break;
           case 'skill_complete':
             typeLabel = '✅ Завершение';
             content = log.final_message || 'Skill completed';
+            if (log.user_content_sent_to_ai) {
+              content += `\n\n--- User Content Sent to AI ---\n${log.user_content_sent_to_ai}`;
+            }
+            if (log.ai_full_response) {
+              content += `\n\n--- AI Full Response ---\n${log.ai_full_response}`;
+            }
             className = 'log-skill-complete';
             extraInfo = `Шаг: ${log.step}`;
             break;

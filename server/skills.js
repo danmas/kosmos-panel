@@ -66,6 +66,44 @@ const skillSessions = {};
 //   }
 // }
 
+// Функция очистки output перед отправкой AI
+function cleanOutputForAI(rawOutput) {
+  if (!rawOutput) return '(no output)';
+  
+  let clean = rawOutput
+    // Удаляем ANSI escape sequences
+    .replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '')
+    // Удаляем OSC sequences (заголовок окна)
+    .replace(/\x1b\][^\x07]*\x07/g, '')
+    .replace(/]0;[^\x07]*[\x07\x00]/g, '')
+    .replace(/]0;[^\n]*/g, '')
+    // Удаляем промпты Windows/Linux
+    .replace(/^[a-zA-Z0-9_-]+@[a-zA-Z0-9_.-]+[^>$#]*[>$#]\s*/gm, '')
+    // Удаляем Microsoft Windows banner
+    .replace(/Microsoft Windows \[Version[^\]]*\][^\n]*\n/g, '')
+    .replace(/\(c\) Microsoft Corporation[^\n]*\n/g, '')
+    // Удаляем пустые строки и лишние пробелы
+    .replace(/\r/g, '')
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l.length > 0)
+    .join('\n');
+  
+  // Удаляем дубликаты строк
+  const lines = clean.split('\n');
+  const uniqueLines = [];
+  const seen = new Set();
+  for (const line of lines) {
+    if (!seen.has(line)) {
+      seen.add(line);
+      uniqueLines.push(line);
+    }
+  }
+  clean = uniqueLines.join('\n');
+  
+  return clean || '(no output)';
+}
+
 // Output subscribers - called when terminal output is received
 const outputSubscribers = {};
 // { terminalSessionId: { skillSessionId: callback } }
@@ -265,7 +303,7 @@ router.post('/start', async (req, res) => {
       { role: 'user', content: userPrompt }
     ];
 
-    // Логируем запуск skill
+    // Логируем запуск skill (с AI контекстом)
     appendToSkillsLog({
       id: uuidv4(),
       skill_log_id: skillSessionId,
@@ -279,7 +317,10 @@ router.post('/start', async (req, res) => {
       step: 1,
       max_steps: 100,
       serverId,
-      serverName
+      serverName,
+      // AI context
+      ai_system_prompt: systemPrompt.substring(0, 1000),
+      ai_messages_count: messages.length
     });
 
     // Call AI
@@ -289,7 +330,7 @@ router.post('/start', async (req, res) => {
     // Add assistant message to history
     messages.push({ role: 'assistant', content: parsed.content });
 
-    // Логируем ответ AI
+    // Логируем ответ AI (с полным контекстом)
     if (parsed.type === 'CMD') {
       appendToSkillsLog({
         id: uuidv4(),
@@ -302,7 +343,13 @@ router.post('/start', async (req, res) => {
         command: parsed.command,
         ai_response: parsed.content,
         serverId,
-        serverName
+        serverName,
+        // Full AI context
+        ai_full_response: aiContent,
+        ai_messages_history: messages.map(m => ({
+          role: m.role,
+          content: m.content?.substring(0, 500)
+        }))
       });
     } else if (parsed.type === 'ASK') {
       appendToSkillsLog({
@@ -317,7 +364,12 @@ router.post('/start', async (req, res) => {
         required: parsed.required,
         ai_response: parsed.content,
         serverId,
-        serverName
+        serverName,
+        ai_full_response: aiContent,
+        ai_messages_history: messages.map(m => ({
+          role: m.role,
+          content: m.content?.substring(0, 500)
+        }))
       });
     } else if (parsed.type === 'MESSAGE') {
       appendToSkillsLog({
@@ -331,7 +383,12 @@ router.post('/start', async (req, res) => {
         message: parsed.message,
         ai_response: parsed.content,
         serverId,
-        serverName
+        serverName,
+        ai_full_response: aiContent,
+        ai_messages_history: messages.map(m => ({
+          role: m.role,
+          content: m.content?.substring(0, 500)
+        }))
       });
     } else if (parsed.type === 'DONE') {
       appendToSkillsLog({
@@ -345,7 +402,12 @@ router.post('/start', async (req, res) => {
         final_message: parsed.message,
         ai_response: parsed.content,
         serverId,
-        serverName
+        serverName,
+        ai_full_response: aiContent,
+        ai_messages_history: messages.map(m => ({
+          role: m.role,
+          content: m.content?.substring(0, 500)
+        }))
       });
     }
 
@@ -624,15 +686,46 @@ router.post('/:skillSessionId/command-result', async (req, res) => {
     let userContent;
     if (skipped) {
       userContent = `User skipped the command.\n\n[Step ${session.step} of ${session.maxSteps}]`;
+      logger.info('skills-api', 'Command skipped', { skillSessionId, step: session.step });
     } else {
-      // Use buffered output or provided stdout
-      const output = stdout || session.outputBuffer.join('\n') || '(no output)';
-      userContent = `Command output:\n${output}\n\n[Step ${session.step} of ${session.maxSteps}]`;
+      // Use provided stdout (from frontend) or buffered output (fallback)
+      const rawOutput = stdout || session.outputBuffer.join('\n') || '';
+      const cleanedOutput = cleanOutputForAI(rawOutput);
+      userContent = `Command output:\n${cleanedOutput}\n\n[Step ${session.step} of ${session.maxSteps}]`;
+      
+      logger.info('skills-api', 'Command output received', { 
+        skillSessionId, 
+        step: session.step,
+        outputSource: stdout ? 'frontend' : 'buffer',
+        rawOutputLength: rawOutput.length,
+        cleanedOutputLength: cleanedOutput.length,
+        cleanedOutputPreview: cleanedOutput.substring(0, 200)
+      });
     }
 
     session.messages.push({ role: 'user', content: userContent });
     session.pendingCommand = null;
     session.outputBuffer = [];
+
+    // Логируем command output
+    if (!skipped) {
+      const rawOutput = stdout || '(buffer empty)';
+      const cleanedOutput = cleanOutputForAI(rawOutput);
+      appendToSkillsLog({
+        id: uuidv4(),
+        skill_log_id: skillSessionId,
+        session_id: session.terminalSessionId,
+        timestamp: new Date().toISOString(),
+        type: 'skill_command_output',
+        skill_name: session.skillName,
+        step: session.step,
+        command_output_raw: rawOutput.substring(0, 2000),
+        command_output_cleaned: cleanedOutput.substring(0, 1000),
+        output_source: stdout ? 'frontend' : 'buffer',
+        serverId: session.serverId,
+        serverName: session.serverName
+      });
+    }
 
     // Call AI
     const aiContent = await callSkillAI(session.messages);
@@ -654,7 +747,14 @@ router.post('/:skillSessionId/command-result', async (req, res) => {
         command: parsed.command,
         ai_response: parsed.content,
         serverId: session.serverId,
-        serverName: session.serverName
+        serverName: session.serverName,
+        // Full AI context
+        user_content_sent_to_ai: userContent.substring(0, 1000),
+        ai_full_response: aiContent,
+        ai_messages_history: session.messages.map(m => ({
+          role: m.role,
+          content: m.content?.substring(0, 500)
+        }))
       });
     } else if (parsed.type === 'ASK') {
       appendToSkillsLog({
@@ -669,7 +769,13 @@ router.post('/:skillSessionId/command-result', async (req, res) => {
         required: parsed.required,
         ai_response: parsed.content,
         serverId: session.serverId,
-        serverName: session.serverName
+        serverName: session.serverName,
+        user_content_sent_to_ai: userContent.substring(0, 1000),
+        ai_full_response: aiContent,
+        ai_messages_history: session.messages.map(m => ({
+          role: m.role,
+          content: m.content?.substring(0, 500)
+        }))
       });
     } else if (parsed.type === 'MESSAGE') {
       appendToSkillsLog({
@@ -683,7 +789,13 @@ router.post('/:skillSessionId/command-result', async (req, res) => {
         message: parsed.message,
         ai_response: parsed.content,
         serverId: session.serverId,
-        serverName: session.serverName
+        serverName: session.serverName,
+        user_content_sent_to_ai: userContent.substring(0, 1000),
+        ai_full_response: aiContent,
+        ai_messages_history: session.messages.map(m => ({
+          role: m.role,
+          content: m.content?.substring(0, 500)
+        }))
       });
     } else if (parsed.type === 'DONE') {
       appendToSkillsLog({
@@ -697,7 +809,13 @@ router.post('/:skillSessionId/command-result', async (req, res) => {
         final_message: parsed.message,
         ai_response: parsed.content,
         serverId: session.serverId,
-        serverName: session.serverName
+        serverName: session.serverName,
+        user_content_sent_to_ai: userContent.substring(0, 1000),
+        ai_full_response: aiContent,
+        ai_messages_history: session.messages.map(m => ({
+          role: m.role,
+          content: m.content?.substring(0, 500)
+        }))
       });
     }
 
@@ -762,6 +880,165 @@ router.get('/:skillSessionId/output', (req, res) => {
       step: session.step
     }
   });
+});
+
+/**
+ * POST /api/skills/:skillSessionId/continue
+ * Continue skill after MESSAGE (auto-continue without user input)
+ */
+router.post('/:skillSessionId/continue', async (req, res) => {
+  const { skillSessionId } = req.params;
+
+  const session = skillSessions[skillSessionId];
+  if (!session) {
+    return res.status(404).json({ success: false, error: 'Skill session not found' });
+  }
+
+  if (session.state !== 'idle') {
+    return res.status(400).json({ success: false, error: `Skill is in state '${session.state}', not 'idle'` });
+  }
+
+  try {
+    // Increment step
+    session.step++;
+    if (session.step > session.maxSteps) {
+      session.state = 'done';
+      return res.json({
+        success: true,
+        data: {
+          aiResponse: {
+            type: 'DONE',
+            content: 'Maximum steps reached',
+            command: null
+          }
+        }
+      });
+    }
+
+    // Add continuation message
+    const userContent = `[Continue after informational message]\n\n[Step ${session.step} of ${session.maxSteps}]`;
+    session.messages.push({ role: 'user', content: userContent });
+
+    logger.info('skills-api', 'Continuing skill after MESSAGE', { skillSessionId, step: session.step });
+
+    // Call AI
+    const aiContent = await callSkillAI(session.messages);
+    const parsed = parseSkillResponse(aiContent);
+
+    // Add assistant message
+    session.messages.push({ role: 'assistant', content: parsed.content });
+
+    // Логируем
+    if (parsed.type === 'CMD') {
+      appendToSkillsLog({
+        id: uuidv4(),
+        skill_log_id: skillSessionId,
+        session_id: session.terminalSessionId,
+        timestamp: new Date().toISOString(),
+        type: 'skill_command',
+        skill_name: session.skillName,
+        step: session.step,
+        command: parsed.command,
+        ai_response: parsed.content,
+        serverId: session.serverId,
+        serverName: session.serverName,
+        user_content_sent_to_ai: userContent,
+        ai_full_response: aiContent,
+        ai_messages_history: session.messages.map(m => ({
+          role: m.role,
+          content: m.content?.substring(0, 500)
+        }))
+      });
+    } else if (parsed.type === 'MESSAGE') {
+      appendToSkillsLog({
+        id: uuidv4(),
+        skill_log_id: skillSessionId,
+        session_id: session.terminalSessionId,
+        timestamp: new Date().toISOString(),
+        type: 'skill_message',
+        skill_name: session.skillName,
+        step: session.step,
+        message: parsed.message,
+        ai_response: parsed.content,
+        serverId: session.serverId,
+        serverName: session.serverName,
+        user_content_sent_to_ai: userContent,
+        ai_full_response: aiContent
+      });
+    } else if (parsed.type === 'ASK') {
+      appendToSkillsLog({
+        id: uuidv4(),
+        skill_log_id: skillSessionId,
+        session_id: session.terminalSessionId,
+        timestamp: new Date().toISOString(),
+        type: 'skill_ask',
+        skill_name: session.skillName,
+        step: session.step,
+        question: parsed.question,
+        required: parsed.required,
+        ai_response: parsed.content,
+        serverId: session.serverId,
+        serverName: session.serverName,
+        user_content_sent_to_ai: userContent,
+        ai_full_response: aiContent
+      });
+    } else if (parsed.type === 'DONE') {
+      appendToSkillsLog({
+        id: uuidv4(),
+        skill_log_id: skillSessionId,
+        session_id: session.terminalSessionId,
+        timestamp: new Date().toISOString(),
+        type: 'skill_complete',
+        skill_name: session.skillName,
+        step: session.step,
+        final_message: parsed.message,
+        ai_response: parsed.content,
+        serverId: session.serverId,
+        serverName: session.serverName,
+        user_content_sent_to_ai: userContent,
+        ai_full_response: aiContent
+      });
+    }
+
+    // Update state
+    if (parsed.type === 'CMD') {
+      session.state = 'waiting_cmd';
+      session.pendingCommand = parsed.command;
+      subscribeToOutput(session.terminalSessionId, skillSessionId, (output) => {
+        const lines = output.split('\n').filter(l => l.trim());
+        session.outputBuffer = lines.slice(-7);
+      });
+    } else if (parsed.type === 'ASK') {
+      session.state = 'waiting_user';
+    } else if (parsed.type === 'MESSAGE') {
+      session.state = 'idle';  // MESSAGE не блокирует
+    } else if (parsed.type === 'DONE') {
+      session.state = 'done';
+    }
+
+    session.lastActivity = new Date().toISOString();
+
+    res.json({
+      success: true,
+      data: {
+        step: session.step,
+        aiResponse: {
+          type: parsed.type,
+          content: parsed.type === 'ASK' ? parsed.question :
+                   parsed.type === 'MESSAGE' ? parsed.message : 
+                   parsed.type === 'DONE' ? parsed.message : 
+                   parsed.content,
+          command: parsed.command || null,
+          question: parsed.question || null,
+          required: parsed.required !== undefined ? parsed.required : null
+        }
+      }
+    });
+
+  } catch (e) {
+    logger.error('skills-api', 'Error continuing skill', { skillSessionId, error: e.message });
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 /**

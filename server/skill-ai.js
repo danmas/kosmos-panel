@@ -5,8 +5,8 @@
 
 const logger = require('./logger');
 
-// Специальный системный промпт для multi-step skills
-const SKILL_SYSTEM_PROMPT = `You are a terminal AI assistant executing a multi-step skill.
+// Системный промпт для multi-step skills с поддержкой [ASK]
+const SKILL_SYSTEM_PROMPT_WITH_ASK = `You are a terminal AI assistant executing a multi-step skill.
 
 RESPONSE FORMAT - Use EXACTLY ONE of these formats per response:
 
@@ -39,6 +39,7 @@ RULES:
 - [MESSAGE]: does NOT block - execution continues automatically (info only)
 - [DONE]: summarize what was accomplished`;
 
+
 /**
  * Build full system prompt for a skill
  * @param {string} skillContent - Content of the skill (SKILL.md)
@@ -47,7 +48,7 @@ RULES:
  * @returns {string} Full system prompt
  */
 function buildSkillSystemPrompt(skillContent, skillName, remoteKnowledge = '') {
-  let fullSystemPrompt = SKILL_SYSTEM_PROMPT;
+  let fullSystemPrompt = SKILL_SYSTEM_PROMPT_WITH_ASK;
   
   if (remoteKnowledge && remoteKnowledge.trim()) {
     fullSystemPrompt += `\n\n--- System Context ---\n${remoteKnowledge.trim()}`;
@@ -105,14 +106,20 @@ async function callSkillAI(messages, options = {}) {
     max_tokens: maxTokens
   };
   
-  // Логируем запрос к AI
+  // Логируем запрос к AI (детально)
   logger.info('skill-ai', 'AI request', {
     url: aiServerUrl,
     model: aiModel,
     messagesCount: messages.length,
-    lastUserMessage: messages.filter(m => m.role === 'user').pop()?.content?.substring(0, 100),
     temperature,
-    maxTokens
+    maxTokens,
+    systemPrompt: messages.find(m => m.role === 'system')?.content?.substring(0, 300),
+    lastUserMessage: messages.filter(m => m.role === 'user').pop()?.content?.substring(0, 200),
+    fullMessages: messages.map(m => ({
+      role: m.role,
+      contentLength: m.content?.length || 0,
+      contentPreview: m.content?.substring(0, 150)
+    }))
   });
 
   try {
@@ -134,12 +141,17 @@ async function callSkillAI(messages, options = {}) {
       throw new Error(result.error?.message || 'Invalid AI response');
     }
 
-    // Логируем успешный ответ
+    // Логируем успешный ответ (детально)
     logger.info('skill-ai', 'AI response received', {
       duration: `${duration}ms`,
       contentLength: content.length,
       contentPreview: content.substring(0, 150),
-      usage: result.usage
+      usage: result.usage,
+      fullResponse: content,
+      rawResult: {
+        finishReason: result.choices?.[0]?.finish_reason,
+        model: result.model
+      }
     });
 
     return content;
@@ -271,7 +283,8 @@ async function getRemoteKnowledge(sshConn, remoteOS) {
 }
 
 module.exports = {
-  SKILL_SYSTEM_PROMPT,
+  SKILL_SYSTEM_PROMPT: SKILL_SYSTEM_PROMPT_WITH_ASK,  // alias for compatibility
+  SKILL_SYSTEM_PROMPT_WITH_ASK,
   buildSkillSystemPrompt,
   buildInitialUserPrompt,
   callSkillAI,

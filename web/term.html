@@ -701,6 +701,11 @@
         border-left: 3px solid #ff4444;
         color: #ff8888;
       }
+      .skill-msg-ask {
+        background: #3d2e4f;
+        border-left: 3px solid #a855f7;
+        color: #e9d5ff;
+      }
       
       .skill-dialog-footer {
         padding: 10px 12px;
@@ -1052,6 +1057,16 @@ description: Описание skill
           
           if (m.type === 'data' || m.type === 'err') {
             term.write(m.data);
+            
+            // Собираем output для skill
+            if (skillDialogState.state === 'waiting_cmd') {
+              skillDialogState.outputBuffer.push(m.data);
+              // Ограничиваем размер буфера (100 чанков)
+              if (skillDialogState.outputBuffer.length > 100) {
+                skillDialogState.outputBuffer.shift();
+              }
+            }
+            
             if (remoteCommandCollecting && pendingRemoteCommand) {
               remoteCommandBuffer += m.data;
               checkRemoteCommandCompletion();
@@ -1461,7 +1476,8 @@ description: Описание skill
         commandMatched: false,     // флаг для отслеживания выполнения
         state: 'idle',             // 'idle' | 'waiting_cmd' | 'waiting_user' | 'done'
         messages: [],              // история сообщений
-        startedAt: null
+        startedAt: null,
+        outputBuffer: []           // Собираем output для передачи в API
       };
 
       function showSkillDialog() {
@@ -1487,6 +1503,7 @@ description: Описание skill
         skillDialogState.commandMatched = false;
         skillDialogState.state = 'idle';
         skillDialogState.messages = [];
+        skillDialogState.outputBuffer = [];
         document.getElementById('skillDialogBody').innerHTML = '';
         document.getElementById('skillDialogInput').value = '';
         document.getElementById('skillCommandDoneBtn').classList.add('hidden');
@@ -1516,6 +1533,10 @@ description: Описание skill
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+      }
+
+      function stripAnsi(str) {
+        return (str || '').replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
       }
 
       async function startSkillDialog(skill) {
@@ -1587,12 +1608,25 @@ description: Описание skill
           // Скрываем quick actions, показываем инпут для skip/cancel
           updateSkillDialogFooter('waiting_cmd');
 
-        } else if (type === 'MESSAGE') {
+        } else if (type === 'ASK') {
+          // [ASK] или [ASK:optional] - вопрос пользователю, БЛОКИРУЕТ выполнение
           skillDialogState.state = 'waiting_user';
           skillDialogState.pendingCommand = null;
-          addSkillMessage('ai', content);
+          const isOptional = aiResponse.required === false;
+          const questionText = aiResponse.question || content;
+          addSkillMessage('ask', questionText + (isOptional ? ' (опционально)' : ''));
           updateSkillDialogFooter('waiting_user');
+          document.getElementById('skillDialogInput').placeholder = isOptional ? 'Введите ответ или Enter для пропуска...' : 'Введите ответ...';
           document.getElementById('skillDialogInput').focus();
+
+        } else if (type === 'MESSAGE') {
+          // MESSAGE - информационное сообщение, НЕ блокирует - автоматически продолжаем
+          skillDialogState.state = 'idle';
+          skillDialogState.pendingCommand = null;
+          addSkillMessage('ai', content);
+          updateSkillDialogFooter('idle');
+          // Автоматически продолжаем выполнение skill
+          setTimeout(() => continueSkillAfterMessage(), 500);
 
         } else if (type === 'DONE') {
           skillDialogState.state = 'done';
@@ -1615,6 +1649,11 @@ description: Описание skill
         } else if (state === 'waiting_user') {
           quickActions.style.display = 'flex';
           inputRow.style.display = 'flex';
+          doneBtn.classList.add('hidden');
+        } else if (state === 'idle') {
+          // MESSAGE - авто-продолжение, скрываем всё
+          quickActions.style.display = 'none';
+          inputRow.style.display = 'none';
           doneBtn.classList.add('hidden');
         } else if (state === 'done') {
           quickActions.style.display = 'none';
@@ -1659,6 +1698,28 @@ description: Описание skill
       function sendSkillQuickReply(text) {
         document.getElementById('skillDialogInput').value = text;
         sendSkillMessage();
+      }
+
+      // Автоматическое продолжение после MESSAGE
+      async function continueSkillAfterMessage() {
+        if (!skillDialogState.sessionId || skillDialogState.state !== 'idle') return;
+
+        try {
+          const resp = await fetch(`/api/skills/${skillDialogState.sessionId}/continue`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+
+          const data = await resp.json();
+          if (!data.success) {
+            throw new Error(data.error || 'Failed to continue skill');
+          }
+
+          handleSkillAIResponse(data.data.aiResponse);
+
+        } catch (e) {
+          addSkillMessage('error', `Ошибка: ${e.message}`);
+        }
       }
 
       async function skillSkipCommand() {
@@ -1714,18 +1775,31 @@ description: Описание skill
         skillDialogState.pendingCommand = null;
         document.getElementById('skillCommandDoneBtn').classList.add('hidden');
 
-        // Получаем output с сервера
+        // Собираем output из буфера
+        const collectedOutput = skillDialogState.outputBuffer.join('');
+        const cleanOutput = stripAnsi(collectedOutput).trim();
+        skillDialogState.outputBuffer = [];
+
+        // Показываем output
+        if (cleanOutput) {
+          addSkillMessage('output', cleanOutput);
+        }
+
+        // Получаем output с сервера (фоллбек)
         try {
           const outputResp = await fetch(`/api/skills/${skillDialogState.sessionId}/output`);
           const outputData = await outputResp.json();
-          if (outputData.success && outputData.data.lastOutput) {
+          if (outputData.success && outputData.data.lastOutput && !cleanOutput) {
             addSkillMessage('output', outputData.data.lastOutput);
           }
 
           const resp = await fetch(`/api/skills/${skillDialogState.sessionId}/command-result`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ skipped: false })
+            body: JSON.stringify({ 
+              skipped: false,
+              stdout: cleanOutput || outputData.data.lastOutput || ''
+            })
           });
 
           const data = await resp.json();
@@ -1753,19 +1827,32 @@ description: Описание skill
         // Ждём немного для сбора output
         await new Promise(r => setTimeout(r, 500));
 
+        // Собираем output из буфера
+        const collectedOutput = skillDialogState.outputBuffer.join('');
+        const cleanOutput = stripAnsi(collectedOutput).trim();
+        skillDialogState.outputBuffer = [];
+
+        // Показываем output
+        if (cleanOutput) {
+          addSkillMessage('output', cleanOutput);
+        }
+
         try {
-          // Получаем output
+          // Получаем output с сервера (фоллбек)
           const outputResp = await fetch(`/api/skills/${skillDialogState.sessionId}/output`);
           const outputData = await outputResp.json();
-          if (outputData.success && outputData.data.lastOutput) {
+          if (outputData.success && outputData.data.lastOutput && !cleanOutput) {
             addSkillMessage('output', outputData.data.lastOutput);
           }
 
-          // Отправляем результат
+          // Отправляем результат с stdout
           const resp = await fetch(`/api/skills/${skillDialogState.sessionId}/command-result`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ skipped: false })
+            body: JSON.stringify({ 
+              skipped: false,
+              stdout: cleanOutput || outputData.data.lastOutput || ''
+            })
           });
 
           const data = await resp.json();
