@@ -250,7 +250,7 @@ async function getRemoteKnowledge(sshConn, remoteOS) {
     let cmd;
     
     if (remoteOS === 'windows') {
-      cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p1 = './.kosmos-panel/kosmos-panel.md'; $p2 = Join-Path $env:USERPROFILE '.config/kosmos-panel/kosmos-panel.md'; if (Test-Path $p1) { Get-Content $p1 -Encoding UTF8 | Out-String } elseif (Test-Path $p2) { Get-Content $p2 -Encoding UTF8 | Out-String }"`;
+      cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p1 = Join-Path (Get-Location) '.kosmos-panel\\kosmos-panel.md'; $p2 = Join-Path $env:USERPROFILE '.config\\kosmos-panel\\kosmos-panel.md'; if (Test-Path $p1) { [System.IO.File]::ReadAllText($p1, [System.Text.Encoding]::UTF8) } elseif (Test-Path $p2) { [System.IO.File]::ReadAllText($p2, [System.Text.Encoding]::UTF8) }"`;
     } else {
       cmd = `cat ./.kosmos-panel/kosmos-panel.md 2>/dev/null || cat ~/.config/kosmos-panel/kosmos-panel.md 2>/dev/null`;
     }

@@ -174,7 +174,7 @@ function getRemoteSkill(sshConn, skillName, remoteOS = 'linux', skillPath = null
 
     if (remoteOS === 'windows') {
       const relPathEsc = relPath.replace(/'/g, "''");
-      cmd = `powershell -Command "$rel = '${relPathEsc}' -replace '/','\\\\'; $dir = Join-Path $env:USERPROFILE '.config\\kosmos-panel\\skills'; $full = Join-Path (Join-Path $dir $rel) 'SKILL.md'; if (Test-Path $full) { [System.IO.File]::ReadAllText($full, [System.Text.Encoding]::UTF8) }"`;
+      cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $rel = '${relPathEsc}' -replace '/','\\\\'; $dir = Join-Path $env:USERPROFILE '.config\\kosmos-panel\\skills'; $full = Join-Path (Join-Path $dir $rel) 'SKILL.md'; if (Test-Path $full) { [System.IO.File]::ReadAllText($full, [System.Text.Encoding]::UTF8) }"`;
     } else {
       const fullPath = `~/.config/kosmos-panel/skills/${relPath}/SKILL.md`;
       cmd = `cat ${fullPath} 2>/dev/null`;

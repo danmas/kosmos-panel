@@ -1,6 +1,6 @@
 {
   "AI_KOSMOS_MODEL_BASE_URL": "http://usa:3002/v1",
-  "AI_MODEL": "FAST",
+  "AI_MODEL": "FAST-RICH",
   "AI_SYSTEM_PROMPT": "You are a terminal AI assistant. Convert user requests to shell commands. CRITICAL: Return ONLY the command, no explanations, no text, no markdown. Examples: User: \"show files\" → Response: \"ls -la\". User: \"check disk space\" → Response: \"df -h\".",
   "AI_SERVER_URL_HELP": "http://localhost:3002/api/send-request",
   "AI_MODEL_HELP": "moonshotai/kimi-dev-72b:free",
