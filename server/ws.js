@@ -21,8 +21,10 @@ function getSkillsModule() {
 }
 
 const LOG_FILE_PATH = path.join(__dirname, '..', 'logs', 'terminal', 'terminal_log.json');
+const SKILLS_LOG_PATH = path.join(__dirname, '..', 'data', 'skills_log.json');
 
 let logQueue = Promise.resolve();
+let skillsLogQueue = Promise.resolve();
 
 // Глобальные хранилища для REST API bridge
 const wsSessions = {};
@@ -52,6 +54,31 @@ function appendToLog(logEntry) {
   }).catch(err => {
     // Prevent unhandled promise rejection
     logger.error('terminal', 'Error in log queue', { error: err.message });
+  });
+}
+
+// Отдельное логирование для skills
+function appendToSkillsLog(logEntry) {
+  skillsLogQueue = skillsLogQueue.then(async () => {
+    try {
+      let logs = [];
+      try {
+        const data = await fs.readFile(SKILLS_LOG_PATH, 'utf8');
+        logs = JSON.parse(data);
+      } catch (readErr) {
+        if (readErr.code !== 'ENOENT') {
+          logger.error('skills', 'Error reading skills log file', { error: readErr.message });
+        }
+      }
+      logs.push(logEntry);
+      await fs.mkdir(path.dirname(SKILLS_LOG_PATH), { recursive: true });
+      await fs.writeFile(SKILLS_LOG_PATH, JSON.stringify(logs, null, 2));
+      logger.info('skills', 'Logged skill entry', { type: logEntry.type, step: logEntry.step, skill_name: logEntry.skill_name });
+    } catch (writeErr) {
+      logger.error('skills', 'Error writing to skills log file', { error: writeErr.message });
+    }
+  }).catch(err => {
+    logger.error('skills', 'Error in skills log queue', { error: err.message });
   });
 }
 
@@ -722,7 +749,8 @@ RULES:
                   step: 1,
                   maxSteps: 100,
                   waitingForOutput: false,
-                  waitingForUser: false
+                  waitingForUser: false,
+                  skillLogId: uuidv4() // ID для группировки логов skill
                 };
 
                 // Логируем
@@ -738,6 +766,22 @@ RULES:
                   ...serverInfo
                 });
                 currentAiQueryId = aiQueryId;
+
+                // Логируем запуск skill
+                appendToSkillsLog({
+                  id: uuidv4(),
+                  skill_log_id: activeSkill.skillLogId,
+                  session_id: sessionId,
+                  timestamp: new Date().toISOString(),
+                  type: 'skill_start',
+                  skill_name: skillName,
+                  skill_description: skill.description,
+                  skill_params: skillParams,
+                  user_prompt: userPrompt,
+                  step: 1,
+                  max_steps: 100,
+                  ...serverInfo
+                });
 
                 // Уведомление в терминал
                 ws.send(JSON.stringify({ 
@@ -765,6 +809,20 @@ RULES:
                     activeSkill.messages.push({ role: 'assistant', content: content });
                     activeSkill.waitingForOutput = true;
                     
+                    // Логируем команду
+                    appendToSkillsLog({
+                      id: uuidv4(),
+                      skill_log_id: activeSkill.skillLogId,
+                      session_id: sessionId,
+                      timestamp: new Date().toISOString(),
+                      type: 'skill_command',
+                      skill_name: activeSkill.name,
+                      step: activeSkill.step,
+                      command: command,
+                      ai_response: content,
+                      ...serverInfo
+                    });
+                    
                     ws.send(JSON.stringify({ type: 'data', data: `\x1b[90m$ ${command}\x1b[0m\r\n` }));
                     stream.write(command + '\r');
 
@@ -788,12 +846,40 @@ RULES:
                     activeSkill.messages.push({ role: 'assistant', content: content });
                     activeSkill.waitingForUser = true;
                     
+                    // Логируем вопрос
+                    appendToSkillsLog({
+                      id: uuidv4(),
+                      skill_log_id: activeSkill.skillLogId,
+                      session_id: sessionId,
+                      timestamp: new Date().toISOString(),
+                      type: 'skill_message',
+                      skill_name: activeSkill.name,
+                      step: activeSkill.step,
+                      message: message,
+                      ai_response: content,
+                      ...serverInfo
+                    });
+                    
                     ws.send(JSON.stringify({ type: 'skill_message', text: message }));
                     ws.send(JSON.stringify({ type: 'data', data: `\r\n\x1b[1;33m[Skill вопрос]\x1b[0m ${message}\r\n` }));
 
                   } else if (doneMatch) {
                     // [DONE] - skill завершён
                     const finalMessage = doneMatch[1].trim() || 'Skill completed';
+                    
+                    // Логируем завершение
+                    appendToSkillsLog({
+                      id: uuidv4(),
+                      skill_log_id: activeSkill.skillLogId,
+                      session_id: sessionId,
+                      timestamp: new Date().toISOString(),
+                      type: 'skill_complete',
+                      skill_name: activeSkill.name,
+                      step: activeSkill.step,
+                      final_message: finalMessage,
+                      ai_response: content,
+                      ...serverInfo
+                    });
                     
                     ws.send(JSON.stringify({ type: 'skill_complete', text: finalMessage }));
                     ws.send(JSON.stringify({ type: 'data', data: `\r\n\x1b[1;32m[Skill завершён]\x1b[0m ${finalMessage}\r\n` }));
@@ -902,6 +988,19 @@ RULES:
               // ========== User input for skill ==========
               const userInput = obj.text || '';
               activeSkill.waitingForUser = false;
+              
+              // Логируем ответ пользователя
+              appendToSkillsLog({
+                id: uuidv4(),
+                skill_log_id: activeSkill.skillLogId,
+                session_id: sessionId,
+                timestamp: new Date().toISOString(),
+                type: 'skill_user_input',
+                skill_name: activeSkill.name,
+                step: activeSkill.step,
+                user_input: userInput,
+                ...serverInfo
+              });
               
               ws.send(JSON.stringify({ type: 'data', data: `\x1b[90m> ${userInput}\x1b[0m\r\n` }));
               

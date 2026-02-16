@@ -77,6 +77,32 @@
         gap: 8px;
         align-items: center;
       }
+      .tabs {
+        display: flex;
+        gap: 4px;
+        border-bottom: 1px solid #1c2333;
+        padding: 0 16px;
+        background: #0e1322;
+      }
+      .tab {
+        background: transparent;
+        border: none;
+        color: #a0aec0;
+        padding: 12px 20px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s;
+      }
+      .tab:hover {
+        color: #e6ecff;
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .tab.active {
+        color: #4a9eff;
+        border-bottom-color: #4a9eff;
+      }
       .filter-btn {
         background: #1b2544;
         border: 1px solid #223055;
@@ -138,6 +164,16 @@
       .log-stdout { border-left-color: #4a9eff; }
       .log-stderr { border-left-color: #ef4444; }
       .log-stderr .log-entry-type { color: #ef4444; }
+      .log-skill-start { border-left-color: #10b981; }
+      .log-skill-start .log-entry-type { color: #10b981; }
+      .log-skill-command { border-left-color: #8b5cf6; }
+      .log-skill-command .log-entry-type { color: #8b5cf6; }
+      .log-skill-message { border-left-color: #f59e0b; }
+      .log-skill-message .log-entry-type { color: #f59e0b; }
+      .log-skill-user-input { border-left-color: #06b6d4; }
+      .log-skill-user-input .log-entry-type { color: #06b6d4; }
+      .log-skill-complete { border-left-color: #22c55e; }
+      .log-skill-complete .log-entry-type { color: #22c55e; }
       .empty {
         text-align: center;
         color: #888;
@@ -153,9 +189,15 @@
   </head>
   <body>
     <div class="wrap">
+      <!-- Вкладки -->
+      <div class="tabs">
+        <button class="tab active" data-tab="terminal">💻 Terminal</button>
+        <button class="tab" data-tab="skills">✨ Skills</button>
+      </div>
+      
       <div class="header">
         <div class="header-left">
-          <div class="header-title">📋 Лог команд терминала</div>
+          <div class="header-title" id="headerTitle">📋 Лог команд терминала</div>
           <div class="session-filter">
             <div class="session-info" id="sessionInfo">Session: ...</div>
             <label title="Показать логи всех сессий">
@@ -164,12 +206,20 @@
             </label>
           </div>
         </div>
-        <div class="filters">
+        <div class="filters" id="terminalFilters">
           <button class="filter-btn active" data-type="all">Все</button>
           <button class="filter-btn" data-type="ai_query">AI</button>
           <button class="filter-btn" data-type="stdin">Команды</button>
           <button class="filter-btn" data-type="stdout">Вывод</button>
           <button class="filter-btn" data-type="stderr">Ошибки</button>
+        </div>
+        <div class="filters" id="skillsFilters" style="display: none;">
+          <button class="filter-btn active" data-type="all">Все</button>
+          <button class="filter-btn" data-type="skill_start">Запуск</button>
+          <button class="filter-btn" data-type="skill_command">Команды</button>
+          <button class="filter-btn" data-type="skill_message">Вопросы</button>
+          <button class="filter-btn" data-type="skill_user_input">Ответы</button>
+          <button class="filter-btn" data-type="skill_complete">Завершение</button>
         </div>
         <div class="status" id="status">Загрузка...</div>
       </div>
@@ -181,16 +231,17 @@
       const params = new URLSearchParams(location.search);
       const sessionId = params.get('sessionId');
       
+      let currentTab = 'terminal'; // 'terminal' или 'skills'
+      let allLogs = [];
+      let currentFilter = 'all';
+      let lastUpdate = 0;
+      let showAllSessions = false;
+      
       if (!sessionId) {
         document.getElementById('sessionInfo').textContent = 'Session: не указан';
       } else {
         document.getElementById('sessionInfo').textContent = `Session: ${sessionId.substring(0, 8)}...`;
       }
-      
-      let allLogs = [];
-      let currentFilter = 'all';
-      let lastUpdate = 0;
-      let showAllSessions = false;
       
       function stripAnsi(str) {
         return str.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
@@ -200,9 +251,10 @@
         if (!showAllSessions && !sessionId) return;
         
         try {
+          const apiUrl = currentTab === 'skills' ? '/api/skills-logs' : '/api/logs';
           const url = showAllSessions
-            ? `/api/logs?t=${Date.now()}`
-            : `/api/logs?sessionId=${encodeURIComponent(sessionId)}&t=${Date.now()}`;
+            ? `${apiUrl}?t=${Date.now()}`
+            : `${apiUrl}?sessionId=${encodeURIComponent(sessionId)}&t=${Date.now()}`;
           const response = await fetch(url);
           const logs = await response.json();
           
@@ -249,49 +301,11 @@
         }
         
         const html = logs.map(log => {
-          let typeLabel, content, className;
-          
-          switch (log.type) {
-            case 'ai_query':
-              typeLabel = '🤖 AI Запрос';
-              content = log.user_ai_query || '';
-              className = 'log-ai-query';
-              break;
-            case 'stdin':
-              typeLabel = '⚡ Команда';
-              content = log.executed_command || '';
-              className = 'log-stdin';
-              break;
-            case 'stdout':
-              typeLabel = '📤 Вывод';
-              content = stripAnsi(log.terminal_output || '');
-              className = 'log-stdout';
-              break;
-            case 'stderr':
-              typeLabel = '🔥 Ошибка';
-              content = stripAnsi(log.terminal_output || '');
-              className = 'log-stderr';
-              break;
-            default:
-              return '';
+          if (currentTab === 'skills') {
+            return renderSkillLog(log);
+          } else {
+            return renderTerminalLog(log);
           }
-          
-          // HTML escaping
-          content = content.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-          const timestamp = log.timestamp ? new Date(log.timestamp).toLocaleString('ru-RU') : '';
-          const sessionBadge = showAllSessions && (log.serverName || log.sessionId)
-            ? `<div class="log-entry-session"><span>${escapeHtml(log.serverName || log.serverId || '')}</span><span>${escapeHtml((log.sessionId || '').substring(0, 8))}…</span></div>`
-            : '';
-          return `
-            <div class="log-entry ${className}">
-              ${sessionBadge}
-              <div class="log-entry-type">
-                ${typeLabel}
-                ${timestamp ? `<span class="timestamp">${timestamp}</span>` : ''}
-              </div>
-              <pre class="log-entry-content">${content}</pre>
-            </div>
-          `;
         }).join('');
         
         contentEl.innerHTML = html;
@@ -303,10 +317,147 @@
         }
       }
       
+      function renderTerminalLog(log) {
+        let typeLabel, content, className;
+        
+        switch (log.type) {
+          case 'ai_query':
+            typeLabel = '🤖 AI Запрос';
+            content = log.user_ai_query || '';
+            className = 'log-ai-query';
+            break;
+          case 'stdin':
+            typeLabel = '⚡ Команда';
+            content = log.executed_command || '';
+            className = 'log-stdin';
+            break;
+          case 'stdout':
+            typeLabel = '📤 Вывод';
+            content = stripAnsi(log.terminal_output || '');
+            className = 'log-stdout';
+            break;
+          case 'stderr':
+            typeLabel = '🔥 Ошибка';
+            content = stripAnsi(log.terminal_output || '');
+            className = 'log-stderr';
+            break;
+          default:
+            return '';
+        }
+        
+        content = content.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const timestamp = log.timestamp ? new Date(log.timestamp).toLocaleString('ru-RU') : '';
+        const sessionBadge = showAllSessions && (log.serverName || log.sessionId)
+          ? `<div class="log-entry-session"><span>${escapeHtml(log.serverName || log.serverId || '')}</span><span>${escapeHtml((log.sessionId || '').substring(0, 8))}…</span></div>`
+          : '';
+        return `
+          <div class="log-entry ${className}">
+            ${sessionBadge}
+            <div class="log-entry-type">
+              ${typeLabel}
+              ${timestamp ? `<span class="timestamp">${timestamp}</span>` : ''}
+            </div>
+            <pre class="log-entry-content">${content}</pre>
+          </div>
+        `;
+      }
+      
+      function renderSkillLog(log) {
+        let typeLabel, content, className, extraInfo = '';
+        
+        switch (log.type) {
+          case 'skill_start':
+            typeLabel = '✨ Запуск Skill';
+            content = `Skill: ${log.skill_name}\n${log.skill_description || ''}\n\nПараметры: ${JSON.stringify(log.skill_params, null, 2)}`;
+            className = 'log-skill-start';
+            break;
+          case 'skill_command':
+            typeLabel = '🐚 Команда';
+            content = log.command || '';
+            className = 'log-skill-command';
+            extraInfo = `Шаг: ${log.step}`;
+            break;
+          case 'skill_message':
+            typeLabel = '❓ Вопрос AI';
+            content = log.message || '';
+            className = 'log-skill-message';
+            extraInfo = `Шаг: ${log.step}`;
+            break;
+          case 'skill_user_input':
+            typeLabel = '💬 Ответ пользователя';
+            content = log.user_input || '';
+            className = 'log-skill-user-input';
+            extraInfo = `Шаг: ${log.step}`;
+            break;
+          case 'skill_complete':
+            typeLabel = '✅ Завершение';
+            content = log.final_message || 'Skill completed';
+            className = 'log-skill-complete';
+            extraInfo = `Шаг: ${log.step}`;
+            break;
+          default:
+            return '';
+        }
+        
+        content = content.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const timestamp = log.timestamp ? new Date(log.timestamp).toLocaleString('ru-RU') : '';
+        const sessionBadge = showAllSessions && (log.serverName || log.session_id)
+          ? `<div class="log-entry-session"><span>${escapeHtml(log.serverName || log.serverId || '')}</span><span>${escapeHtml((log.session_id || '').substring(0, 8))}…</span></div>`
+          : '';
+        const skillBadge = `<div class="log-entry-session"><span>📦 ${escapeHtml(log.skill_name)}</span>${extraInfo ? `<span>${extraInfo}</span>` : ''}</div>`;
+        
+        return `
+          <div class="log-entry ${className}">
+            ${sessionBadge}
+            ${skillBadge}
+            <div class="log-entry-type">
+              ${typeLabel}
+              ${timestamp ? `<span class="timestamp">${timestamp}</span>` : ''}
+            </div>
+            <pre class="log-entry-content">${content}</pre>
+          </div>
+        `;
+      }
+      
       // Чекбокс All — переключение текущая сессия / все сессии
       document.getElementById('showAllSessions').addEventListener('change', function() {
         showAllSessions = this.checked;
         loadLogs();
+      });
+      
+      // Переключение табов
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.onclick = () => {
+          const tabName = tab.dataset.tab;
+          if (tabName === currentTab) return;
+          
+          // Переключаем активный таб
+          document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+          currentTab = tabName;
+          
+          // Обновляем заголовок
+          const headerTitle = document.getElementById('headerTitle');
+          if (tabName === 'skills') {
+            headerTitle.textContent = '✨ Логи Skills';
+          } else {
+            headerTitle.textContent = '📋 Лог команд терминала';
+          }
+          
+          // Показываем соответствующие фильтры
+          document.getElementById('terminalFilters').style.display = tabName === 'terminal' ? 'flex' : 'none';
+          document.getElementById('skillsFilters').style.display = tabName === 'skills' ? 'flex' : 'none';
+          
+          // Сбрасываем фильтр
+          currentFilter = 'all';
+          const activeFilters = tabName === 'terminal' ? '#terminalFilters .filter-btn' : '#skillsFilters .filter-btn';
+          document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+          document.querySelector(activeFilters + '[data-type="all"]').classList.add('active');
+          
+          // Перезагружаем логи
+          allLogs = [];
+          loadLogs();
+        };
       });
       
       // Фильтры по типу

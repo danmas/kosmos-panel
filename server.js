@@ -11,6 +11,32 @@ const { createSession, executeCommand, closeSession, createSessionV2, executeCom
 const logger = require('./server/logger');
 const skillsRouter = require('./server/skills');
 
+// Global config object
+let appConfig = {};
+
+// Load config.json
+function loadConfig() {
+  try {
+    const configPath = path.join(process.cwd(), 'config.json');
+    const configData = require('fs').readFileSync(configPath, 'utf8');
+    appConfig = JSON.parse(configData);
+    
+    // Inject config values into process.env
+    Object.keys(appConfig).forEach(key => {
+      process.env[key] = appConfig[key];
+    });
+    
+    logger.info('config', 'Config loaded successfully', { keys: Object.keys(appConfig) });
+  } catch (e) {
+    logger.error('config', 'Failed to load config.json - server cannot start', { error: e.message });
+    console.error('ERROR: config.json is missing or invalid. Server stopped.');
+    process.exit(1);
+  }
+}
+
+// Load config at startup
+loadConfig();
+
 const app = express();
 app.use(express.json());
 
@@ -84,6 +110,46 @@ app.post('/api/reload', (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     res.status(400).json({ ok: false, error: e.message });
+  }
+});
+
+// Reload config.json endpoint
+app.post('/api/reload-config', (req, res) => {
+  try {
+    loadConfig();
+    res.json({ ok: true, message: 'Config reloaded successfully' });
+  } catch (e) {
+    logger.error('api', 'Failed to reload config', { error: e.message });
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Get current config
+app.get('/api/config', (req, res) => {
+  res.json(appConfig);
+});
+
+// Update config.json
+app.post('/api/config', async (req, res) => {
+  try {
+    const configPath = path.join(process.cwd(), 'config.json');
+    const newConfig = req.body;
+    
+    if (!newConfig || typeof newConfig !== 'object') {
+      return res.status(400).json({ ok: false, error: 'Invalid config data' });
+    }
+    
+    // Save to file
+    const jsonContent = JSON.stringify(newConfig, null, 2);
+    await fs.writeFile(configPath, jsonContent, 'utf8');
+    
+    // Reload config
+    loadConfig();
+    
+    res.json({ ok: true, message: 'Config saved and reloaded successfully' });
+  } catch (e) {
+    logger.error('api', 'Failed to save config', { error: e.message });
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 
@@ -245,6 +311,36 @@ app.get('/api/logs', async (req, res) => {
     }
     logger.error('api', 'Error reading or parsing log file', { error: err.message });
     res.status(500).json({ error: 'Failed to read or parse log file' });
+  }
+});
+
+// Skills logs API
+app.get('/api/skills-logs', async (req, res) => {
+  const skillsLogPath = path.join(__dirname, 'data', 'skills_log.json');
+  const sessionId = req.query.sessionId;
+  const skillLogId = req.query.skillLogId;
+  
+  try {
+    const data = await fs.readFile(skillsLogPath, 'utf8');
+    let logs = JSON.parse(data);
+    
+    // Фильтрация по sessionId
+    if (sessionId) {
+      logs = logs.filter(log => log.session_id === sessionId);
+    }
+    
+    // Фильтрация по skillLogId (группировка по одному запуску skill)
+    if (skillLogId) {
+      logs = logs.filter(log => log.skill_log_id === skillLogId);
+    }
+    
+    res.json(logs);
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      return res.json([]);
+    }
+    logger.error('api', 'Error reading or parsing skills log file', { error: err.message });
+    res.status(500).json({ error: 'Failed to read or parse skills log file' });
   }
 });
 

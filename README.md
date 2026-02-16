@@ -102,7 +102,7 @@ AI_SYSTEM_PROMPT=You are a terminal AI assistant. Your task is to convert the us
 - **Редактор конфигурации**: доступен по ссылке "⚙️ Настройки" или `/inventory-editor.html`
 - **Стабильный порядок серверов**: плитки серверов отображаются в том же порядке, что определен в `inventory.json`
 
-📖 **Подробная документация**:
+📖 **Подробная документация (база знаний):** оглавление — [KB/README_INDEX.md](KB/README_INDEX.md).
 - **Терминал (WebSocket, REST API, логи, AI, Skills)**: [KB/README_terminal.md](KB/README_terminal.md). История команд: `logs/terminal/terminal_log.json`, `GET /api/logs`, UI — `/logs.html`, `/raw-logs.html`
 
 ### Редактор inventory.json
