@@ -69,7 +69,7 @@ const skillSessions = {};
 // Функция очистки output перед отправкой AI
 function cleanOutputForAI(rawOutput) {
   if (!rawOutput) return '(no output)';
-  
+
   let clean = rawOutput
     // Удаляем ANSI escape sequences
     .replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '')
@@ -88,7 +88,7 @@ function cleanOutputForAI(rawOutput) {
     .map(l => l.trim())
     .filter(l => l.length > 0)
     .join('\n');
-  
+
   // Удаляем дубликаты строк
   const lines = clean.split('\n');
   const uniqueLines = [];
@@ -100,7 +100,7 @@ function cleanOutputForAI(rawOutput) {
     }
   }
   clean = uniqueLines.join('\n');
-  
+
   return clean || '(no output)';
 }
 
@@ -154,7 +154,8 @@ function notifyOutputSubscribers(terminalSessionId, output) {
  * Parse YAML frontmatter from SKILL.md
  */
 function parseSkillFrontmatter(content, fallbackName = 'unknown') {
-  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
+  // More robust regex: allows optional whitespace/BOM at start, and optional delimiter at top
+  const match = content.match(/^(?:\s*---\s*\r?\n)?([\s\S]*?)\r?\n---\s*\r?\n([\s\S]*)$/);
   if (!match) {
     return { name: fallbackName, description: '', params: [], content: content.trim() };
   }
@@ -170,12 +171,19 @@ function parseSkillFrontmatter(content, fallbackName = 'unknown') {
   const descMatch = frontmatter.match(/^description:\s*(.+)$/m);
   if (descMatch) result.description = descMatch[1].trim();
 
-  const paramsMatch = frontmatter.match(/^params:\s*\n((?:\s+-[\s\S]*?(?=\n[^\s-]|$))+)/m);
+  const paramsMatch = frontmatter.match(/^params:\s*\n([\s\S]*?)(?=\n\S|$)/m);
   if (paramsMatch) {
     const paramsBlock = paramsMatch[1];
-    const paramMatches = paramsBlock.matchAll(/^\s+-\s*name:\s*(\S+)/gm);
-    for (const pm of paramMatches) {
-      result.params.push({ name: pm[1] });
+    const items = paramsBlock.split(/^\s+-\s+/m).filter(Boolean);
+    for (const item of items) {
+      const pNameMatch = item.match(/^name:\s*(\S+)/m);
+      const pDescMatch = item.match(/^description:\s*(.+)$/m);
+      if (pNameMatch) {
+        result.params.push({
+          name: pNameMatch[1].trim(),
+          description: pDescMatch ? pDescMatch[1].trim() : ''
+        });
+      }
     }
   }
 
@@ -190,14 +198,14 @@ async function getProjectSkill(skillPath) {
   const skillsRoot = path.join(projectRoot, '.kosmos-panel', 'skills');
   const relPath = (skillPath || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
   const filePath = path.join(skillsRoot, ...relPath.split('/'), 'SKILL.md');
-  
+
   let content;
   try {
     content = await fs.readFile(filePath, 'utf8');
   } catch (e) {
     return null;
   }
-  
+
   const fallbackName = relPath.split('/').filter(Boolean).pop() || 'unknown';
   return parseSkillFrontmatter(content, fallbackName);
 }
@@ -233,7 +241,7 @@ function getRemoteSkill(sshConn, skillName, remoteOS = 'linux', skillPath = null
       stream.on('data', (data) => { content += data.toString(); });
       stream.on('close', () => {
         clearTimeout(commandTimeout);
-        
+
         if (!content.trim()) {
           logger.debug('skills-api', 'Skill not found', { skillName });
           return resolve(null);
@@ -271,13 +279,13 @@ router.post('/start', async (req, res) => {
     if (!conn) {
       return res.status(400).json({ success: false, error: 'No SSH connection available' });
     }
-    
+
     const remoteOS = getOS ? getOS() : 'linux';
 
     // Load skill content
     const skillName = skillPath || skillId;
     let skill;
-    
+
     if (skillSource === 'project') {
       skill = await getProjectSkill(skillPath);
     } else {
@@ -452,11 +460,11 @@ router.post('/start', async (req, res) => {
       });
     }
 
-    logger.info('skills-api', 'Skill session started', { 
-      skillSessionId, 
-      terminalSessionId, 
+    logger.info('skills-api', 'Skill session started', {
+      skillSessionId,
+      terminalSessionId,
       skillName: activeSkillName,
-      state 
+      state
     });
 
     res.json({
@@ -468,9 +476,9 @@ router.post('/start', async (req, res) => {
         aiResponse: {
           type: parsed.type,
           content: parsed.type === 'ASK' ? parsed.question :
-                   parsed.type === 'MESSAGE' ? parsed.message : 
-                   parsed.type === 'DONE' ? parsed.message : 
-                   parsed.content,
+            parsed.type === 'MESSAGE' ? parsed.message :
+              parsed.type === 'DONE' ? parsed.message :
+                parsed.content,
           command: parsed.command || null,
           question: parsed.question || null,
           required: parsed.required !== undefined ? parsed.required : null
@@ -628,9 +636,9 @@ router.post('/:skillSessionId/message', async (req, res) => {
         aiResponse: {
           type: parsed.type,
           content: parsed.type === 'ASK' ? parsed.question :
-                   parsed.type === 'MESSAGE' ? parsed.message : 
-                   parsed.type === 'DONE' ? parsed.message : 
-                   parsed.content,
+            parsed.type === 'MESSAGE' ? parsed.message :
+              parsed.type === 'DONE' ? parsed.message :
+                parsed.content,
           command: parsed.command || null,
           question: parsed.question || null,
           required: parsed.required !== undefined ? parsed.required : null
@@ -692,9 +700,9 @@ router.post('/:skillSessionId/command-result', async (req, res) => {
       const rawOutput = stdout || session.outputBuffer.join('\n') || '';
       const cleanedOutput = cleanOutputForAI(rawOutput);
       userContent = `Command output:\n${cleanedOutput}\n\n[Step ${session.step} of ${session.maxSteps}]`;
-      
-      logger.info('skills-api', 'Command output received', { 
-        skillSessionId, 
+
+      logger.info('skills-api', 'Command output received', {
+        skillSessionId,
         step: session.step,
         outputSource: stdout ? 'frontend' : 'buffer',
         rawOutputLength: rawOutput.length,
@@ -844,9 +852,9 @@ router.post('/:skillSessionId/command-result', async (req, res) => {
         aiResponse: {
           type: parsed.type,
           content: parsed.type === 'ASK' ? parsed.question :
-                   parsed.type === 'MESSAGE' ? parsed.message : 
-                   parsed.type === 'DONE' ? parsed.message : 
-                   parsed.content,
+            parsed.type === 'MESSAGE' ? parsed.message :
+              parsed.type === 'DONE' ? parsed.message :
+                parsed.content,
           command: parsed.command || null,
           question: parsed.question || null,
           required: parsed.required !== undefined ? parsed.required : null
@@ -1025,9 +1033,9 @@ router.post('/:skillSessionId/continue', async (req, res) => {
         aiResponse: {
           type: parsed.type,
           content: parsed.type === 'ASK' ? parsed.question :
-                   parsed.type === 'MESSAGE' ? parsed.message : 
-                   parsed.type === 'DONE' ? parsed.message : 
-                   parsed.content,
+            parsed.type === 'MESSAGE' ? parsed.message :
+              parsed.type === 'DONE' ? parsed.message :
+                parsed.content,
           command: parsed.command || null,
           question: parsed.question || null,
           required: parsed.required !== undefined ? parsed.required : null

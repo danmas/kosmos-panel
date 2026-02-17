@@ -1,6 +1,9 @@
 ---
 name: git-untrack-file
 description: Удаление файла из-под контроля версий Git без удаления с диска
+params:
+  - name: file
+    description: путь к файлу, который нужно исключить
 ---
 
 ## Что я делаю

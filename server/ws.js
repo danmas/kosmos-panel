@@ -104,7 +104,8 @@ function stripAnsi(str) {
  * ...
  */
 function parseSkillFrontmatter(content, fallbackName = 'unknown') {
-  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
+  // More robust regex: allows optional whitespace/BOM at start, and optional delimiter at top
+  const match = content.match(/^(?:\s*---\s*\r?\n)?([\s\S]*?)\r?\n---\s*\r?\n([\s\S]*)$/);
   if (!match) {
     return { name: fallbackName, description: '', params: [], content: content.trim() };
   }
@@ -112,24 +113,27 @@ function parseSkillFrontmatter(content, fallbackName = 'unknown') {
   const frontmatter = match[1];
   const body = match[2].trim();
 
-  // Простой парсер YAML (без зависимостей)
   const result = { name: fallbackName, description: '', params: [], content: body };
 
-  // Парсим name
   const nameMatch = frontmatter.match(/^name:\s*(.+)$/m);
   if (nameMatch) result.name = nameMatch[1].trim();
 
-  // Парсим description
   const descMatch = frontmatter.match(/^description:\s*(.+)$/m);
   if (descMatch) result.description = descMatch[1].trim();
 
-  // Парсим params (упрощённо — только имена)
-  const paramsMatch = frontmatter.match(/^params:\s*\n((?:\s+-[\s\S]*?(?=\n[^\s-]|$))+)/m);
+  const paramsMatch = frontmatter.match(/^params:\s*\n([\s\S]*?)(?=\n\S|$)/m);
   if (paramsMatch) {
     const paramsBlock = paramsMatch[1];
-    const paramMatches = paramsBlock.matchAll(/^\s+-\s*name:\s*(\S+)/gm);
-    for (const pm of paramMatches) {
-      result.params.push({ name: pm[1] });
+    const items = paramsBlock.split(/^\s+-\s+/m).filter(Boolean);
+    for (const item of items) {
+      const pNameMatch = item.match(/^name:\s*(\S+)/m);
+      const pDescMatch = item.match(/^description:\s*(.+)$/m);
+      if (pNameMatch) {
+        result.params.push({
+          name: pNameMatch[1].trim(),
+          description: pDescMatch ? pDescMatch[1].trim() : ''
+        });
+      }
     }
   }
 
@@ -172,7 +176,7 @@ function getRemoteSkills(sshConn, remoteOS = 'linux') {
       stream.on('close', () => {
         clearTimeout(commandTimeout);
         logger.info('skills', 'Raw skills output', { content: content.substring(0, 500), remoteOS });
-        
+
         if (!content.includes('===SKILL:')) {
           logger.info('skills', 'No skills found - no ===SKILL: marker in output');
           return resolve([]);
@@ -181,19 +185,19 @@ function getRemoteSkills(sshConn, remoteOS = 'linux') {
         // Парсим skills по маркерам
         const skills = [];
         const skillBlocks = content.split('===SKILL:');
-        
+
         for (const block of skillBlocks) {
           if (!block.trim()) continue;
-          
+
           const nameEndIdx = block.indexOf('===');
           if (nameEndIdx === -1) continue;
-          
+
           const skillPath = block.substring(0, nameEndIdx).trim();
           const endMarkerIdx = block.indexOf('===END_SKILL===');
-          const skillContent = endMarkerIdx !== -1 
+          const skillContent = endMarkerIdx !== -1
             ? block.substring(nameEndIdx + 3, endMarkerIdx).trim()
             : block.substring(nameEndIdx + 3).trim();
-          
+
           if (skillContent) {
             const normalizedPath = skillPath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
             const fallbackName = normalizedPath.split('/').filter(Boolean).pop() || skillPath;
@@ -321,7 +325,7 @@ function getRemoteSkill(sshConn, skillName, remoteOS = 'linux', skillPath = null
       stream.on('data', (data) => { content += data.toString(); });
       stream.on('close', () => {
         clearTimeout(commandTimeout);
-        
+
         if (!content.trim()) {
           logger.debug('skills', 'Skill not found', { skillName });
           return resolve(null);
@@ -387,8 +391,8 @@ function handleTerminal(ws, url) {
   ws.on('close', (code, reason) => {
     const reasonStr = reason ? reason.toString() : 'no reason';
     if (code === 1006) {
-      logger.warn('ws', 'Terminal socket abnormal closure (1006)', { 
-        code, 
+      logger.warn('ws', 'Terminal socket abnormal closure (1006)', {
+        code,
         reason: reasonStr,
         hint: 'Connection lost without close frame - network issue, browser closed, or server restart'
       });
@@ -455,7 +459,7 @@ function handleTerminal(ws, url) {
           osDetectionDone = true;
           logger.info('ws', `Detected remote OS: ${remoteOS}`);
           // Отправляем клиенту информацию об ОС
-          try { ws.send(JSON.stringify({ type: 'os_detected', os: remoteOS })); } catch {}
+          try { ws.send(JSON.stringify({ type: 'os_detected', os: remoteOS })); } catch { }
         });
 
         // Сохраняем сессию для REST API bridge
@@ -558,11 +562,11 @@ function handleTerminal(ws, url) {
             if (activeSkill && activeSkill.waitingForOutput) {
               activeSkill.waitingForOutput = false;
               const outputForAI = cleanOutput || '(no output)';
-              logger.debug('skills', 'Command output received, continuing skill', { 
-                step: activeSkill.step, 
-                outputLength: outputForAI.length 
+              logger.debug('skills', 'Command output received, continuing skill', {
+                step: activeSkill.step,
+                outputLength: outputForAI.length
               });
-              
+
               // Асинхронно продолжаем skill
               setImmediate(async () => {
                 try {
@@ -584,7 +588,7 @@ function handleTerminal(ws, url) {
           try {
             const obj = JSON.parse(msg.toString());
             const { type, data, prompt, command } = obj;
-            
+
             // Логируем все входящие сообщения кроме data (слишком много)
             if (type !== 'data') {
               logger.info('ws', 'Received message', { type, hasPrompt: !!prompt, hasCommand: !!command });
@@ -666,7 +670,7 @@ function handleTerminal(ws, url) {
               const skillPath = obj.path || obj.name;
               const skillParams = obj.params || {};
               const userPrompt = obj.prompt || '';
-              
+
               try {
                 const skill = skillSource === 'project'
                   ? await getProjectSkill(skillPath)
@@ -679,7 +683,7 @@ function handleTerminal(ws, url) {
                 const aiBaseUrl = process.env.AI_KOSMOS_MODEL_BASE_URL || 'http://localhost:3002/v1';
                 const aiServerUrl = `${aiBaseUrl}/chat/completions`;
                 const aiModel = process.env.AI_MODEL || 'CHEAP';
-                
+
                 // Специальный системный промпт для multi-step skills
                 const skillSystemPrompt = `You are a terminal AI assistant executing a multi-step skill.
 
@@ -784,9 +788,9 @@ RULES:
                 });
 
                 // Уведомление в терминал
-                ws.send(JSON.stringify({ 
-                  type: 'data', 
-                  data: `\r\n\x1b[1;36m[Skill: ${skillName}]\x1b[0m ${skill.description || ''}\r\n` 
+                ws.send(JSON.stringify({
+                  type: 'data',
+                  data: `\r\n\x1b[1;36m[Skill: ${skillName}]\x1b[0m ${skill.description || ''}\r\n`
                 }));
                 ws.send(JSON.stringify({ type: 'skill_step', step: 1, max: 100 }));
 
@@ -795,7 +799,7 @@ RULES:
                   if (!activeSkill) return;
 
                   const content = aiContent.trim();
-                  
+
                   // Парсим формат ответа
                   const cmdMatch = content.match(/^\[CMD\]\s*(.+)$/im);
                   const msgMatch = content.match(/^\[MESSAGE\]\s*(.+)$/ims);
@@ -805,10 +809,10 @@ RULES:
                     // [CMD] - выполнить команду
                     let command = cmdMatch[1].trim();
                     command = command.replace(/^```[a-z]*\s*|\s*```$/g, '').trim();
-                    
+
                     activeSkill.messages.push({ role: 'assistant', content: content });
                     activeSkill.waitingForOutput = true;
-                    
+
                     // Логируем команду
                     appendToSkillsLog({
                       id: uuidv4(),
@@ -822,7 +826,7 @@ RULES:
                       ai_response: content,
                       ...serverInfo
                     });
-                    
+
                     ws.send(JSON.stringify({ type: 'data', data: `\x1b[90m$ ${command}\x1b[0m\r\n` }));
                     stream.write(command + '\r');
 
@@ -842,10 +846,10 @@ RULES:
                   } else if (msgMatch) {
                     // [MESSAGE] - показать сообщение и ждать ввода
                     const message = msgMatch[1].trim();
-                    
+
                     activeSkill.messages.push({ role: 'assistant', content: content });
                     activeSkill.waitingForUser = true;
-                    
+
                     // Логируем вопрос
                     appendToSkillsLog({
                       id: uuidv4(),
@@ -859,14 +863,14 @@ RULES:
                       ai_response: content,
                       ...serverInfo
                     });
-                    
+
                     ws.send(JSON.stringify({ type: 'skill_message', text: message }));
                     ws.send(JSON.stringify({ type: 'data', data: `\r\n\x1b[1;33m[Skill вопрос]\x1b[0m ${message}\r\n` }));
 
                   } else if (doneMatch) {
                     // [DONE] - skill завершён
                     const finalMessage = doneMatch[1].trim() || 'Skill completed';
-                    
+
                     // Логируем завершение
                     appendToSkillsLog({
                       id: uuidv4(),
@@ -880,23 +884,23 @@ RULES:
                       ai_response: content,
                       ...serverInfo
                     });
-                    
+
                     ws.send(JSON.stringify({ type: 'skill_complete', text: finalMessage }));
                     ws.send(JSON.stringify({ type: 'data', data: `\r\n\x1b[1;32m[Skill завершён]\x1b[0m ${finalMessage}\r\n` }));
-                    
+
                     activeSkill = null;
 
                   } else {
                     // Неизвестный формат - пробуем выполнить как команду
                     logger.warn('skills', 'Unknown response format, treating as command', { content: content.substring(0, 100) });
-                    
+
                     let command = content.split('\n')[0].trim();
                     command = command.replace(/^```[a-z]*\s*|\s*```$/g, '').trim();
-                    
+
                     if (command) {
                       activeSkill.messages.push({ role: 'assistant', content: `[CMD] ${command}` });
                       activeSkill.waitingForOutput = true;
-                      
+
                       ws.send(JSON.stringify({ type: 'data', data: `\x1b[90m$ ${command}\x1b[0m\r\n` }));
                       stream.write(command + '\r');
                     } else {
@@ -909,7 +913,7 @@ RULES:
                 activeSkill.processResponse = processSkillResponse;
                 activeSkill.sendNextRequest = async (userContent) => {
                   if (!activeSkill) return;
-                  
+
                   activeSkill.step++;
                   if (activeSkill.step > activeSkill.maxSteps) {
                     ws.send(JSON.stringify({ type: 'skill_complete', text: 'Maximum steps reached' }));
@@ -988,7 +992,7 @@ RULES:
               // ========== User input for skill ==========
               const userInput = obj.text || '';
               activeSkill.waitingForUser = false;
-              
+
               // Логируем ответ пользователя
               appendToSkillsLog({
                 id: uuidv4(),
@@ -1001,9 +1005,9 @@ RULES:
                 user_input: userInput,
                 ...serverInfo
               });
-              
+
               ws.send(JSON.stringify({ type: 'data', data: `\x1b[90m> ${userInput}\x1b[0m\r\n` }));
-              
+
               await activeSkill.sendNextRequest(`User response: ${userInput}`);
 
             } else if (type === 'skill_cancel') {
@@ -1018,17 +1022,17 @@ RULES:
               // ========== Get skill content for editing ==========
               const { source, path: skillPath } = obj;
               logger.info('skills', 'Received skill_get_content request', { source, skillPath });
-              
+
               try {
                 let content = null;
-                
+
                 if (source === 'project') {
                   // Читаем из локального проекта
                   const projectRoot = path.resolve(__dirname, '..');
                   const skillsRoot = path.join(projectRoot, '.kosmos-panel', 'skills');
                   const relPath = (skillPath || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
                   const filePath = path.join(skillsRoot, ...relPath.split('/'), 'SKILL.md');
-                  
+
                   try {
                     content = await fs.readFile(filePath, 'utf8');
                   } catch (e) {
@@ -1039,7 +1043,7 @@ RULES:
                   // Читаем с удалённого сервера
                   const relPath = (skillPath || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
                   const remotePath = `~/.config/kosmos-panel/skills/${relPath}/SKILL.md`;
-                  
+
                   let cmd;
                   if (remoteOS === 'windows') {
                     const relPathEsc = relPath.replace(/'/g, "''");
@@ -1047,7 +1051,7 @@ RULES:
                   } else {
                     cmd = `cat "${remotePath}"`;
                   }
-                  
+
                   await new Promise((resolve) => {
                     conn.exec(cmd, (err, execStream) => {
                       if (err) {
@@ -1055,7 +1059,7 @@ RULES:
                         resolve();
                         return;
                       }
-                      
+
                       let stdout = '';
                       let stderr = '';
                       execStream.on('data', (d) => { stdout += d.toString(); });
@@ -1072,7 +1076,7 @@ RULES:
                   });
                   return;
                 }
-                
+
                 ws.send(JSON.stringify({ type: 'skill_content', content }));
               } catch (e) {
                 logger.error('skills', 'Error getting skill content', { error: e.message });
@@ -1083,7 +1087,7 @@ RULES:
               // ========== Create new skill ==========
               const { source, path: skillPath, name, content } = obj;
               logger.info('skills', 'Received skill_create request', { source, skillPath, name, contentLength: content?.length });
-              
+
               if (!name || !content) {
                 logger.warn('skills', 'skill_create missing name or content');
                 ws.send(JSON.stringify({ type: 'skill_create_result', success: false, error: 'Имя и содержимое обязательны' }));
@@ -1097,29 +1101,29 @@ RULES:
                   const projectRoot = path.resolve(__dirname, '..');
                   const skillsRoot = path.join(projectRoot, '.kosmos-panel', 'skills');
                   const relPath = skillPath ? skillPath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') : '';
-                  const fullDir = relPath 
+                  const fullDir = relPath
                     ? path.join(skillsRoot, ...relPath.split('/'), name)
                     : path.join(skillsRoot, name);
                   const fullFile = path.join(fullDir, 'SKILL.md');
-                  
+
                   // Создаём директорию
                   await fs.mkdir(fullDir, { recursive: true });
                   // Записываем файл
                   await fs.writeFile(fullFile, content, 'utf8');
-                  
+
                   logger.info('skills', 'Created project skill', { path: fullFile });
                   ws.send(JSON.stringify({ type: 'skill_create_result', success: true }));
                 } else {
                   // Создание на удалённом сервере через SSH
                   logger.info('skills', 'Creating remote skill...', { remoteOS });
                   const relPath = skillPath ? skillPath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') : '';
-                  const remotePath = relPath 
+                  const remotePath = relPath
                     ? `~/.config/kosmos-panel/skills/${relPath}/${name}`
                     : `~/.config/kosmos-panel/skills/${name}`;
-                  
+
                   // Кодируем контент в base64 для безопасной передачи
                   const base64Content = Buffer.from(content, 'utf8').toString('base64');
-                  
+
                   let cmd;
                   if (remoteOS === 'windows') {
                     // PowerShell команда для Windows с base64
@@ -1130,9 +1134,9 @@ RULES:
                     // Bash команда для Linux с base64
                     cmd = `mkdir -p "${remotePath}" && echo "${base64Content}" | base64 -d > "${remotePath}/SKILL.md"`;
                   }
-                  
+
                   logger.info('skills', 'Executing remote command...');
-                  
+
                   // Timeout для команды
                   let responded = false;
                   const timeout = setTimeout(() => {
@@ -1142,7 +1146,7 @@ RULES:
                       ws.send(JSON.stringify({ type: 'skill_create_result', success: false, error: 'Timeout: команда не завершилась за 30 секунд' }));
                     }
                   }, 30000);
-                  
+
                   conn.exec(cmd, (err, execStream) => {
                     if (err) {
                       clearTimeout(timeout);
@@ -1153,7 +1157,7 @@ RULES:
                       }
                       return;
                     }
-                    
+
                     let stderr = '';
                     let stdout = '';
                     execStream.on('data', (d) => { stdout += d.toString(); });
@@ -1162,7 +1166,7 @@ RULES:
                       clearTimeout(timeout);
                       if (responded) return;
                       responded = true;
-                      
+
                       logger.info('skills', 'Remote command completed', { code, stdout: stdout.substring(0, 200), stderr: stderr.substring(0, 200) });
                       if (code === 0) {
                         logger.info('skills', 'Created remote skill', { path: remotePath });
@@ -1212,7 +1216,7 @@ RULES:
                 const getRemoteKnowledge = (sshConn) => new Promise((resolve) => {
                   let commandTimeout;
                   let cmd;
-                  
+
                   if (remoteOS === 'windows') {
                     cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p1 = Join-Path (Get-Location) '.kosmos-panel\\kosmos-panel.md'; $p2 = Join-Path $env:USERPROFILE '.config\\kosmos-panel\\kosmos-panel.md'; if (Test-Path $p1) { [System.IO.File]::ReadAllText($p1, [System.Text.Encoding]::UTF8) } elseif (Test-Path $p2) { [System.IO.File]::ReadAllText($p2, [System.Text.Encoding]::UTF8) }"`;
                   } else {
@@ -1220,7 +1224,7 @@ RULES:
                     const fallbackPath = '~/.config/kosmos-panel/kosmos-panel.md';
                     cmd = `cat ${primaryPath} 2>/dev/null || cat ${fallbackPath} 2>/dev/null`;
                   }
-                  
+
                   logger.debug('ai', 'Attempting to read remote knowledge', { remoteOS });
 
                   commandTimeout = setTimeout(() => {
@@ -1369,13 +1373,13 @@ RULES:
           }, 500);
         });
         stream.on('close', (code, signal) => {
-          logger.info('ssh', 'SSH stream closed', { 
-            sessionId, 
+          logger.info('ssh', 'SSH stream closed', {
+            sessionId,
             serverId,
             code: code !== undefined ? code : 'none',
             signal: signal || 'none'
           });
-          
+
           // Принудительно сохраняем оставшийся вывод при закрытии
           if (stdoutBuffer.trim()) {
             const cleanOutput = stripAnsi(stdoutBuffer).trim();
@@ -1408,7 +1412,7 @@ RULES:
           try { ws.close(); } catch { };
           conn.end();
         });
-        
+
         stream.on('error', (err) => {
           logger.error('ssh', 'SSH stream error', { sessionId, serverId, error: err.message });
         });
@@ -1465,9 +1469,9 @@ RULES:
       logger.info('ssh', 'Terminal SSH connection closed', { serverId });
     })
     .connect((() => {
-      const base = { 
-        host: server.ssh.host, 
-        port: Number(server.ssh.port) || 22, 
+      const base = {
+        host: server.ssh.host,
+        port: Number(server.ssh.port) || 22,
         username: server.ssh.user,
         keepaliveInterval: 10000,  // Пинг каждые 10 сек для предотвращения разрыва
         keepaliveCountMax: 3,      // 3 пропущенных пинга = disconnect
@@ -1550,9 +1554,9 @@ function handleTail(ws, url) {
       logger.info('ssh', 'Tail SSH connection closed', { serverId });
     })
     .connect((() => {
-      const base = { 
-        host: server.ssh.host, 
-        port: Number(server.ssh.port) || 22, 
+      const base = {
+        host: server.ssh.host,
+        port: Number(server.ssh.port) || 22,
         username: server.ssh.user,
         keepaliveInterval: 10000,  // Пинг каждые 10 сек для предотвращения разрыва
         keepaliveCountMax: 3,      // 3 пропущенных пинга = disconnect

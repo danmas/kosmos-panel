@@ -1730,9 +1730,14 @@ description: Описание skill
       const paramsForm = document.getElementById('skillParamsForm');
       document.getElementById('skillParamsName').textContent = skillName;
       document.getElementById('skillParamsInput').value = '';
-      document.getElementById('skillParamsInput').placeholder = selectedSkill.params && selectedSkill.params.length > 0
-        ? `Параметры: ${selectedSkill.params.map(p => p.name).join(', ')}`
-        : 'Дополнительные инструкции (опционально)';
+      let placeholder = 'Дополнительные инструкции (опционально)';
+      if (selectedSkill.params && selectedSkill.params.length > 0) {
+        const pTexts = selectedSkill.params.map(p => {
+          return p.description ? `${p.name} (${p.description})` : p.name;
+        });
+        placeholder = `Параметры: ${pTexts.join(', ')}`;
+      }
+      document.getElementById('skillParamsInput').placeholder = placeholder;
 
       paramsForm.classList.remove('hidden');
       document.getElementById('skillParamsInput').focus();
