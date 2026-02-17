@@ -29,7 +29,8 @@
 
 | Файл | Описание | Ключевые темы | Актуализация |
 |------|----------|---------------|--------------|
-| [README_terminal.md](./README_terminal.md) | Работа с SSH-терминалом и логами команд | WebSocket /ws/terminal, REST API v1/v2, REST Bridge, логирование terminal_log.json, AI в терминале, tail, Skills в терминале | 2026-02-15 |
+| [README_WORKSPACE.md](./README_WORKSPACE.md) | **Новый интерфейс**: Рабочая панель (Super-Terminal) | 3-pane layout, Drag&Drop, Logs integration, Skills UI | 2026-02-17 |
+| [README_terminal.md](./README_terminal.md) | Техническое описание терминала (WS/REST) | WebSocket, REST API, logs, AI integration, Legacy term.html | 2026-02-15 |
 
 ---
 
@@ -72,7 +73,7 @@
 
 - **Начать изучение:** [README_AI.md](./README_AI.md) (архитектура и обзор).
 - **AI конфигурация (config.json, горячая перезагрузка):** [README_CONFIG.md](./README_CONFIG.md).
-- **Терминал (WS, REST, логи, AI):** [README_terminal.md](./README_terminal.md).
+- **Рабочая панель (Workspace):** [README_WORKSPACE.md](./README_WORKSPACE.md).
 - **API и SSH:** основной [README.md](../README.md) в корне + [README_AUTH.md](./README_AUTH.md).
 - **Правила ведения KB:** [README_KB_RULES.md](./README_KB_RULES.md), полная инструкция — [ИНСТРУКЦИЯ_ВЕДЕНИЕ_БЗ.md](./ИНСТРУКЦИЯ_ВЕДЕНИЕ_БЗ.md).
 

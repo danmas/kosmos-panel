@@ -217,11 +217,11 @@ ws://localhost:3000/ws/terminal?serverId=usa&cols=120&rows=30
 
 ## Где открывается терминал в UI
 
+- **Рабочая Панель (Workspace):** Основной интерфейс с 3 панелями (терминал, логи, skills) — `/workspace.html`.
 - **Дашборд:** меню действий по плитке сервера → «Терминал» (встроенное overlay с xterm).
-- **Плавающие окна:** из того же меню — терминал в отдельном перетаскиваемом окне.
-- **Отдельная вкладка/окно:** пункт «Терминал в новой вкладке» или прямая ссылка `/term.html?serverId=usa` (для tail: `mode=tail&serverId=usa&path=/var/log/syslog`).
+- **Legacy:** отдельная вкладка `/term.html` (функционал сохранен, но не рекомендуется).
 
-В overlay и в плавающих окнах используется тот же протокол WebSocket; в `/term.html` — полный набор: Session ID, REST Bridge, AI, Skills, кнопка перехода к логам (`/logs.html?sessionId=...`).
+В overlay и `/term.html` используется тот же протокол WebSocket. Workspace предоставляет расширенные возможности (Drag&Drop, интеграция с логами).
 
 ---
 
@@ -238,4 +238,4 @@ Skills — многошаговые сценарии для AI (нескольк
 - **server/ws-utils.js** — общие функции для SSH (findServer, resolvePrivateKey).
 - **server.js** — регистрация маршрутов REST Bridge (`/api/ws-terminal/...`) и `/api/logs`, `/api/config`.
 
-Фронт: **web/app.js** (overlay, плавающие окна), **web/term.html** (отдельная страница с полным функционалом).
+Фронт: **web/workspace.html** (новая реализация), **web/term.html** (легаси), **web/app.js** (overlay).

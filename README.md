@@ -10,8 +10,9 @@
 - Плитки серверов (цвет: green/yellow/red/gray), тултипы со сводкой
 - **Просмотр логов команд**: Для `sshCommand` сервисов доступен просмотр полного вывода команды прямо в интерфейсе.
 - **Стабильный порядок серверов**: плитки отображаются в том же порядке, что задан в `inventory.json`
-- Быстрые действия: терминал SSH (xterm.js), tail логов, ssh:// и копирование команды
-- Плавающие окна терминала/tail (несколько одновременно) и отдельная вкладка `/term.html`
+- **Рабочая Панель (Workspace)**: Единый интерфейс (три панели: терминал, логи, skills) с настраиваемым размером (`/workspace.html`).
+- Быстрые действия: терминал SSH (xterm.js), tail логов, ssh:// и копирование команды.
+- **Legacy**: Поддержка отдельной вкладки терминала (`/term.html`) сохранена как опция.
 - **AI-команды в терминале**: введите `ai: ваш запрос` и получите готовую shell-команду
 - **AI Skills**: многошаговые сценарии для автоматизации типовых задач (загрузка из локального проекта и удалённого сервера)
 - **Контекст для AI**: создайте `./.kosmos-panel/kosmos-panel.md` или `~/.config/kosmos-panel/kosmos-panel.md` на удалённом сервере для подгрузки специфичных знаний (читается при каждом AI-запросе через SSH)
@@ -95,7 +96,7 @@ AI_SYSTEM_PROMPT=You are a terminal AI assistant. Your task is to convert the us
 
 ## Интерфейс
 - Плитки → hover: тултип; click: меню действий
-- Меню: терминал/tail во встроенном окне, в плавающих окнах и в отдельной вкладке (`/term.html`)
+- Меню: открыть Workspace, терминал в новой вкладке (`/term.html`), tail, SSH-ссылки.
 - Терминал — xterm.js: цвета, UTF‑8, прокрутка; ввод идёт прямо в терминал
 - **AI-команды**: `ai: покажи файлы` → автоматически выполнится `ls -la`
 - **Просмотр логов команд**: интерактивная панель при наведении + страницы `/logs.html` (фильтр по сессии: текущая/все, и по типу) и `/raw-logs.html` (сырой JSON)
@@ -182,6 +183,6 @@ http://localhost:3000/inventory-editor.html
 ## Структура проекта
 - **Корень**: `server.js` — точка входа, Express, статика `web/`, маршруты API и WS
 - **server/** — бэкенд: `monitor.js` (опрос серверов, inventory), `ws.js` (терминал, tail), `terminal.js` (REST API v1/v2), `ws-utils.js` (SSH), `logger.js`, `skills.js`, `skill-ai.js`
-- **web/** — фронт: `index.html`, `app.js`, `term.html`, `logs.html`, `raw-logs.html`, `inventory-editor.html`, `styles.css`
+- **web/** — фронт: `workspace.html` (основной интерфейс), `workspace.js`, `workspace.css`, `index.html`, `app.js`, `term.html` (legacy), `logs.html` (legacy), `inventory-editor.html`.
 - **KB/** — документация: `README_AUTH.md`, `README_AI.md` и др.
 - **tests/** — интеграционные тесты (например `test_usa_v2.js`)
