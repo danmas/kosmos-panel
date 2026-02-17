@@ -1,625 +1,1178 @@
 <!doctype html>
 <html lang="ru">
-  <head>
-    <meta charset="utf-8" />
-    <title>Terminal</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="https://unpkg.com/xterm/css/xterm.css" />
-    <script src="https://unpkg.com/xterm/lib/xterm.js"></script>
-    <script src="https://unpkg.com/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
-    <style>
-      html, body { height:100%; margin:0; background:#0b0f1a; color:#e6ecff; }
-      .wrap { height:100%; display:flex; flex-direction:column; }
-      .top { padding:8px 10px; background:#0e1322; border-bottom:1px solid #1c2333; display:flex; gap:8px; align-items:center; }
-      .title { font-weight:700; }
-      .term { flex:1; background:#000; }
-      .bar { padding:6px 10px; background:#0e1322; border-top:1px solid #1c2333; display:flex; gap:8px; }
-      button { background:#1b2544; border:1px solid #223055; color:#e6ecff; border-radius:8px; padding:6px 10px; cursor:pointer; }
-      .term-container { position: relative; flex: 1; display: flex; }
-      .term { flex: 1; background: #000; }
-      .log-indicator {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        width: 24px;
-        height: 24px;
-        background: #1b2544;
-        border: 1px solid #223055;
-        border-radius: 50%;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 12px;
-        opacity: 0.7;
-        transition: opacity 0.2s;
-        z-index: 10;
-      }
-      .log-indicator:hover { opacity: 1; }
-      
-      /* Remote command confirmation panel */
-      .command-confirm {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        background: linear-gradient(180deg, #1a2744 0%, #0e1322 100%);
-        border-top: 2px solid #ffa500;
-        padding: 12px 16px;
-        z-index: 1001;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
-        animation: slideUp 0.2s ease-out;
-      }
-      .command-confirm.hidden { display: none; }
-      @keyframes slideUp {
-        from { transform: translateY(100%); opacity: 0; }
-        to { transform: translateY(0); opacity: 1; }
-      }
-      .command-confirm-header {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 12px;
-        color: #ffa500;
-        font-weight: 600;
-      }
-      .command-confirm-badge {
-        background: #ffa500;
-        color: #000;
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-size: 10px;
-        text-transform: uppercase;
-      }
-      .command-confirm-text {
-        font-family: 'Courier New', monospace;
-        background: #000;
-        padding: 10px 12px;
-        border-radius: 6px;
-        border: 1px solid #333;
-        color: #00ff00;
-        font-size: 13px;
-        word-break: break-all;
-        max-height: 100px;
-        overflow-y: auto;
-      }
-      .command-confirm-buttons {
-        display: flex;
-        gap: 10px;
-        justify-content: flex-end;
-      }
-      .command-confirm-buttons button {
-        padding: 8px 16px;
-        font-size: 13px;
-        font-weight: 600;
-        border-radius: 6px;
-        cursor: pointer;
-        transition: all 0.15s ease;
-      }
-      .btn-confirm {
-        background: #22c55e;
-        border: 1px solid #16a34a;
-        color: #fff;
-      }
-      .btn-confirm:hover { background: #16a34a; }
-      .btn-reject {
-        background: #ef4444;
-        border: 1px solid #dc2626;
-        color: #fff;
-      }
-      .btn-reject:hover { background: #dc2626; }
-      .btn-skip {
-        background: #3b82f6;
-        border: 1px solid #2563eb;
-        color: #fff;
-      }
-      .btn-skip:hover { background: #2563eb; }
-      
-      /* Session ID indicator */
-      .session-indicator {
-        position: absolute;
-        top: 8px;
-        right: 45px;
-        font-size: 11px;
-        color: #4a9eff;
-        font-family: monospace;
-        background: rgba(0, 0, 0, 0.7);
-        padding: 4px 8px;
-        border-radius: 4px;
-        border: 1px solid #223055;
-        z-index: 10;
-        user-select: all;
-        cursor: pointer;
-        transition: all 0.15s ease;
-      }
-      .session-indicator:hover { 
-        background: rgba(74, 158, 255, 0.2);
-        color: #fff;
-      }
-      #reconnect { 
-        background: #22c55e; 
-        border-color: #16a34a; 
-      }
-      #reconnect:hover { 
-        background: #16a34a; 
-      }
-      
-      /* Skills popup - draggable dialog */
-      .skills-popup {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 400px;
-        max-width: 90%;
-        max-height: 70%;
-        background: linear-gradient(180deg, #1a2744 0%, #0e1322 100%);
-        border: 2px solid #4a9eff;
-        border-radius: 8px;
-        padding: 0;
-        z-index: 1002;
-        overflow: hidden;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-      }
-      .skills-popup.hidden { display: none; }
-      .skills-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        font-size: 14px;
-        color: #4a9eff;
-        font-weight: 600;
-        padding: 10px 16px;
-        background: #0e1322;
-        border-bottom: 1px solid #223055;
-        cursor: move;
-        user-select: none;
-      }
-      .skills-close {
-        background: transparent;
-        border: none;
-        color: #888;
-        font-size: 20px;
-        cursor: pointer;
-        padding: 0 4px;
-      }
-      .skills-close:hover { color: #fff; }
-      .skills-body {
-        padding: 12px 16px;
-        max-height: 300px;
-        overflow-y: auto;
-      }
-      .skills-list {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-      .skill-dir {
-        color: #7aa2ff;
-        font-size: 12px;
-        letter-spacing: 0.2px;
-        margin-top: 6px;
-        display: flex;
-        align-items: center;
-        gap: 4px;
-      }
-      .skill-root {
-        color: #9fb8dd;
-        font-weight: 600;
-      }
-      .skill-add-btn {
-        background: transparent;
-        border: 1px solid #4a9eff;
-        color: #4a9eff;
-        width: 18px;
-        height: 18px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 14px;
-        line-height: 1;
-        padding: 0;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-      }
-      .skill-add-btn:hover {
-        background: rgba(74, 158, 255, 0.3);
-        color: #fff;
-      }
-      
-      /* Create skill dialog */
-      .skill-create-dialog {
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 600px;
-        max-width: 95%;
-        max-height: 85%;
-        background: linear-gradient(180deg, #1a2744 0%, #0e1322 100%);
-        border: 2px solid #4a9eff;
-        border-radius: 8px;
-        z-index: 1010;
-        display: flex;
-        flex-direction: column;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
-      }
-      .skill-create-dialog.hidden { display: none; }
-      .skill-create-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 12px 16px;
-        background: #0e1322;
-        border-bottom: 1px solid #223055;
-        cursor: move;
-        user-select: none;
-      }
-      .skill-create-title {
-        color: #4a9eff;
-        font-weight: 600;
-        font-size: 14px;
-      }
-      .skill-create-close {
-        background: transparent;
-        border: none;
-        color: #888;
-        font-size: 20px;
-        cursor: pointer;
-        padding: 0 4px;
-      }
-      .skill-create-close:hover { color: #fff; }
-      .skill-create-body {
-        padding: 16px;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        overflow-y: auto;
-        flex: 1;
-      }
-      .skill-create-field {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-      }
-      .skill-create-label {
-        color: #9fb8dd;
-        font-size: 12px;
-        font-weight: 500;
-      }
-      .skill-create-input {
-        background: #000;
-        border: 1px solid #333;
-        color: #00ff00;
-        padding: 10px 12px;
-        border-radius: 4px;
-        font-family: monospace;
-        font-size: 14px;
-      }
-      .skill-create-input:focus {
-        outline: none;
-        border-color: #4a9eff;
-      }
-      .skill-create-textarea {
-        background: #000;
-        border: 1px solid #333;
-        color: #ccc;
-        padding: 12px;
-        border-radius: 4px;
-        font-family: monospace;
-        font-size: 13px;
-        min-height: 300px;
-        resize: vertical;
-        line-height: 1.5;
-      }
-      .skill-create-textarea:focus {
-        outline: none;
-        border-color: #4a9eff;
-      }
-      .skill-create-footer {
-        display: flex;
-        justify-content: flex-end;
-        gap: 10px;
-        padding: 12px 16px;
-        border-top: 1px solid #223055;
-        background: #0e1322;
-      }
-      .skill-create-btn {
-        padding: 8px 20px;
-        border-radius: 6px;
-        cursor: pointer;
-        font-weight: 600;
-        font-size: 13px;
-      }
-      .skill-create-btn-cancel {
-        background: transparent;
-        border: 1px solid #666;
-        color: #999;
-      }
-      .skill-create-btn-cancel:hover {
-        background: rgba(255,255,255,0.1);
-        color: #fff;
-      }
-      .skill-create-btn-save {
-        background: #22c55e;
-        border: 1px solid #16a34a;
-        color: #fff;
-      }
-      .skill-create-btn-save:hover { background: #16a34a; }
-      .skill-create-btn-save:disabled {
-        background: #333;
-        border-color: #444;
-        color: #666;
-        cursor: not-allowed;
-      }
-      .skill-create-error {
-        color: #ef4444;
-        font-size: 12px;
-        padding: 8px 12px;
-        background: rgba(239, 68, 68, 0.1);
-        border-radius: 4px;
-        border: 1px solid rgba(239, 68, 68, 0.3);
-      }
-      .skill-create-path {
-        color: #7aa2ff;
-        font-size: 11px;
-        font-family: monospace;
-        padding: 6px 10px;
-        background: rgba(74, 158, 255, 0.1);
-        border-radius: 4px;
-        border: 1px solid rgba(74, 158, 255, 0.2);
-      }
-      .skill-create-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0,0,0,0.5);
-        z-index: 1009;
-      }
-      .skill-create-overlay.hidden { display: none; }
-      .skill-item {
-        background: rgba(0, 0, 0, 0.4);
-        border: 1px solid #333;
-        border-radius: 6px;
-        padding: 10px 12px;
-        cursor: pointer;
-        transition: all 0.15s ease;
-        position: relative;
-      }
-      .skill-item:hover {
-        background: rgba(74, 158, 255, 0.2);
-        border-color: #4a9eff;
-      }
-      .skill-edit-btn {
-        position: absolute;
-        top: 6px;
-        right: 6px;
-        background: transparent;
-        border: 1px solid #666;
-        color: #888;
-        width: 22px;
-        height: 22px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 12px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+
+<head>
+  <meta charset="utf-8" />
+  <title>Terminal</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://unpkg.com/xterm/css/xterm.css" />
+  <script src="https://unpkg.com/xterm/lib/xterm.js"></script>
+  <script src="https://unpkg.com/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+  <style>
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      background: #0b0f1a;
+      color: #e6ecff;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .wrap {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .top {
+      padding: 8px 10px;
+      background: #0e1322;
+      border-bottom: 1px solid #1c2333;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .title {
+      font-weight: 700;
+    }
+
+    .term {
+      flex: 1;
+      background: #000;
+    }
+
+    .bar {
+      padding: 6px 10px;
+      background: #0e1322;
+      border-top: 1px solid #1c2333;
+      display: flex;
+      gap: 8px;
+    }
+
+    button {
+      background: #1b2544;
+      border: 1px solid #223055;
+      color: #e6ecff;
+      border-radius: 8px;
+      padding: 6px 10px;
+      cursor: pointer;
+    }
+
+    .term-container {
+      position: relative;
+      flex: 1;
+      display: flex;
+    }
+
+    .term {
+      flex: 1;
+      background: #000;
+    }
+
+    .log-indicator {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 24px;
+      height: 24px;
+      background: #1b2544;
+      border: 1px solid #223055;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+      z-index: 10;
+    }
+
+    .log-indicator:hover {
+      opacity: 1;
+    }
+
+    /* Remote command confirmation panel */
+    .command-confirm {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(180deg, #1a2744 0%, #0e1322 100%);
+      border-top: 2px solid #ffa500;
+      padding: 12px 16px;
+      z-index: 1001;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+      animation: slideUp 0.2s ease-out;
+    }
+
+    .command-confirm.hidden {
+      display: none;
+    }
+
+    @keyframes slideUp {
+      from {
+        transform: translateY(100%);
         opacity: 0;
-        transition: all 0.15s ease;
       }
-      .skill-item:hover .skill-edit-btn {
+
+      to {
+        transform: translateY(0);
         opacity: 1;
       }
-      .skill-edit-btn:hover {
-        background: rgba(74, 158, 255, 0.3);
-        border-color: #4a9eff;
-        color: #fff;
-      }
-      .skill-name {
-        font-weight: 600;
-        color: #00ff00;
-        font-family: monospace;
-        margin-bottom: 4px;
-        padding-right: 28px;
-      }
-      .skill-desc {
-        font-size: 12px;
-        color: #aaa;
-      }
-      .skills-empty {
-        color: #666;
-        text-align: center;
-        padding: 20px;
-      }
-      .skills-loading {
-        color: #4a9eff;
-        text-align: center;
-        padding: 20px;
-      }
-      .skill-params-form {
-        margin-top: 12px;
-        padding-top: 12px;
-        border-top: 1px solid #333;
-      }
-      .skill-params-form.hidden { display: none; }
-      .skill-params-title {
-        color: #4a9eff;
-        font-size: 12px;
-        margin-bottom: 8px;
-      }
-      .skill-param-input {
-        display: flex;
-        gap: 8px;
-        margin-bottom: 8px;
-      }
-      .skill-param-input input {
-        flex: 1;
-        background: #000;
-        border: 1px solid #333;
-        color: #00ff00;
-        padding: 8px 10px;
-        border-radius: 4px;
-        font-family: monospace;
-      }
-      .skill-param-input input:focus {
-        outline: none;
-        border-color: #4a9eff;
-      }
-      .skill-execute-btn {
-        background: #22c55e;
-        border: 1px solid #16a34a;
-        color: #fff;
-        padding: 8px 16px;
-        border-radius: 6px;
-        cursor: pointer;
-        font-weight: 600;
-      }
-      .skill-execute-btn:hover { background: #16a34a; }
-      
-      /* Skill input panel for multi-step skills */
-      .skill-input-panel {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        background: linear-gradient(180deg, #1a2744 0%, #0e1322 100%);
-        border-top: 2px solid #22c55e;
-        padding: 12px 16px;
-        z-index: 1003;
-        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
-        animation: slideUp 0.2s ease-out;
-      }
-      .skill-input-panel.hidden { display: none; }
-      .skill-input-header {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 13px;
-        color: #22c55e;
-        font-weight: 600;
-        margin-bottom: 10px;
-      }
-      .skill-input-badge {
-        background: #22c55e;
-        color: #000;
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-size: 10px;
-        text-transform: uppercase;
-      }
-      .skill-input-form {
-        display: flex;
-        gap: 8px;
-      }
-      .skill-input-form input {
-        flex: 1;
-        background: #000;
-        border: 1px solid #333;
-        color: #00ff00;
-        padding: 10px 12px;
-        border-radius: 6px;
-        font-family: monospace;
-        font-size: 14px;
-      }
-      .skill-input-form input:focus {
-        outline: none;
-        border-color: #22c55e;
-      }
-      .skill-execute-btn:hover { background: #16a34a; }
-      
-      /* Skills button - под Session indicator */
-      .skills-btn {
-        position: absolute;
-        top: 32px;
-        right: 45px;
-        background: #1b2544;
-        border: 1px solid #4a9eff;
-        color: #4a9eff;
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-size: 11px;
-        cursor: pointer;
-        z-index: 10;
-        transition: all 0.15s ease;
-      }
-      .skills-btn:hover {
-        background: rgba(74, 158, 255, 0.2);
-        color: #fff;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="wrap">
-      <div class="top">
-        <div class="title" id="t"></div>
-        <button id="close">Закрыть</button>
-        <button id="fit">Подогнать</button>
-        <button id="reconnect" style="display:none;">Переподключить</button>
+    }
+
+    .command-confirm-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #ffa500;
+      font-weight: 600;
+    }
+
+    .command-confirm-badge {
+      background: #ffa500;
+      color: #000;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      text-transform: uppercase;
+    }
+
+    .command-confirm-text {
+      font-family: 'Courier New', monospace;
+      background: #000;
+      padding: 10px 12px;
+      border-radius: 6px;
+      border: 1px solid #333;
+      color: #00ff00;
+      font-size: 13px;
+      word-break: break-all;
+      max-height: 100px;
+      overflow-y: auto;
+    }
+
+    .command-confirm-buttons {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .command-confirm-buttons button {
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn-confirm {
+      background: #22c55e;
+      border: 1px solid #16a34a;
+      color: #fff;
+    }
+
+    .btn-confirm:hover {
+      background: #16a34a;
+    }
+
+    .btn-reject {
+      background: #ef4444;
+      border: 1px solid #dc2626;
+      color: #fff;
+    }
+
+    .btn-reject:hover {
+      background: #dc2626;
+    }
+
+    .btn-skip {
+      background: #3b82f6;
+      border: 1px solid #2563eb;
+      color: #fff;
+    }
+
+    .btn-skip:hover {
+      background: #2563eb;
+    }
+
+    /* Session ID indicator */
+    .session-indicator {
+      position: absolute;
+      top: 8px;
+      right: 45px;
+      font-size: 11px;
+      color: #4a9eff;
+      font-family: monospace;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 4px 8px;
+      border-radius: 4px;
+      border: 1px solid #223055;
+      z-index: 10;
+      user-select: all;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .session-indicator:hover {
+      background: rgba(74, 158, 255, 0.2);
+      color: #fff;
+    }
+
+    #reconnect {
+      background: #22c55e;
+      border-color: #16a34a;
+    }
+
+    #reconnect:hover {
+      background: #16a34a;
+    }
+
+    /* Skills popup - draggable, resizable dialog */
+    .skills-popup {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 440px;
+      height: 480px;
+      min-width: 320px;
+      min-height: 280px;
+      max-width: 95vw;
+      max-height: 85vh;
+      background: rgba(13, 19, 34, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(74, 158, 255, 0.3);
+      border-radius: 12px;
+      padding: 0;
+      z-index: 1002;
+      overflow: hidden;
+      resize: both;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .skills-popup.hidden {
+      display: none;
+    }
+
+    .skills-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 14px;
+      color: #4a9eff;
+      font-weight: 600;
+      padding: 10px 16px;
+      background: #0e1322;
+      border-bottom: 1px solid #223055;
+      cursor: move;
+      user-select: none;
+    }
+
+    .skills-close {
+      background: transparent;
+      border: none;
+      color: #888;
+      font-size: 20px;
+      cursor: pointer;
+      padding: 0 4px;
+    }
+
+    .skills-close:hover {
+      color: #fff;
+    }
+
+    .skills-body {
+      padding: 12px 16px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .skills-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .skill-dir {
+      color: #7aa2ff;
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.2px;
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 8px;
+      border-radius: 6px;
+      background: rgba(74, 158, 255, 0.05);
+    }
+
+    .skill-dir-info {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .skill-root {
+      color: #9fb8dd;
+      font-weight: 600;
+      background: rgba(74, 158, 255, 0.1);
+      margin-top: 12px;
+    }
+
+    .skill-add-btn {
+      background: rgba(34, 197, 94, 0.15);
+      border: 1px solid rgba(34, 197, 94, 0.4);
+      color: #22c55e;
+      width: 22px;
+      height: 22px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+
+    .skill-add-btn:hover {
+      background: rgba(34, 197, 94, 0.3);
+      border-color: #22c55e;
+      color: #fff;
+      transform: scale(1.1);
+    }
+
+    /* Create skill dialog */
+    .skill-create-dialog {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 600px;
+      max-width: 95%;
+      max-height: 85%;
+      background: linear-gradient(180deg, #1a2744 0%, #0e1322 100%);
+      border: 2px solid #4a9eff;
+      border-radius: 8px;
+      z-index: 1010;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+    }
+
+    .skill-create-dialog.hidden {
+      display: none;
+    }
+
+    .skill-create-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: #0e1322;
+      border-bottom: 1px solid #223055;
+      cursor: move;
+      user-select: none;
+    }
+
+    .skill-create-title {
+      color: #4a9eff;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .skill-create-close {
+      background: transparent;
+      border: none;
+      color: #888;
+      font-size: 20px;
+      cursor: pointer;
+      padding: 0 4px;
+    }
+
+    .skill-create-close:hover {
+      color: #fff;
+    }
+
+    .skill-create-body {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .skill-create-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .skill-create-label {
+      color: #9fb8dd;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .skill-create-input {
+      background: #000;
+      border: 1px solid #333;
+      color: #00ff00;
+      padding: 10px 12px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+
+    .skill-create-input:focus {
+      outline: none;
+      border-color: #4a9eff;
+    }
+
+    .skill-create-textarea {
+      background: #000;
+      border: 1px solid #333;
+      color: #ccc;
+      padding: 12px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 13px;
+      min-height: 300px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+
+    .skill-create-textarea:focus {
+      outline: none;
+      border-color: #4a9eff;
+    }
+
+    .skill-create-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      padding: 12px 16px;
+      border-top: 1px solid #223055;
+      background: #0e1322;
+    }
+
+    .skill-create-btn {
+      padding: 8px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .skill-create-btn-cancel {
+      background: transparent;
+      border: 1px solid #666;
+      color: #999;
+    }
+
+    .skill-create-btn-cancel:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+
+    .skill-create-btn-save {
+      background: #22c55e;
+      border: 1px solid #16a34a;
+      color: #fff;
+    }
+
+    .skill-create-btn-save:hover {
+      background: #16a34a;
+    }
+
+    .skill-create-btn-save:disabled {
+      background: #333;
+      border-color: #444;
+      color: #666;
+      cursor: not-allowed;
+    }
+
+    .skill-create-error {
+      color: #ef4444;
+      font-size: 12px;
+      padding: 8px 12px;
+      background: rgba(239, 68, 68, 0.1);
+      border-radius: 4px;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .skill-create-path {
+      color: #7aa2ff;
+      font-size: 11px;
+      font-family: monospace;
+      padding: 6px 10px;
+      background: rgba(74, 158, 255, 0.1);
+      border-radius: 4px;
+      border: 1px solid rgba(74, 158, 255, 0.2);
+    }
+
+    .skill-create-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1009;
+    }
+
+    .skill-create-overlay.hidden {
+      display: none;
+    }
+
+    .skill-item {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 4px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .skill-item:hover {
+      background: rgba(74, 158, 255, 0.12);
+      border-color: rgba(74, 158, 255, 0.4);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .skill-item::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: #22c55e;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .skill-item:hover::before {
+      opacity: 1;
+    }
+
+    .skill-edit-btn {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      background: transparent;
+      border: 1px solid #666;
+      color: #888;
+      width: 22px;
+      height: 22px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: all 0.15s ease;
+    }
+
+    .skill-item:hover .skill-edit-btn {
+      opacity: 1;
+    }
+
+    .skill-edit-btn:hover {
+      background: rgba(74, 158, 255, 0.3);
+      border-color: #4a9eff;
+      color: #fff;
+    }
+
+    .skill-name {
+      font-weight: 600;
+      color: #22c55e;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 14px;
+      margin-bottom: 4px;
+      padding-right: 28px;
+    }
+
+    .skill-desc {
+      font-size: 12px;
+      color: rgba(230, 236, 255, 0.6);
+      line-height: 1.4;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+
+    .skills-empty {
+      color: #666;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .skills-loading {
+      color: #4a9eff;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .skill-params-form {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #333;
+    }
+
+    .skill-params-form.hidden {
+      display: none;
+    }
+
+    .skill-params-title {
+      color: #4a9eff;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+
+    .skill-param-input {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .skill-param-input input {
+      flex: 1;
+      background: #000;
+      border: 1px solid #333;
+      color: #00ff00;
+      padding: 8px 10px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+
+    .skill-param-input input:focus {
+      outline: none;
+      border-color: #4a9eff;
+    }
+
+    .skill-execute-btn {
+      background: #22c55e;
+      border: 1px solid #16a34a;
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .skill-execute-btn:hover {
+      background: #16a34a;
+    }
+
+    /* Skill input panel for multi-step skills */
+    .skill-input-panel {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(180deg, #1a2744 0%, #0e1322 100%);
+      border-top: 2px solid #22c55e;
+      padding: 12px 16px;
+      z-index: 1003;
+      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+      animation: slideUp 0.2s ease-out;
+    }
+
+    .skill-input-panel.hidden {
+      display: none;
+    }
+
+    .skill-input-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #22c55e;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+
+    .skill-input-badge {
+      background: #22c55e;
+      color: #000;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      text-transform: uppercase;
+    }
+
+    .skill-input-form {
+      display: flex;
+      gap: 8px;
+    }
+
+    .skill-input-form input {
+      flex: 1;
+      background: #000;
+      border: 1px solid #333;
+      color: #00ff00;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+
+    .skill-input-form input:focus {
+      outline: none;
+      border-color: #22c55e;
+    }
+
+    .skill-execute-btn:hover {
+      background: #16a34a;
+    }
+
+    /* Skills button - под Session indicator */
+    .skills-btn {
+      position: absolute;
+      top: 32px;
+      right: 45px;
+      background: #1b2544;
+      border: 1px solid #4a9eff;
+      color: #4a9eff;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+      z-index: 10;
+      transition: all 0.15s ease;
+    }
+
+    .skills-btn:hover {
+      background: rgba(74, 158, 255, 0.2);
+      color: #fff;
+    }
+
+    /* ========== Skill Dialog Window (floating) ========== */
+    .skill-dialog {
+      position: absolute;
+      top: 80px;
+      right: 20px;
+      width: 420px;
+      height: 450px;
+      min-width: 320px;
+      min-height: 280px;
+      background: linear-gradient(180deg, #1a2744 0%, #0e1322 100%);
+      border: 2px solid #22c55e;
+      border-radius: 8px;
+      z-index: 1005;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+      resize: both;
+      overflow: hidden;
+    }
+
+    .skill-dialog.hidden {
+      display: none;
+    }
+
+    .skill-dialog-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: #0e1322;
+      border-bottom: 1px solid #223055;
+      cursor: move;
+      user-select: none;
+    }
+
+    .skill-dialog-title {
+      color: #22c55e;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .skill-dialog-title span {
+      color: #fff;
+    }
+
+    .skill-dialog-header-buttons {
+      display: flex;
+      gap: 6px;
+    }
+
+    .skill-dialog-history-btn {
+      background: transparent;
+      border: 1px solid #444;
+      color: #888;
+      width: 26px;
+      height: 26px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .skill-dialog-history-btn:hover {
+      background: rgba(74, 158, 255, 0.2);
+      color: #fff;
+      border-color: #4a9eff;
+    }
+
+    .skill-dialog-close {
+      background: transparent;
+      border: none;
+      color: #888;
+      font-size: 22px;
+      cursor: pointer;
+      padding: 0 4px;
+      line-height: 1;
+    }
+
+    .skill-dialog-close:hover {
+      color: #ff4444;
+    }
+
+    .skill-dialog-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* Message types */
+    .skill-msg {
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      line-height: 1.5;
+      word-wrap: break-word;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+    }
+
+    .skill-msg-ai {
+      background: #1e3a5f;
+      border-left: 3px solid #4a9eff;
+      color: #e6ecff;
+    }
+
+    .skill-msg-user {
+      background: #2d4a3e;
+      border-left: 3px solid #22c55e;
+      color: #e6ecff;
+    }
+
+    .skill-msg-cmd {
+      background: #3d2e1f;
+      border-left: 3px solid #ffa500;
+      color: #ffd700;
+    }
+
+    .skill-msg-cmd code {
+      display: block;
+      margin-top: 4px;
+      padding: 6px 8px;
+      background: #000;
+      border-radius: 4px;
+      font-family: monospace;
+      color: #00ff00;
+      font-size: 12px;
+    }
+
+    .skill-msg-output {
+      background: #1a1a2e;
+      border-left: 3px solid #666;
+      font-family: monospace;
+      font-size: 11px;
+      color: #aaa;
+      white-space: pre-wrap;
+    }
+
+    .skill-msg-system {
+      background: transparent;
+      color: #888;
+      font-style: italic;
+      font-size: 12px;
+      text-align: center;
+      border-left: none;
+      padding: 4px;
+    }
+
+    .skill-msg-done {
+      background: #1f4a2d;
+      border-left: 3px solid #22c55e;
+      color: #88ff88;
+    }
+
+    .skill-msg-error {
+      background: #4a1f1f;
+      border-left: 3px solid #ff4444;
+      color: #ff8888;
+    }
+
+    .skill-msg-ask {
+      background: #3d2e4f;
+      border-left: 3px solid #a855f7;
+      color: #e9d5ff;
+    }
+
+    .skill-dialog-footer {
+      padding: 10px 12px;
+      background: #0e1322;
+      border-top: 1px solid #223055;
+    }
+
+    .skill-quick-actions {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+
+    .skill-quick-actions button {
+      background: #1b2544;
+      border: 1px solid #333;
+      color: #aaa;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .skill-quick-actions button:hover {
+      background: #2a3654;
+      color: #fff;
+      border-color: #4a9eff;
+    }
+
+    .skill-dialog-input-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .skill-dialog-input-row input {
+      flex: 1;
+      background: #000;
+      border: 1px solid #333;
+      color: #00ff00;
+      padding: 8px 10px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 13px;
+    }
+
+    .skill-dialog-input-row input:focus {
+      outline: none;
+      border-color: #22c55e;
+    }
+
+    .skill-dialog-input-row button {
+      background: #22c55e;
+      border: 1px solid #16a34a;
+      color: #fff;
+      padding: 8px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 12px;
+    }
+
+    .skill-dialog-input-row button:hover {
+      background: #16a34a;
+    }
+
+    .skill-cmd-done-btn {
+      width: 100%;
+      margin-top: 8px;
+      background: #ffa500;
+      border: 1px solid #cc8400;
+      color: #000;
+      padding: 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .skill-cmd-done-btn:hover {
+      background: #ffb733;
+    }
+
+    .skill-cmd-done-btn.hidden {
+      display: none;
+    }
+
+    /* Skills History Dropdown */
+    .skill-history-dropdown {
+      position: absolute;
+      top: 120px;
+      right: 450px;
+      width: 280px;
+      max-height: 350px;
+      background: linear-gradient(180deg, #1a2744 0%, #0e1322 100%);
+      border: 1px solid #4a9eff;
+      border-radius: 6px;
+      z-index: 1006;
+      overflow: hidden;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    }
+
+    .skill-history-dropdown.hidden {
+      display: none;
+    }
+
+    .skill-history-header {
+      padding: 10px 12px;
+      background: #0e1322;
+      color: #4a9eff;
+      font-weight: 600;
+      font-size: 13px;
+      border-bottom: 1px solid #223055;
+    }
+
+    .skill-history-list {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .skill-history-item {
+      padding: 10px 12px;
+      border-bottom: 1px solid #223055;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .skill-history-item:hover {
+      background: rgba(74, 158, 255, 0.1);
+    }
+
+    .skill-history-item-name {
+      color: #22c55e;
+      font-weight: 600;
+      font-size: 12px;
+    }
+
+    .skill-history-item-date {
+      color: #666;
+      font-size: 10px;
+      margin-top: 2px;
+    }
+
+    .skill-history-item-status {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 9px;
+      margin-left: 6px;
+    }
+
+    .skill-history-item-status.completed {
+      background: #1f4a2d;
+      color: #22c55e;
+    }
+
+    .skill-history-item-status.cancelled {
+      background: #4a1f1f;
+      color: #ff6666;
+    }
+
+    .skill-history-empty {
+      padding: 20px;
+      text-align: center;
+      color: #666;
+      font-size: 12px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="title" id="t"></div>
+      <button id="close">Закрыть</button>
+      <button id="fit">Подогнать</button>
+      <button id="reconnect" style="display:none;">Переподключить</button>
+    </div>
+    <div class="term-container">
+      <div id="term" class="term"></div>
+      <div class="session-indicator" id="sessionIndicator" title="Session ID для REST API"></div>
+      <button class="skills-btn" id="skillsBtn" title="Показать доступные Skills">Skills</button>
+      <div class="log-indicator" id="logIndicator" title="Показать лог команды">📋</div>
+
+      <!-- Remote command confirmation panel -->
+      <div id="commandConfirm" class="command-confirm hidden">
+        <div class="command-confirm-header">
+          <span class="command-confirm-badge">REST API</span>
+          <span>Удалённая команда требует подтверждения</span>
+        </div>
+        <div class="command-confirm-text" id="commandConfirmText"></div>
+        <div class="command-confirm-buttons">
+          <button class="btn-reject" id="confirmNo">Отклонить</button>
+          <button class="btn-skip" id="confirmSkip">Выполнить без подтверждения</button>
+          <button class="btn-confirm" id="confirmYes">Выполнить</button>
+        </div>
       </div>
-      <div class="term-container">
-        <div id="term" class="term"></div>
-        <div class="session-indicator" id="sessionIndicator" title="Session ID для REST API"></div>
-        <button class="skills-btn" id="skillsBtn" title="Показать доступные Skills">Skills</button>
-        <div class="log-indicator" id="logIndicator" title="Показать лог команды">📋</div>
-        
-        <!-- Remote command confirmation panel -->
-        <div id="commandConfirm" class="command-confirm hidden">
-          <div class="command-confirm-header">
-            <span class="command-confirm-badge">REST API</span>
-            <span>Удалённая команда требует подтверждения</span>
-          </div>
-          <div class="command-confirm-text" id="commandConfirmText"></div>
-          <div class="command-confirm-buttons">
-            <button class="btn-reject" id="confirmNo">Отклонить</button>
-            <button class="btn-skip" id="confirmSkip">Выполнить без подтверждения</button>
-            <button class="btn-confirm" id="confirmYes">Выполнить</button>
-          </div>
+
+      <!-- Skills popup (draggable) -->
+      <div id="skillsPopup" class="skills-popup hidden">
+        <div class="skills-header" id="skillsHeader">
+          <span>Skills <span id="skillProgress" style="font-weight:normal;font-size:12px;color:#888;"></span></span>
+          <button class="skills-close" id="skillsClose">×</button>
         </div>
-        
-        <!-- Skills popup (draggable) -->
-        <div id="skillsPopup" class="skills-popup hidden">
-          <div class="skills-header" id="skillsHeader">
-            <span>Skills <span id="skillProgress" style="font-weight:normal;font-size:12px;color:#888;"></span></span>
-            <button class="skills-close" id="skillsClose">×</button>
+        <div class="skills-body">
+          <div class="skills-list" id="skillsList">
+            <div class="skills-loading">Загрузка skills...</div>
           </div>
-          <div class="skills-body">
-            <div class="skills-list" id="skillsList">
-              <div class="skills-loading">Загрузка skills...</div>
-            </div>
-            <div class="skill-params-form hidden" id="skillParamsForm">
-              <div class="skill-params-title">Параметры для <span id="skillParamsName"></span>:</div>
-              <div class="skill-param-input">
-                <input type="text" id="skillParamsInput" placeholder="Введите параметры или сообщение...">
-                <button class="skill-execute-btn" id="skillExecuteBtn">Выполнить</button>
-              </div>
+          <div class="skill-params-form hidden" id="skillParamsForm">
+            <div class="skill-params-title">Параметры для <span id="skillParamsName"></span>:</div>
+            <div class="skill-param-input">
+              <input type="text" id="skillParamsInput" placeholder="Введите параметры или сообщение...">
+              <button class="skill-execute-btn" id="skillExecuteBtn">Выполнить</button>
             </div>
           </div>
         </div>
-        
-        <!-- Create skill dialog -->
-        <div id="skillCreateOverlay" class="skill-create-overlay hidden"></div>
-        <div id="skillCreateDialog" class="skill-create-dialog hidden">
-          <div class="skill-create-header" id="skillCreateHeader">
-            <span class="skill-create-title">Создать новый Skill</span>
-            <button class="skill-create-close" id="skillCreateClose">×</button>
+      </div>
+
+      <!-- Create skill dialog -->
+      <div id="skillCreateOverlay" class="skill-create-overlay hidden"></div>
+      <div id="skillCreateDialog" class="skill-create-dialog hidden">
+        <div class="skill-create-header" id="skillCreateHeader">
+          <span class="skill-create-title">Создать новый Skill</span>
+          <button class="skill-create-close" id="skillCreateClose">×</button>
+        </div>
+        <div class="skill-create-body">
+          <div class="skill-create-path" id="skillCreatePath">Путь: ...</div>
+          <div class="skill-create-field">
+            <label class="skill-create-label">Имя skill (латиница, без пробелов)</label>
+            <input type="text" class="skill-create-input" id="skillCreateName" placeholder="my-skill-name"
+              autocomplete="off">
           </div>
-          <div class="skill-create-body">
-            <div class="skill-create-path" id="skillCreatePath">Путь: ...</div>
-            <div class="skill-create-field">
-              <label class="skill-create-label">Имя skill (латиница, без пробелов)</label>
-              <input type="text" class="skill-create-input" id="skillCreateName" placeholder="my-skill-name" autocomplete="off">
-            </div>
-            <div class="skill-create-field" style="flex:1; display:flex; flex-direction:column;">
-              <label class="skill-create-label">Содержимое SKILL.md</label>
-              <textarea class="skill-create-textarea" id="skillCreateContent" placeholder="---
+          <div class="skill-create-field" style="flex:1; display:flex; flex-direction:column;">
+            <label class="skill-create-label">Содержимое SKILL.md</label>
+            <textarea class="skill-create-textarea" id="skillCreateContent" placeholder="---
 name: my-skill
 description: Описание skill
 ---
@@ -630,500 +1183,1164 @@ description: Описание skill
 ## When to use me
 
 Когда использовать этот skill..."></textarea>
-            </div>
-            <div class="skill-create-error hidden" id="skillCreateError"></div>
           </div>
-          <div class="skill-create-footer">
-            <button class="skill-create-btn skill-create-btn-cancel" id="skillCreateCancel">Отмена</button>
-            <button class="skill-create-btn skill-create-btn-save" id="skillCreateSave">Сохранить</button>
-          </div>
+          <div class="skill-create-error hidden" id="skillCreateError"></div>
         </div>
-        
-        <!-- Skill input panel (for multi-step skills) -->
-        <div id="skillInputPanel" class="skill-input-panel hidden">
-          <div class="skill-input-header">
-            <span class="skill-input-badge">Skill</span>
-            <span id="skillInputQuestion">Waiting for input...</span>
-          </div>
-          <div class="skill-input-form">
-            <input type="text" id="skillUserInput" placeholder="Введите ответ...">
-            <button class="btn-confirm" id="skillInputSend">Отправить</button>
-            <button class="btn-reject" id="skillInputCancel">Отмена</button>
-          </div>
+        <div class="skill-create-footer">
+          <button class="skill-create-btn skill-create-btn-cancel" id="skillCreateCancel">Отмена</button>
+          <button class="skill-create-btn skill-create-btn-save" id="skillCreateSave">Сохранить</button>
         </div>
       </div>
+
+      <!-- Skill input panel (for multi-step skills) -->
+      <div id="skillInputPanel" class="skill-input-panel hidden">
+        <div class="skill-input-header">
+          <span class="skill-input-badge">Skill</span>
+          <span id="skillInputQuestion">Waiting for input...</span>
+        </div>
+        <div class="skill-input-form">
+          <input type="text" id="skillUserInput" placeholder="Введите ответ...">
+          <button class="btn-confirm" id="skillInputSend">Отправить</button>
+          <button class="btn-reject" id="skillInputCancel">Отмена</button>
+        </div>
+      </div>
+
+      <!-- Skills Dialog Window (floating, draggable, resizable) -->
+      <div id="skillDialog" class="skill-dialog hidden">
+        <div class="skill-dialog-header" id="skillDialogHeader">
+          <span class="skill-dialog-title">Skill: <span id="skillDialogName">-</span></span>
+          <div class="skill-dialog-header-buttons">
+            <button class="skill-dialog-history-btn" id="skillDialogHistoryBtn" title="История">📋</button>
+            <button class="skill-dialog-close" id="skillDialogClose">×</button>
+          </div>
+        </div>
+        <div class="skill-dialog-body" id="skillDialogBody">
+          <!-- Scrollable message history -->
+        </div>
+        <div class="skill-dialog-footer">
+          <div class="skill-quick-actions" id="skillQuickActions">
+            <button onclick="sendSkillQuickReply('Да')">Да</button>
+            <button onclick="sendSkillQuickReply('Нет')">Нет</button>
+            <button onclick="skillSkipCommand()">Skip</button>
+            <button onclick="skillCancel()">Cancel</button>
+          </div>
+          <div class="skill-dialog-input-row">
+            <input type="text" id="skillDialogInput" placeholder="Введите ответ...">
+            <button id="skillDialogSendBtn" onclick="sendSkillMessage()">Отправить</button>
+          </div>
+          <button id="skillCommandDoneBtn" class="skill-cmd-done-btn hidden" onclick="skillCommandDone()">
+            Я выполнил команду
+          </button>
+        </div>
+      </div>
+
+      <!-- Skills History Dropdown -->
+      <div id="skillHistoryDropdown" class="skill-history-dropdown hidden">
+        <div class="skill-history-header">История Skills</div>
+        <div class="skill-history-list" id="skillHistoryList"></div>
+      </div>
     </div>
-    <script>
-      const params = new URLSearchParams(location.search);
-      const mode = params.get('mode');
-      const serverId = params.get('serverId');
-      const path = params.get('path') || '';
-      const title = document.getElementById('t');
-      title.textContent = mode === 'tail' ? `tail ${path}` : `terminal (${serverId})`;
-      const termDiv = document.getElementById('term');
-      const term = new Terminal({ convertEol:true, cursorBlink:true, theme:{ background:'#000000', foreground:'#00ff00' } });
-      
-      const fit = new window.FitAddon.FitAddon();
-      term.loadAddon(fit); term.open(termDiv); setTimeout(()=>{ try{fit.fit()}catch{} },0);
-      
-      // ========== Resize Support ==========
-      function sendResize() {
-        if (ws.readyState === WebSocket.OPEN && mode !== 'tail') {
-          ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-        }
-      }
-      
-      let resizeTimeout;
-      function handleResize() {
-        clearTimeout(resizeTimeout);
-        resizeTimeout = setTimeout(() => {
-          try { fit.fit(); sendResize(); } catch (e) {}
-        }, 100);
-      }
-      
-      window.addEventListener('resize', handleResize);
-      if (typeof ResizeObserver !== 'undefined') {
-        new ResizeObserver(handleResize).observe(termDiv);
-      }
-      
-      const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
-      const wsUrl = mode === 'tail'
-        ? `${wsProto}://${location.host}/ws/tail?serverId=${encodeURIComponent(serverId)}&path=${encodeURIComponent(path)}&lines=200`
-        : `${wsProto}://${location.host}/ws/terminal?serverId=${encodeURIComponent(serverId)}&cols=120&rows=30`;
-      const ws = new WebSocket(wsUrl);
-      term.writeln(mode === 'tail' ? `[tail ${path}]` : '[подключение к SSH...]');
-      
-      ws.onopen = () => {
-        term.writeln('[соединение установлено]');
-        setTimeout(() => { try { fit.fit(); } catch {} sendResize(); }, 100);
-      };
-      ws.onclose = ev => {
-        term.writeln(`\r\n[соединение закрыто код ${ev.code}${ev.reason ? ' ' + ev.reason : ''}]`);
-        document.getElementById('reconnect').style.display = 'inline-block';
-      };
-      ws.onerror = () => term.writeln(`\r\n[ошибка соединения]`);
+  </div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const mode = params.get('mode');
+    const serverId = params.get('serverId');
+    const path = params.get('path') || '';
+    const title = document.getElementById('t');
+    title.textContent = mode === 'tail' ? `tail ${path}` : `terminal (${serverId})`;
+    const termDiv = document.getElementById('term');
+    const term = new Terminal({ convertEol: true, cursorBlink: true, theme: { background: '#000000', foreground: '#00ff00' } });
 
-      // ========== REST Bridge Variables ==========
-      let currentSessionId = null;
-      let pendingRemoteCommand = null;
-      let remoteCommandBuffer = '';
-      let remoteCommandCollecting = false;
-      const promptRegex = /\w+@[\w\-\.]+[^$#>]*[\$#>]\s*$/;
+    const fit = new window.FitAddon.FitAddon();
+    term.loadAddon(fit); term.open(termDiv); setTimeout(() => { try { fit.fit() } catch { } }, 0);
 
-      // ========== AI Config ==========
-      let aiCommandPrefix = 'ai:';
-      fetch('/api/config')
-        .then(res => res.json())
-        .then(config => { if (config.aiCommandPrefix) aiCommandPrefix = config.aiCommandPrefix; })
-        .catch(() => {});
+    // ========== Resize Support ==========
+    function sendResize() {
+      if (ws.readyState === WebSocket.OPEN && mode !== 'tail') {
+        ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+      }
+    }
 
-      // ========== WebSocket Message Handler ==========
-      ws.onmessage = ev => {
-        try {
-          const m = JSON.parse(ev.data);
-          
-          if (m.type === 'data' || m.type === 'err') {
-            term.write(m.data);
-            if (remoteCommandCollecting && pendingRemoteCommand) {
-              remoteCommandBuffer += m.data;
-              checkRemoteCommandCompletion();
+    let resizeTimeout;
+    function handleResize() {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        try { fit.fit(); sendResize(); } catch (e) { }
+      }, 100);
+    }
+
+    window.addEventListener('resize', handleResize);
+    if (typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(handleResize).observe(termDiv);
+    }
+
+    const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const wsUrl = mode === 'tail'
+      ? `${wsProto}://${location.host}/ws/tail?serverId=${encodeURIComponent(serverId)}&path=${encodeURIComponent(path)}&lines=200`
+      : `${wsProto}://${location.host}/ws/terminal?serverId=${encodeURIComponent(serverId)}&cols=120&rows=30`;
+    const ws = new WebSocket(wsUrl);
+    term.writeln(mode === 'tail' ? `[tail ${path}]` : '[подключение к SSH...]');
+
+    ws.onopen = () => {
+      term.writeln('[соединение установлено]');
+      setTimeout(() => { try { fit.fit(); } catch { } sendResize(); }, 100);
+    };
+    ws.onclose = ev => {
+      term.writeln(`\r\n[соединение закрыто код ${ev.code}${ev.reason ? ' ' + ev.reason : ''}]`);
+      document.getElementById('reconnect').style.display = 'inline-block';
+    };
+    ws.onerror = () => term.writeln(`\r\n[ошибка соединения]`);
+
+    // ========== REST Bridge Variables ==========
+    let currentSessionId = null;
+    let pendingRemoteCommand = null;
+    let remoteCommandBuffer = '';
+    let remoteCommandCollecting = false;
+    const promptRegex = /\w+@[\w\-\.]+[^$#>]*[\$#>]\s*$/;
+
+    // ========== AI Config ==========
+    let aiCommandPrefix = 'ai:';
+    fetch('/api/config')
+      .then(res => res.json())
+      .then(config => { if (config.aiCommandPrefix) aiCommandPrefix = config.aiCommandPrefix; })
+      .catch(() => { });
+
+    // ========== WebSocket Message Handler ==========
+    ws.onmessage = ev => {
+      try {
+        const m = JSON.parse(ev.data);
+
+        if (m.type === 'data' || m.type === 'err') {
+          term.write(m.data);
+
+          // Собираем output для skill
+          if (skillDialogState.state === 'waiting_cmd') {
+            skillDialogState.outputBuffer.push(m.data);
+            // Ограничиваем размер буфера (100 чанков)
+            if (skillDialogState.outputBuffer.length > 100) {
+              skillDialogState.outputBuffer.shift();
             }
           }
-          
-          if (m.type === 'fatal') term.writeln(`\r\n[FATAL] ${m.error}`);
-          
-          if (m.type === 'session' && m.sessionId) {
-            currentSessionId = m.sessionId;
-            updateSessionIndicator();
+
+          if (remoteCommandCollecting && pendingRemoteCommand) {
+            remoteCommandBuffer += m.data;
+            checkRemoteCommandCompletion();
           }
-          
-          if (m.type === 'remote_command') handleRemoteCommand(m);
-          
-          if (m.type === 'cancel_command' && m.commandId) {
-            if (pendingRemoteCommand && pendingRemoteCommand.commandId === m.commandId) {
-              hideCommandConfirm();
-              pendingRemoteCommand = null;
-              remoteCommandCollecting = false;
-              remoteCommandBuffer = '';
-            }
-          }
-          
-          // Skills responses
-          if (m.type === 'skills_list') handleSkillsList(m.skills || [], m.error);
-          if (m.type === 'skill_error') {
-            term.writeln(`\r\n\x1b[1;31m[Skill Error] ${m.error}\x1b[0m`);
-            hideSkillsPopup();
-            skillActive = false;
-          }
-          if (m.type === 'skill_step') {
-            skillActive = true;
-            updateSkillProgress(m.step, m.max);
-          }
-          if (m.type === 'skill_message') {
-            showSkillInput(m.text);
-          }
-          if (m.type === 'skill_complete') {
-            skillActive = false;
-            hideSkillInput();
-            hideSkillsPopup();
-          }
-          if (m.type === 'skill_create_result') {
-            handleSkillCreateResult(m.success, m.error);
-          }
-          if (m.type === 'skill_content') {
-            handleSkillContent(m.content, m.error);
-          }
-        } catch (e) {
-          console.error('[ws.onmessage] Error:', e);
         }
-      };
 
-      // ========== Terminal Input ==========
-      if (mode !== 'tail') {
-        term.onData(d => { 
-          try { ws.send(JSON.stringify({ type: 'data', data: d })); } catch {} 
-        });
-        
-        term.attachCustomKeyEventHandler((arg) => {
-          if (arg.code === 'Enter' && arg.type === 'keydown') {
-            const buffer = term.buffer.active;
-            for (let i = buffer.length - 1; i >= 0; i--) {
-              const line = buffer.getLine(i).translateToString(true);
-              const promptEndIndex = Math.max(line.lastIndexOf('$'), line.lastIndexOf('#'), line.lastIndexOf('>'));
-              if (promptEndIndex !== -1) {
-                const commandPart = line.substring(promptEndIndex + 1).trim();
-                const cleanCommand = commandPart.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '').replace(/[\b\u0007]/g, '').trim();
-                
-                const prefixText = aiCommandPrefix.slice(0, -1);
-                const prefixSep = aiCommandPrefix.slice(-1);
-                const commandRegex = new RegExp(`(${prefixText}\\s*${prefixSep})`);
-                const match = commandPart.match(commandRegex);
+        if (m.type === 'fatal') term.writeln(`\r\n[FATAL] ${m.error}`);
 
-                if (match) {
-                  const aiPrompt = commandPart.substring(match.index + match[0].length).trim();
-                  // Визуальный feedback - желтый вывод AI запроса с новой строки
-                  setTimeout(() => {
-                    term.writeln(`\r\n\x1b[1;33m[AI] Запрос: ${aiPrompt}\x1b[0m`);
-                  }, 50);
-                  ws.send(JSON.stringify({ type: 'ai_query', prompt: line }));
-                  return true; // Разрешаем Enter для AI команд
-                } else if (cleanCommand) {
-                  ws.send(JSON.stringify({ type: 'command_log', command: cleanCommand }));
-                }
-                break;
+        if (m.type === 'session' && m.sessionId) {
+          currentSessionId = m.sessionId;
+          updateSessionIndicator();
+        }
+
+        if (m.type === 'remote_command') handleRemoteCommand(m);
+
+        if (m.type === 'cancel_command' && m.commandId) {
+          if (pendingRemoteCommand && pendingRemoteCommand.commandId === m.commandId) {
+            hideCommandConfirm();
+            pendingRemoteCommand = null;
+            remoteCommandCollecting = false;
+            remoteCommandBuffer = '';
+          }
+        }
+
+        // Skills responses
+        if (m.type === 'skills_list') handleSkillsList(m.skills || [], m.error);
+        if (m.type === 'skill_error') {
+          term.writeln(`\r\n\x1b[1;31m[Skill Error] ${m.error}\x1b[0m`);
+          hideSkillsPopup();
+          skillActive = false;
+        }
+        if (m.type === 'skill_step') {
+          skillActive = true;
+          updateSkillProgress(m.step, m.max);
+        }
+        if (m.type === 'skill_message') {
+          showSkillInput(m.text);
+        }
+        if (m.type === 'skill_complete') {
+          skillActive = false;
+          hideSkillInput();
+          hideSkillsPopup();
+        }
+        if (m.type === 'skill_create_result') {
+          handleSkillCreateResult(m.success, m.error);
+        }
+        if (m.type === 'skill_content') {
+          handleSkillContent(m.content, m.error);
+        }
+      } catch (e) {
+        console.error('[ws.onmessage] Error:', e);
+      }
+    };
+
+    // ========== Terminal Input ==========
+    if (mode !== 'tail') {
+      term.onData(d => {
+        try { ws.send(JSON.stringify({ type: 'data', data: d })); } catch { }
+      });
+
+      term.attachCustomKeyEventHandler((arg) => {
+        if (arg.code === 'Enter' && arg.type === 'keydown') {
+          const buffer = term.buffer.active;
+          for (let i = buffer.length - 1; i >= 0; i--) {
+            const line = buffer.getLine(i).translateToString(true);
+            const promptEndIndex = Math.max(line.lastIndexOf('$'), line.lastIndexOf('#'), line.lastIndexOf('>'));
+            if (promptEndIndex !== -1) {
+              const commandPart = line.substring(promptEndIndex + 1).trim();
+              const cleanCommand = commandPart.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '').replace(/[\b\u0007]/g, '').trim();
+
+              // Check for skill:skip command
+              if (cleanCommand === 'skill:skip') {
+                // Intercept - don't send to shell
+                clearTerminalLine();
+                term.writeln('\r\n\x1b[1;33m[Skill] Команда пропущена\x1b[0m');
+                skillSkipCommand();
+                return false; // Prevent Enter from being sent
               }
+
+              // Check for skill:cancel command
+              if (cleanCommand === 'skill:cancel') {
+                // Intercept - don't send to shell
+                clearTerminalLine();
+                term.writeln('\r\n\x1b[1;31m[Skill] Отменён\x1b[0m');
+                skillCancel();
+                return false; // Prevent Enter from being sent
+              }
+
+              // Check if pending skill command matches
+              if (skillDialogState.state === 'waiting_cmd' && skillDialogState.pendingCommand) {
+                const pendingNormalized = normalizeCommand(skillDialogState.pendingCommand);
+                const currentNormalized = normalizeCommand(cleanCommand);
+
+                if (pendingNormalized === currentNormalized) {
+                  // Command matches - will be executed, track it
+                  skillDialogState.commandMatched = true;
+                  document.getElementById('skillCommandDoneBtn').classList.add('hidden');
+                  // After command executed, wait for output and notify (1.5s for slow commands)
+                  setTimeout(() => onSkillCommandExecuted(), 1500);
+                } else if (cleanCommand.length > 0) {
+                  // Command was modified - show manual confirm button
+                  document.getElementById('skillCommandDoneBtn').classList.remove('hidden');
+                }
+              }
+
+              const prefixText = aiCommandPrefix.slice(0, -1);
+              const prefixSep = aiCommandPrefix.slice(-1);
+              const commandRegex = new RegExp(`(${prefixText}\\s*${prefixSep})`);
+              const match = commandPart.match(commandRegex);
+
+              if (match) {
+                const aiPrompt = commandPart.substring(match.index + match[0].length).trim();
+                // Визуальный feedback - желтый вывод AI запроса с новой строки
+                setTimeout(() => {
+                  term.writeln(`\r\n\x1b[1;33m[AI] Запрос: ${aiPrompt}\x1b[0m`);
+                }, 50);
+                ws.send(JSON.stringify({ type: 'ai_query', prompt: line }));
+                return true; // Разрешаем Enter для AI команд
+              } else if (cleanCommand) {
+                ws.send(JSON.stringify({ type: 'command_log', command: cleanCommand }));
+              }
+              break;
             }
           }
-          return true;
-        });
-      }
-
-      // ========== UI Handlers ==========
-      document.getElementById('close').onclick = () => { try { ws.close(); } catch {}; window.close(); };
-      document.getElementById('fit').onclick = () => { try { fit.fit(); sendResize(); } catch {} };
-      document.getElementById('reconnect').onclick = () => location.reload();
-
-      document.getElementById('logIndicator').onclick = () => {
-        if (currentSessionId) {
-          window.open(`/logs.html?sessionId=${encodeURIComponent(currentSessionId)}`, 'terminal-logs', 'width=800,height=600');
-        } else {
-          term.writeln('\r\n\x1b[1;33m[INFO] Session ID еще не получен\x1b[0m');
         }
-      };
+        return true;
+      });
+    }
 
-      // ========== REST Bridge Functions ==========
-      function updateSessionIndicator() {
-        const indicator = document.getElementById('sessionIndicator');
-        if (indicator && currentSessionId) {
-          indicator.textContent = `Session: ${currentSessionId.substring(0, 8)}...`;
-          indicator.title = `Session ID: ${currentSessionId}\nКликните для копирования`;
-          indicator.style.display = 'block';
-          indicator.onclick = () => {
-            navigator.clipboard.writeText(currentSessionId).then(() => {
-              const original = indicator.textContent;
-              indicator.textContent = '✓ Скопировано!';
-              indicator.style.background = 'rgba(34, 197, 94, 0.3)';
-              setTimeout(() => { indicator.textContent = original; indicator.style.background = ''; }, 1500);
-            });
-          };
-          term.writeln(`\x1b[90m[Session ID: ${currentSessionId}]\x1b[0m`);
+    // ========== UI Handlers ==========
+    document.getElementById('close').onclick = () => { try { ws.close(); } catch { }; window.close(); };
+    document.getElementById('fit').onclick = () => { try { fit.fit(); sendResize(); } catch { } };
+    document.getElementById('reconnect').onclick = () => location.reload();
+
+    document.getElementById('logIndicator').onclick = () => {
+      if (currentSessionId) {
+        window.open(`/logs.html?sessionId=${encodeURIComponent(currentSessionId)}`, 'terminal-logs', 'width=800,height=600');
+      } else {
+        term.writeln('\r\n\x1b[1;33m[INFO] Session ID еще не получен\x1b[0m');
+      }
+    };
+
+    // ========== REST Bridge Functions ==========
+    function updateSessionIndicator() {
+      const indicator = document.getElementById('sessionIndicator');
+      if (indicator && currentSessionId) {
+        indicator.textContent = `Session: ${currentSessionId.substring(0, 8)}...`;
+        indicator.title = `Session ID: ${currentSessionId}\nКликните для копирования`;
+        indicator.style.display = 'block';
+        indicator.onclick = () => {
+          navigator.clipboard.writeText(currentSessionId).then(() => {
+            const original = indicator.textContent;
+            indicator.textContent = '✓ Скопировано!';
+            indicator.style.background = 'rgba(34, 197, 94, 0.3)';
+            setTimeout(() => { indicator.textContent = original; indicator.style.background = ''; }, 1500);
+          });
+        };
+        term.writeln(`\x1b[90m[Session ID: ${currentSessionId}]\x1b[0m`);
+      }
+    }
+
+    function handleRemoteCommand(msg) {
+      term.writeln(`\r\n\x1b[1;45;97m ⚡ REST API COMMAND ⚡ \x1b[0m`);
+      term.writeln(`\x1b[1;35mCommand:\x1b[0m \x1b[1;33m${msg.command}\x1b[0m`);
+      pendingRemoteCommand = { commandId: msg.commandId, command: msg.command, requireConfirmation: msg.requireConfirmation };
+      if (msg.requireConfirmation) showCommandConfirm(msg.command);
+      else executeRemoteCommand(msg.command);
+    }
+
+    function showCommandConfirm(command) {
+      document.getElementById('commandConfirmText').textContent = command;
+      document.getElementById('commandConfirm').classList.remove('hidden');
+      term.writeln('\r\n\x1b[1;33m[REST API] Ожидается подтверждение...\x1b[0m');
+    }
+
+    function hideCommandConfirm() {
+      document.getElementById('commandConfirm').classList.add('hidden');
+    }
+
+    function executeRemoteCommand(command) {
+      remoteCommandBuffer = '';
+      remoteCommandCollecting = true;
+      term.writeln(`\r\n\x1b[1;36m[REST API] Выполняется: ${command}\x1b[0m`);
+      try { ws.send(JSON.stringify({ type: 'data', data: command + '\r' })); }
+      catch (e) { sendCommandResult('error', '', 'Failed: ' + e.message, null); }
+    }
+
+    function checkRemoteCommandCompletion() {
+      const cleanBuffer = remoteCommandBuffer.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
+      if (promptRegex.test(cleanBuffer)) {
+        const lines = cleanBuffer.split('\n');
+        let outputLines = [];
+        for (let i = lines.length - 1; i >= 0; i--) {
+          if (promptRegex.test(lines[i])) { outputLines = lines.slice(0, i); break; }
         }
-      }
-
-      function handleRemoteCommand(msg) {
-        term.writeln(`\r\n\x1b[1;45;97m ⚡ REST API COMMAND ⚡ \x1b[0m`);
-        term.writeln(`\x1b[1;35mCommand:\x1b[0m \x1b[1;33m${msg.command}\x1b[0m`);
-        pendingRemoteCommand = { commandId: msg.commandId, command: msg.command, requireConfirmation: msg.requireConfirmation };
-        if (msg.requireConfirmation) showCommandConfirm(msg.command);
-        else executeRemoteCommand(msg.command);
-      }
-
-      function showCommandConfirm(command) {
-        document.getElementById('commandConfirmText').textContent = command;
-        document.getElementById('commandConfirm').classList.remove('hidden');
-        term.writeln('\r\n\x1b[1;33m[REST API] Ожидается подтверждение...\x1b[0m');
-      }
-
-      function hideCommandConfirm() {
-        document.getElementById('commandConfirm').classList.add('hidden');
-      }
-
-      function executeRemoteCommand(command) {
+        if (outputLines.length > 0) outputLines = outputLines.slice(1);
+        sendCommandResult('completed', outputLines.join('\n').trim(), '', 0);
+        remoteCommandCollecting = false;
         remoteCommandBuffer = '';
-        remoteCommandCollecting = true;
-        term.writeln(`\r\n\x1b[1;36m[REST API] Выполняется: ${command}\x1b[0m`);
-        try { ws.send(JSON.stringify({ type: 'data', data: command + '\r' })); } 
-        catch (e) { sendCommandResult('error', '', 'Failed: ' + e.message, null); }
+        pendingRemoteCommand = null;
+      }
+    }
+
+    function sendCommandResult(status, stdout, stderr, exitCode) {
+      if (!pendingRemoteCommand) return;
+      try { ws.send(JSON.stringify({ type: 'command_result', commandId: pendingRemoteCommand.commandId, status, stdout, stderr, exitCode })); } catch { }
+    }
+
+    document.getElementById('confirmYes').onclick = () => { if (pendingRemoteCommand) { hideCommandConfirm(); executeRemoteCommand(pendingRemoteCommand.command); } };
+    document.getElementById('confirmNo').onclick = () => { if (pendingRemoteCommand) { term.writeln('\r\n\x1b[1;31m[REST API] Команда отклонена\x1b[0m'); sendCommandResult('rejected', '', 'Rejected by user', null); hideCommandConfirm(); pendingRemoteCommand = null; } };
+    document.getElementById('confirmSkip').onclick = () => { if (pendingRemoteCommand) { hideCommandConfirm(); executeRemoteCommand(pendingRemoteCommand.command); } };
+
+    // ========== Skills Functions ==========
+    let availableSkills = [];
+    let selectedSkill = null;
+    let skillActive = false;
+    let collapsedFolders = new Set();
+
+    // Make it global for onclick
+    window.toggleFolder = function (el) {
+      const folderItem = el.closest('[data-folder-id]');
+      const folderId = folderItem.dataset.folderId;
+      const id = 'children-' + folderId.replace(/[^a-z0-9]/gi, '_');
+      const childrenEl = document.getElementById(id);
+
+      if (!childrenEl) return;
+
+      const iconEl = folderItem.querySelector('.folder-icon');
+      if (childrenEl.classList.contains('hidden')) {
+        childrenEl.classList.remove('hidden');
+        if (iconEl) iconEl.textContent = '📂';
+        collapsedFolders.delete(folderId);
+      } else {
+        childrenEl.classList.add('hidden');
+        if (iconEl) iconEl.textContent = '📁';
+        collapsedFolders.add(folderId);
+      }
+    };
+
+    function updateSkillProgress(step, max) {
+      const el = document.getElementById('skillProgress');
+      if (el) el.textContent = `(шаг ${step}/${max})`;
+    }
+
+    function showSkillInput(question) {
+      const panel = document.getElementById('skillInputPanel');
+      const questionEl = document.getElementById('skillInputQuestion');
+      const inputEl = document.getElementById('skillUserInput');
+
+      questionEl.textContent = question;
+      inputEl.value = '';
+      panel.classList.remove('hidden');
+      inputEl.focus();
+    }
+
+    function hideSkillInput() {
+      document.getElementById('skillInputPanel').classList.add('hidden');
+      document.getElementById('skillProgress').textContent = '';
+    }
+
+    function sendSkillUserInput() {
+      const inputEl = document.getElementById('skillUserInput');
+      const text = inputEl.value.trim();
+      if (!text) return;
+
+      ws.send(JSON.stringify({ type: 'skill_user_input', text }));
+      hideSkillInput();
+    }
+
+    function cancelSkill() {
+      ws.send(JSON.stringify({ type: 'skill_cancel' }));
+      hideSkillInput();
+      skillActive = false;
+    }
+
+    function showSkillsPopup() {
+      const popup = document.getElementById('skillsPopup');
+      // Сбросить позицию на центр
+      popup.style.left = '50%';
+      popup.style.top = '50%';
+      popup.style.transform = 'translate(-50%, -50%)';
+      popup.classList.remove('hidden');
+      document.getElementById('skillsList').innerHTML = '<div class="skills-loading">Загрузка skills...</div>';
+      document.getElementById('skillParamsForm').classList.add('hidden');
+      ws.send(JSON.stringify({ type: 'skills_list' }));
+    }
+
+    function hideSkillsPopup() {
+      document.getElementById('skillsPopup').classList.add('hidden');
+      document.getElementById('skillParamsForm').classList.add('hidden');
+      selectedSkill = null;
+    }
+
+    function handleSkillsList(skills, error) {
+      availableSkills = skills.map(s => ({
+        ...s,
+        id: s.id || `${s.source || 'remote'}:${s.path || s.name}`
+      }));
+      const listEl = document.getElementById('skillsList');
+
+      if (error) {
+        listEl.innerHTML = `<div class="skills-empty">Ошибка: ${error}</div>`;
+        return;
       }
 
-      function checkRemoteCommandCompletion() {
-        const cleanBuffer = remoteCommandBuffer.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
-        if (promptRegex.test(cleanBuffer)) {
-          const lines = cleanBuffer.split('\n');
-          let outputLines = [];
-          for (let i = lines.length - 1; i >= 0; i--) {
-            if (promptRegex.test(lines[i])) { outputLines = lines.slice(0, i); break; }
-          }
-          if (outputLines.length > 0) outputLines = outputLines.slice(1);
-          sendCommandResult('completed', outputLines.join('\n').trim(), '', 0);
-          remoteCommandCollecting = false;
-          remoteCommandBuffer = '';
-          pendingRemoteCommand = null;
-        }
-      }
-
-      function sendCommandResult(status, stdout, stderr, exitCode) {
-        if (!pendingRemoteCommand) return;
-        try { ws.send(JSON.stringify({ type: 'command_result', commandId: pendingRemoteCommand.commandId, status, stdout, stderr, exitCode })); } catch {}
-      }
-
-      document.getElementById('confirmYes').onclick = () => { if (pendingRemoteCommand) { hideCommandConfirm(); executeRemoteCommand(pendingRemoteCommand.command); } };
-      document.getElementById('confirmNo').onclick = () => { if (pendingRemoteCommand) { term.writeln('\r\n\x1b[1;31m[REST API] Команда отклонена\x1b[0m'); sendCommandResult('rejected', '', 'Rejected by user', null); hideCommandConfirm(); pendingRemoteCommand = null; } };
-      document.getElementById('confirmSkip').onclick = () => { if (pendingRemoteCommand) { hideCommandConfirm(); executeRemoteCommand(pendingRemoteCommand.command); } };
-
-      // ========== Skills Functions ==========
-      let availableSkills = [];
-      let selectedSkill = null;
-      let skillActive = false;
-
-      function updateSkillProgress(step, max) {
-        const el = document.getElementById('skillProgress');
-        if (el) el.textContent = `(шаг ${step}/${max})`;
-      }
-
-      function showSkillInput(question) {
-        const panel = document.getElementById('skillInputPanel');
-        const questionEl = document.getElementById('skillInputQuestion');
-        const inputEl = document.getElementById('skillUserInput');
-        
-        questionEl.textContent = question;
-        inputEl.value = '';
-        panel.classList.remove('hidden');
-        inputEl.focus();
-      }
-
-      function hideSkillInput() {
-        document.getElementById('skillInputPanel').classList.add('hidden');
-        document.getElementById('skillProgress').textContent = '';
-      }
-
-      function sendSkillUserInput() {
-        const inputEl = document.getElementById('skillUserInput');
-        const text = inputEl.value.trim();
-        if (!text) return;
-        
-        ws.send(JSON.stringify({ type: 'skill_user_input', text }));
-        hideSkillInput();
-      }
-
-      function cancelSkill() {
-        ws.send(JSON.stringify({ type: 'skill_cancel' }));
-        hideSkillInput();
-        skillActive = false;
-      }
-
-      function showSkillsPopup() {
-        const popup = document.getElementById('skillsPopup');
-        // Сбросить позицию на центр
-        popup.style.left = '50%';
-        popup.style.top = '50%';
-        popup.style.transform = 'translate(-50%, -50%)';
-        popup.classList.remove('hidden');
-        document.getElementById('skillsList').innerHTML = '<div class="skills-loading">Загрузка skills...</div>';
-        document.getElementById('skillParamsForm').classList.add('hidden');
-        ws.send(JSON.stringify({ type: 'skills_list' }));
-      }
-
-      function hideSkillsPopup() {
-        document.getElementById('skillsPopup').classList.add('hidden');
-        document.getElementById('skillParamsForm').classList.add('hidden');
-        selectedSkill = null;
-      }
-
-      function handleSkillsList(skills, error) {
-        availableSkills = skills.map(s => ({
-          ...s,
-          id: s.id || `${s.source || 'remote'}:${s.path || s.name}`
-        }));
-        const listEl = document.getElementById('skillsList');
-        
-        if (error) {
-          listEl.innerHTML = `<div class="skills-empty">Ошибка: ${error}</div>`;
-          return;
-        }
-        
-        if (skills.length === 0) {
-          listEl.innerHTML = `<div class="skills-empty">
+      if (skills.length === 0) {
+        listEl.innerHTML = `<div class="skills-empty">
             Нет доступных skills.<br>
             <small style="color:#666">Проверьте:</small><br>
             <small style="color:#666">1) /.kosmos-panel/skills/&lt;path&gt;/SKILL.md (сервер)</small><br>
             <small style="color:#666">2) ~/.config/kosmos-panel/skills/&lt;path&gt;/SKILL.md (удалённый)</small>
           </div>`;
-          return;
-        }
+        return;
+      }
 
-        const rootMap = new Map();
-        const ensureRoot = (source) => {
-          if (rootMap.has(source)) return rootMap.get(source);
-          const label = source === 'project'
-            ? 'Project: /.kosmos-panel/skills'
-            : 'Remote: ~/.config/kosmos-panel/skills';
-          const node = { type: 'dir', name: label, children: [], root: true, source: source, path: '' };
-          rootMap.set(source, node);
-          return node;
-        };
+      const rootMap = new Map();
+      const ensureRoot = (source) => {
+        if (rootMap.has(source)) return rootMap.get(source);
+        const label = source === 'project'
+          ? 'Project: /.kosmos-panel/skills'
+          : 'Remote: ~/.config/kosmos-panel/skills';
+        const node = { type: 'dir', name: label, children: [], root: true, source: source, path: '' };
+        rootMap.set(source, node);
+        return node;
+      };
 
-        for (const skill of availableSkills) {
-          const root = ensureRoot(skill.source || 'remote');
-          const rawPath = (skill.path || skill.name || '').replace(/^\/+|\/+$/g, '');
-          const parts = rawPath ? rawPath.split('/') : [skill.name || 'skill'];
-          let current = root;
-          let currentPath = '';
-          for (let i = 0; i < parts.length; i++) {
-            const part = parts[i];
-            const isLeaf = i === parts.length - 1;
-            currentPath = currentPath ? currentPath + '/' + part : part;
-            if (isLeaf) {
-              current.children.push({ type: 'skill', name: part, skill });
-            } else {
-              let next = current.children.find(c => c.type === 'dir' && c.name === part);
-              if (!next) {
-                next = { type: 'dir', name: part, children: [], source: skill.source || 'remote', path: currentPath };
-                current.children.push(next);
-              }
-              current = next;
+      for (const skill of availableSkills) {
+        const root = ensureRoot(skill.source || 'remote');
+        const rawPath = (skill.path || skill.name || '').replace(/^\/+|\/+$/g, '');
+        const parts = rawPath ? rawPath.split('/') : [skill.name || 'skill'];
+        let current = root;
+        let currentPath = '';
+        for (let i = 0; i < parts.length; i++) {
+          const part = parts[i];
+          const isLeaf = i === parts.length - 1;
+          currentPath = currentPath ? currentPath + '/' + part : part;
+          if (isLeaf) {
+            current.children.push({ type: 'skill', name: part, skill });
+          } else {
+            let next = current.children.find(c => c.type === 'dir' && c.name === part);
+            if (!next) {
+              next = { type: 'dir', name: part, children: [], source: skill.source || 'remote', path: currentPath };
+              current.children.push(next);
             }
+            current = next;
           }
         }
+      }
 
-        const renderNodes = (nodes, depth = 0) => {
-          return nodes.map(node => {
-            if (node.type === 'dir') {
-              const cls = node.root ? 'skill-dir skill-root' : 'skill-dir';
-              const addBtnData = `data-source="${node.source}" data-path="${node.path || ''}"`;
-              const html = `<div class="${cls}" style="padding-left:${depth * 12}px"><button class="skill-add-btn" ${addBtnData} title="Создать skill">+</button>📁 ${node.name}</div>`;
-              return html + renderNodes(node.children, depth + 1);
-            }
-            const skill = node.skill;
+      const renderNodes = (nodes, depth = 0) => {
+        return nodes.map(node => {
+          if (node.type === 'dir') {
+            const cls = node.root ? 'skill-dir skill-root' : 'skill-dir';
+            const addBtnData = `data-source="${node.source}" data-path="${node.path || ''}"`;
+            const folderId = `${node.source}:${node.path || node.name}`;
+            const isCollapsed = collapsedFolders.has(folderId);
+            const childrenId = 'children-' + folderId.replace(/[^a-z0-9]/gi, '_');
+
             return `
-              <div class="skill-item" data-skill="${skill.id}" style="margin-left:${depth * 12}px">
+                <div class="${cls}" style="margin-left:${depth * 10}px" data-folder-id="${folderId}">
+                  <div class="skill-dir-info" onclick="toggleFolder(this)" style="cursor:pointer; flex:1">
+                    <span class="folder-icon">${isCollapsed ? '📁' : '📂'}</span>
+                    <span>${node.name}</span>
+                  </div>
+                  <button class="skill-add-btn" ${addBtnData} title="Создать skill в этой папке">+</button>
+                </div>
+                <div id="${childrenId}" class="${isCollapsed ? 'hidden' : ''}">
+                  ${renderNodes(node.children, depth + 1)}
+                </div>
+              `;
+          }
+          const skill = node.skill;
+          return `
+              <div class="skill-item" data-skill="${skill.id}" style="margin-left:${depth * 10}px">
                 <button class="skill-edit-btn" data-skill-id="${skill.id}" data-source="${skill.source}" data-path="${skill.path || ''}" title="Редактировать">✎</button>
                 <div class="skill-name">${node.name}</div>
                 <div class="skill-desc">${skill.description || 'Без описания'}</div>
               </div>
             `;
-          }).join('');
+        }).join('');
+      };
+
+      const roots = Array.from(rootMap.values());
+      listEl.innerHTML = renderNodes(roots, 0);
+      listEl.querySelectorAll('.skill-item').forEach(item => {
+        item.onclick = () => selectSkill(item.dataset.skill);
+      });
+      listEl.querySelectorAll('.skill-add-btn').forEach(btn => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          openCreateSkillDialog(btn.dataset.source, btn.dataset.path);
+        };
+      });
+      listEl.querySelectorAll('.skill-edit-btn').forEach(btn => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          openEditSkillDialog(btn.dataset.skillId, btn.dataset.source, btn.dataset.path);
+        };
+      });
+    }
+
+    function selectSkill(skillName) {
+      selectedSkill = availableSkills.find(s => s.id === skillName);
+      if (!selectedSkill) return;
+
+      const paramsForm = document.getElementById('skillParamsForm');
+      document.getElementById('skillParamsName').textContent = skillName;
+      document.getElementById('skillParamsInput').value = '';
+      let placeholder = 'Дополнительные инструкции (опционально)';
+      if (selectedSkill.params && selectedSkill.params.length > 0) {
+        const pTexts = selectedSkill.params.map(p => {
+          return p.description ? `${p.name} (${p.description})` : p.name;
+        });
+        placeholder = `Параметры: ${pTexts.join(', ')}`;
+      }
+      document.getElementById('skillParamsInput').placeholder = placeholder;
+
+      paramsForm.classList.remove('hidden');
+      document.getElementById('skillParamsInput').focus();
+    }
+
+    function executeSelectedSkill() {
+      if (!selectedSkill) return;
+      // Use the new REST-based skill dialog
+      startSkillDialog(selectedSkill);
+    }
+
+    function parseSkillParams(str) {
+      const params = {};
+      if (!str) return params;
+      const regex = /--(\w+)\s+(?:"([^"]+)"|(\S+))/g;
+      let match;
+      while ((match = regex.exec(str)) !== null) {
+        params[match[1]] = match[2] || match[3];
+      }
+      if (Object.keys(params).length === 0 && str) {
+        params.message = str;
+      }
+      return params;
+    }
+
+    // ========== NEW: Skill Dialog (REST API based) ==========
+    const skillDialogState = {
+      sessionId: null,           // skill session ID (от сервера)
+      terminalSessionId: null,   // привязка к терминалу (currentSessionId)
+      skillName: '',
+      pendingCommand: null,      // команда ожидающая выполнения
+      commandMatched: false,     // флаг для отслеживания выполнения
+      state: 'idle',             // 'idle' | 'waiting_cmd' | 'waiting_user' | 'done'
+      messages: [],              // история сообщений
+      startedAt: null,
+      outputBuffer: []           // Собираем output для передачи в API
+    };
+
+    function showSkillDialog() {
+      document.getElementById('skillDialog').classList.remove('hidden');
+    }
+
+    function hideSkillDialog() {
+      document.getElementById('skillDialog').classList.add('hidden');
+    }
+
+    function closeSkillDialog() {
+      if (skillDialogState.sessionId && skillDialogState.state !== 'done') {
+        skillCancel();
+      } else {
+        hideSkillDialog();
+        resetSkillDialogState();
+      }
+    }
+
+    function resetSkillDialogState() {
+      skillDialogState.sessionId = null;
+      skillDialogState.pendingCommand = null;
+      skillDialogState.commandMatched = false;
+      skillDialogState.state = 'idle';
+      skillDialogState.messages = [];
+      skillDialogState.outputBuffer = [];
+      document.getElementById('skillDialogBody').innerHTML = '';
+      document.getElementById('skillDialogInput').value = '';
+      document.getElementById('skillCommandDoneBtn').classList.add('hidden');
+    }
+
+    function addSkillMessage(type, content) {
+      const body = document.getElementById('skillDialogBody');
+      const msg = document.createElement('div');
+      msg.className = `skill-msg skill-msg-${type}`;
+
+      if (type === 'cmd') {
+        msg.innerHTML = `Предложена команда:<code>${escapeHtml(content)}</code>`;
+      } else if (type === 'output') {
+        msg.textContent = content;
+      } else {
+        // Преобразуем \n в <br> для красивого отображения
+        const contentWithBreaks = escapeHtml(content).replace(/\n/g, '<br>');
+        msg.innerHTML = contentWithBreaks;
+      }
+
+      body.appendChild(msg);
+      body.scrollTop = body.scrollHeight;
+
+      // Сохраняем в историю
+      skillDialogState.messages.push({ type, content, timestamp: new Date().toISOString() });
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function stripAnsi(str) {
+      return (str || '').replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
+    }
+
+    async function startSkillDialog(skill) {
+      if (!currentSessionId) {
+        term.writeln('\r\n\x1b[1;31m[Ошибка] Session ID ещё не получен\x1b[0m');
+        return;
+      }
+
+      // Сбрасываем состояние
+      resetSkillDialogState();
+      skillDialogState.terminalSessionId = currentSessionId;
+      skillDialogState.skillName = skill.name;
+      skillDialogState.startedAt = new Date().toISOString();
+
+      // Показываем окно
+      document.getElementById('skillDialogName').textContent = skill.name;
+      showSkillDialog();
+      addSkillMessage('system', 'Запуск skill...');
+
+      // Закрываем popup выбора skills
+      hideSkillsPopup();
+
+      // Получаем параметры
+      const userInput = document.getElementById('skillParamsInput').value.trim();
+      const params = parseSkillParams(userInput);
+
+      try {
+        const resp = await fetch('/api/skills/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            terminalSessionId: currentSessionId,
+            skillId: skill.id,
+            skillPath: skill.path,
+            skillSource: skill.source,
+            params,
+            prompt: userInput
+          })
+        });
+
+        const data = await resp.json();
+        if (!data.success) {
+          throw new Error(data.error || 'Failed to start skill');
+        }
+
+        skillDialogState.sessionId = data.data.skillSessionId;
+
+        // Обрабатываем ответ AI
+        handleSkillAIResponse(data.data.aiResponse);
+
+      } catch (e) {
+        addSkillMessage('error', `Ошибка: ${e.message}`);
+        skillDialogState.state = 'done';
+      }
+    }
+
+    function handleSkillAIResponse(aiResponse) {
+      if (!aiResponse) return;
+
+      const { type, content, command } = aiResponse;
+
+      if (type === 'CMD') {
+        skillDialogState.state = 'waiting_cmd';
+        skillDialogState.pendingCommand = command;
+        addSkillMessage('cmd', command);
+        addSkillMessage('system', 'Нажмите Enter для выполнения или отредактируйте команду');
+        // Вставляем команду в терминал
+        insertCommandToTerminal(command);
+        // Скрываем quick actions, показываем инпут для skip/cancel
+        updateSkillDialogFooter('waiting_cmd');
+
+      } else if (type === 'ASK') {
+        // [ASK] или [ASK:optional] - вопрос пользователю, БЛОКИРУЕТ выполнение
+        skillDialogState.state = 'waiting_user';
+        skillDialogState.pendingCommand = null;
+        const isOptional = aiResponse.required === false;
+        const questionText = aiResponse.question || content;
+        addSkillMessage('ask', questionText + (isOptional ? ' (опционально)' : ''));
+        updateSkillDialogFooter('waiting_user');
+        document.getElementById('skillDialogInput').placeholder = isOptional ? 'Введите ответ или Enter для пропуска...' : 'Введите ответ...';
+        document.getElementById('skillDialogInput').focus();
+
+      } else if (type === 'MESSAGE') {
+        // MESSAGE - информационное сообщение, НЕ блокирует - автоматически продолжаем
+        skillDialogState.state = 'idle';
+        skillDialogState.pendingCommand = null;
+        addSkillMessage('ai', content);
+        updateSkillDialogFooter('idle');
+        // Автоматически продолжаем выполнение skill
+        setTimeout(() => continueSkillAfterMessage(), 500);
+
+      } else if (type === 'DONE') {
+        skillDialogState.state = 'done';
+        skillDialogState.pendingCommand = null;
+        addSkillMessage('done', content);
+        updateSkillDialogFooter('done');
+        saveSkillToHistory('completed');
+      }
+    }
+
+    function updateSkillDialogFooter(state) {
+      const quickActions = document.getElementById('skillQuickActions');
+      const inputRow = document.querySelector('.skill-dialog-input-row');
+      const doneBtn = document.getElementById('skillCommandDoneBtn');
+
+      if (state === 'waiting_cmd') {
+        quickActions.style.display = 'flex';
+        inputRow.style.display = 'none';
+        doneBtn.classList.add('hidden');
+      } else if (state === 'waiting_user') {
+        quickActions.style.display = 'flex';
+        inputRow.style.display = 'flex';
+        doneBtn.classList.add('hidden');
+      } else if (state === 'idle') {
+        // MESSAGE - авто-продолжение, скрываем всё
+        quickActions.style.display = 'none';
+        inputRow.style.display = 'none';
+        doneBtn.classList.add('hidden');
+      } else if (state === 'done') {
+        quickActions.style.display = 'none';
+        inputRow.style.display = 'none';
+        doneBtn.classList.add('hidden');
+      }
+    }
+
+    function insertCommandToTerminal(command) {
+      // Вставляем команду в терминал через paste
+      term.paste(command);
+      term.focus();
+    }
+
+    async function sendSkillMessage() {
+      const input = document.getElementById('skillDialogInput');
+      const text = input.value.trim();
+      if (!text || skillDialogState.state !== 'waiting_user') return;
+
+      addSkillMessage('user', text);
+      input.value = '';
+
+      try {
+        const resp = await fetch(`/api/skills/${skillDialogState.sessionId}/message`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userMessage: text })
+        });
+
+        const data = await resp.json();
+        if (!data.success) {
+          throw new Error(data.error || 'Failed to send message');
+        }
+
+        handleSkillAIResponse(data.data.aiResponse);
+
+      } catch (e) {
+        addSkillMessage('error', `Ошибка: ${e.message}`);
+      }
+    }
+
+    function sendSkillQuickReply(text) {
+      document.getElementById('skillDialogInput').value = text;
+      sendSkillMessage();
+    }
+
+    // Автоматическое продолжение после MESSAGE
+    async function continueSkillAfterMessage() {
+      if (!skillDialogState.sessionId || skillDialogState.state !== 'idle') return;
+
+      try {
+        const resp = await fetch(`/api/skills/${skillDialogState.sessionId}/continue`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        const data = await resp.json();
+        if (!data.success) {
+          throw new Error(data.error || 'Failed to continue skill');
+        }
+
+        handleSkillAIResponse(data.data.aiResponse);
+
+      } catch (e) {
+        addSkillMessage('error', `Ошибка: ${e.message}`);
+      }
+    }
+
+    async function skillSkipCommand() {
+      if (!skillDialogState.sessionId || skillDialogState.state !== 'waiting_cmd') return;
+
+      addSkillMessage('system', 'Команда пропущена');
+      skillDialogState.pendingCommand = null;
+      document.getElementById('skillCommandDoneBtn').classList.add('hidden');
+
+      try {
+        const resp = await fetch(`/api/skills/${skillDialogState.sessionId}/command-result`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ skipped: true })
+        });
+
+        const data = await resp.json();
+        if (!data.success) {
+          throw new Error(data.error || 'Failed to skip command');
+        }
+
+        handleSkillAIResponse(data.data.aiResponse);
+
+      } catch (e) {
+        addSkillMessage('error', `Ошибка: ${e.message}`);
+      }
+    }
+
+    async function skillCancel() {
+      if (!skillDialogState.sessionId) {
+        hideSkillDialog();
+        resetSkillDialogState();
+        return;
+      }
+
+      try {
+        await fetch(`/api/skills/${skillDialogState.sessionId}`, { method: 'DELETE' });
+      } catch (e) {
+        console.error('Error cancelling skill:', e);
+      }
+
+      addSkillMessage('system', 'Skill отменён');
+      skillDialogState.state = 'done';
+      saveSkillToHistory('cancelled');
+      updateSkillDialogFooter('done');
+    }
+
+    async function skillCommandDone() {
+      // Вызывается когда пользователь изменил команду и явно говорит "выполнил"
+      if (!skillDialogState.sessionId || skillDialogState.state !== 'waiting_cmd') return;
+
+      addSkillMessage('system', 'Команда выполнена (изменённая)');
+      skillDialogState.pendingCommand = null;
+      document.getElementById('skillCommandDoneBtn').classList.add('hidden');
+
+      // Собираем output из буфера
+      const collectedOutput = skillDialogState.outputBuffer.join('');
+      const cleanOutput = stripAnsi(collectedOutput).trim();
+      skillDialogState.outputBuffer = [];
+
+      // Показываем output
+      if (cleanOutput) {
+        addSkillMessage('output', cleanOutput);
+      }
+
+      // Получаем output с сервера (фоллбек)
+      try {
+        const outputResp = await fetch(`/api/skills/${skillDialogState.sessionId}/output`);
+        const outputData = await outputResp.json();
+        if (outputData.success && outputData.data.lastOutput && !cleanOutput) {
+          addSkillMessage('output', outputData.data.lastOutput);
+        }
+
+        const resp = await fetch(`/api/skills/${skillDialogState.sessionId}/command-result`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            skipped: false,
+            stdout: cleanOutput || outputData.data.lastOutput || ''
+          })
+        });
+
+        const data = await resp.json();
+        if (!data.success) {
+          throw new Error(data.error || 'Failed to report command result');
+        }
+
+        handleSkillAIResponse(data.data.aiResponse);
+
+      } catch (e) {
+        addSkillMessage('error', `Ошибка: ${e.message}`);
+      }
+    }
+
+    // Функция для обработки выполнения команды из терминала
+    async function onSkillCommandExecuted() {
+      if (!skillDialogState.sessionId || skillDialogState.state !== 'waiting_cmd') return;
+      if (!skillDialogState.commandMatched) return;
+
+      skillDialogState.commandMatched = false;
+      addSkillMessage('system', 'Команда выполнена');
+      skillDialogState.pendingCommand = null;
+      document.getElementById('skillCommandDoneBtn').classList.add('hidden');
+
+      // Ждём немного для сбора output
+      await new Promise(r => setTimeout(r, 500));
+
+      // Собираем output из буфера
+      const collectedOutput = skillDialogState.outputBuffer.join('');
+      const cleanOutput = stripAnsi(collectedOutput).trim();
+      skillDialogState.outputBuffer = [];
+
+      // Показываем output
+      if (cleanOutput) {
+        addSkillMessage('output', cleanOutput);
+      }
+
+      try {
+        // Получаем output с сервера (фоллбек)
+        const outputResp = await fetch(`/api/skills/${skillDialogState.sessionId}/output`);
+        const outputData = await outputResp.json();
+        if (outputData.success && outputData.data.lastOutput && !cleanOutput) {
+          addSkillMessage('output', outputData.data.lastOutput);
+        }
+
+        // Отправляем результат с stdout
+        const resp = await fetch(`/api/skills/${skillDialogState.sessionId}/command-result`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            skipped: false,
+            stdout: cleanOutput || outputData.data.lastOutput || ''
+          })
+        });
+
+        const data = await resp.json();
+        if (!data.success) {
+          throw new Error(data.error || 'Failed to report command result');
+        }
+
+        handleSkillAIResponse(data.data.aiResponse);
+
+      } catch (e) {
+        addSkillMessage('error', `Ошибка: ${e.message}`);
+      }
+    }
+
+    // Получить текущую строку терминала
+    function getCurrentTerminalLine() {
+      const buffer = term.buffer.active;
+      for (let i = buffer.length - 1; i >= 0; i--) {
+        const line = buffer.getLine(i);
+        if (line) {
+          const text = line.translateToString(true);
+          const promptEndIndex = Math.max(text.lastIndexOf('$'), text.lastIndexOf('#'), text.lastIndexOf('>'));
+          if (promptEndIndex !== -1) {
+            return text.substring(promptEndIndex + 1).trim()
+              .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')
+              .replace(/[\b\u0007]/g, '')
+              .trim();
+          }
+        }
+      }
+      return '';
+    }
+
+    // Нормализация команды для сравнения
+    function normalizeCommand(cmd) {
+      return (cmd || '').trim().replace(/\s+/g, ' ');
+    }
+
+    // Очистить текущую строку терминала (Ctrl+U)
+    function clearTerminalLine() {
+      ws.send(JSON.stringify({ type: 'data', data: '\x15' })); // Ctrl+U
+    }
+
+    // ========== localStorage History Management ==========
+    const SKILL_HISTORY_KEY = 'kosmos_skill_history';
+    const SKILL_HISTORY_MAX_SESSIONS = 20;
+    const SKILL_HISTORY_MAX_MSG_LENGTH = 500;
+
+    function loadSkillHistory() {
+      try {
+        const data = localStorage.getItem(SKILL_HISTORY_KEY);
+        return data ? JSON.parse(data) : { sessions: [] };
+      } catch (e) {
+        console.error('[Skill History] Load error:', e);
+        return { sessions: [] };
+      }
+    }
+
+    function saveSkillToHistory(status) {
+      try {
+        const history = loadSkillHistory();
+
+        // Truncate messages content
+        const truncatedMessages = skillDialogState.messages.map(m => ({
+          ...m,
+          content: m.content && m.content.length > SKILL_HISTORY_MAX_MSG_LENGTH
+            ? m.content.substring(0, SKILL_HISTORY_MAX_MSG_LENGTH) + '...'
+            : m.content
+        }));
+
+        const session = {
+          id: skillDialogState.sessionId,
+          skillName: skillDialogState.skillName,
+          terminalSessionId: skillDialogState.terminalSessionId,
+          startedAt: skillDialogState.startedAt,
+          status: status,
+          messages: truncatedMessages
         };
 
-        const roots = Array.from(rootMap.values());
-        listEl.innerHTML = renderNodes(roots, 0);
-        listEl.querySelectorAll('.skill-item').forEach(item => {
-          item.onclick = () => selectSkill(item.dataset.skill);
-        });
-        listEl.querySelectorAll('.skill-add-btn').forEach(btn => {
-          btn.onclick = (e) => {
-            e.stopPropagation();
-            openCreateSkillDialog(btn.dataset.source, btn.dataset.path);
-          };
-        });
-        listEl.querySelectorAll('.skill-edit-btn').forEach(btn => {
-          btn.onclick = (e) => {
-            e.stopPropagation();
-            openEditSkillDialog(btn.dataset.skillId, btn.dataset.source, btn.dataset.path);
-          };
-        });
-      }
+        // Remove existing session with same id
+        history.sessions = history.sessions.filter(s => s.id !== session.id);
 
-      function selectSkill(skillName) {
-        selectedSkill = availableSkills.find(s => s.id === skillName);
-        if (!selectedSkill) return;
-        
-        const paramsForm = document.getElementById('skillParamsForm');
-        document.getElementById('skillParamsName').textContent = skillName;
-        document.getElementById('skillParamsInput').value = '';
-        document.getElementById('skillParamsInput').placeholder = selectedSkill.params && selectedSkill.params.length > 0 
-          ? `Параметры: ${selectedSkill.params.map(p => p.name).join(', ')}`
-          : 'Дополнительные инструкции (опционально)';
-        
-        paramsForm.classList.remove('hidden');
-        document.getElementById('skillParamsInput').focus();
-      }
+        // Add new session at the beginning
+        history.sessions.unshift(session);
 
-      function executeSelectedSkill() {
-        if (!selectedSkill) return;
-        
-        const userInput = document.getElementById('skillParamsInput').value.trim();
-        
-        term.writeln(`\r\n\x1b[1;36m[Skill: ${selectedSkill.name}] ${selectedSkill.description || ''}\x1b[0m`);
-        
-        const params = parseSkillParams(userInput);
-        ws.send(JSON.stringify({ 
-          type: 'skill_invoke', 
-          name: selectedSkill.name,
-          path: selectedSkill.path,
-          source: selectedSkill.source,
-          params: params,
-          prompt: userInput 
-        }));
-        
-        hideSkillsPopup();
-      }
-
-      function parseSkillParams(str) {
-        const params = {};
-        if (!str) return params;
-        const regex = /--(\w+)\s+(?:"([^"]+)"|(\S+))/g;
-        let match;
-        while ((match = regex.exec(str)) !== null) {
-          params[match[1]] = match[2] || match[3];
+        // Limit to max sessions
+        if (history.sessions.length > SKILL_HISTORY_MAX_SESSIONS) {
+          history.sessions = history.sessions.slice(0, SKILL_HISTORY_MAX_SESSIONS);
         }
-        if (Object.keys(params).length === 0 && str) {
-          params.message = str;
-        }
-        return params;
+
+        localStorage.setItem(SKILL_HISTORY_KEY, JSON.stringify(history));
+      } catch (e) {
+        console.error('[Skill History] Save error:', e);
+      }
+    }
+
+    function toggleSkillHistory() {
+      const dropdown = document.getElementById('skillHistoryDropdown');
+      if (dropdown.classList.contains('hidden')) {
+        renderSkillHistory();
+        dropdown.classList.remove('hidden');
+      } else {
+        dropdown.classList.add('hidden');
+      }
+    }
+
+    function renderSkillHistory() {
+      const history = loadSkillHistory();
+      const listEl = document.getElementById('skillHistoryList');
+
+      if (history.sessions.length === 0) {
+        listEl.innerHTML = '<div class="skill-history-empty">Нет записей в истории</div>';
+        return;
       }
 
-      // ========== Create/Edit Skill Dialog ==========
-      let createSkillSource = 'remote';
-      let createSkillPath = '';
-      let editMode = false;
-      let editSkillOriginalName = '';
+      listEl.innerHTML = history.sessions.map(session => {
+        const date = new Date(session.startedAt).toLocaleString('ru-RU');
+        const statusClass = session.status === 'completed' ? 'completed' : 'cancelled';
+        const statusText = session.status === 'completed' ? 'Завершён' : 'Отменён';
 
-      function openCreateSkillDialog(source, path) {
-        editMode = false;
-        editSkillOriginalName = '';
-        createSkillSource = source || 'remote';
-        createSkillPath = path || '';
-        
-        const basePath = source === 'project' 
-          ? '/.kosmos-panel/skills' 
-          : '~/.config/kosmos-panel/skills';
-        const fullPath = createSkillPath ? `${basePath}/${createSkillPath}` : basePath;
-        
-        document.getElementById('skillCreatePath').textContent = `Путь: ${fullPath}/<имя>/SKILL.md`;
-        document.getElementById('skillCreateName').value = '';
-        document.getElementById('skillCreateName').disabled = false;
-        document.getElementById('skillCreateContent').value = `---
+        return `
+            <div class="skill-history-item" data-session-id="${session.id}">
+              <span class="skill-history-item-name">${escapeHtml(session.skillName)}</span>
+              <span class="skill-history-item-status ${statusClass}">${statusText}</span>
+              <div class="skill-history-item-date">${date}</div>
+            </div>
+          `;
+      }).join('');
+
+      // Add click handlers to view history
+      listEl.querySelectorAll('.skill-history-item').forEach(item => {
+        item.onclick = () => viewHistorySession(item.dataset.sessionId);
+      });
+    }
+
+    function viewHistorySession(sessionId) {
+      const history = loadSkillHistory();
+      const session = history.sessions.find(s => s.id === sessionId);
+      if (!session) return;
+
+      // Close history dropdown
+      document.getElementById('skillHistoryDropdown').classList.add('hidden');
+
+      // Reset and populate dialog
+      resetSkillDialogState();
+      skillDialogState.sessionId = session.id;
+      skillDialogState.skillName = session.skillName;
+      skillDialogState.state = 'done';
+
+      document.getElementById('skillDialogName').textContent = session.skillName + ' (история)';
+      showSkillDialog();
+
+      // Render messages
+      session.messages.forEach(m => {
+        addSkillMessage(m.type, m.content);
+      });
+
+      updateSkillDialogFooter('done');
+    }
+
+    // Close history dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      const dropdown = document.getElementById('skillHistoryDropdown');
+      const historyBtn = document.getElementById('skillDialogHistoryBtn');
+      if (!dropdown.contains(e.target) && e.target !== historyBtn && !dropdown.classList.contains('hidden')) {
+        dropdown.classList.add('hidden');
+      }
+    });
+
+    // ========== Create/Edit Skill Dialog ==========
+    let createSkillSource = 'remote';
+    let createSkillPath = '';
+    let editMode = false;
+    let editSkillOriginalName = '';
+
+    function openCreateSkillDialog(source, path) {
+      editMode = false;
+      editSkillOriginalName = '';
+      createSkillSource = source || 'remote';
+      createSkillPath = path || '';
+
+      const basePath = source === 'project'
+        ? '/.kosmos-panel/skills'
+        : '~/.config/kosmos-panel/skills';
+      const fullPath = createSkillPath ? `${basePath}/${createSkillPath}` : basePath;
+
+      document.getElementById('skillCreatePath').textContent = `Путь: ${fullPath}/<имя>/SKILL.md`;
+      document.getElementById('skillCreateName').value = '';
+      document.getElementById('skillCreateName').disabled = false;
+      document.getElementById('skillCreateContent').value = `---
 name: 
 description: 
 ---
@@ -1134,259 +2351,304 @@ description:
 ## When to use me
 
 Когда использовать этот skill...`;
-        document.getElementById('skillCreateError').classList.add('hidden');
-        document.getElementById('skillCreateError').textContent = '';
-        document.querySelector('.skill-create-title').textContent = 'Создать новый Skill';
-        document.getElementById('skillCreateSave').textContent = 'Сохранить';
-        
-        document.getElementById('skillCreateOverlay').classList.remove('hidden');
-        document.getElementById('skillCreateDialog').classList.remove('hidden');
-        document.getElementById('skillCreateName').focus();
+      document.getElementById('skillCreateError').classList.add('hidden');
+      document.getElementById('skillCreateError').textContent = '';
+      document.querySelector('.skill-create-title').textContent = 'Создать новый Skill';
+      document.getElementById('skillCreateSave').textContent = 'Сохранить';
+
+      document.getElementById('skillCreateOverlay').classList.remove('hidden');
+      document.getElementById('skillCreateDialog').classList.remove('hidden');
+      document.getElementById('skillCreateName').focus();
+    }
+
+    function openEditSkillDialog(skillId, source, skillPath) {
+      editMode = true;
+      createSkillSource = source || 'remote';
+      createSkillPath = skillPath || '';
+
+      // Извлекаем имя skill из path (последняя часть)
+      const pathParts = (skillPath || '').split('/').filter(Boolean);
+      const skillName = pathParts.pop() || '';
+      editSkillOriginalName = skillName;
+      createSkillPath = pathParts.join('/'); // путь без имени skill
+
+      const basePath = source === 'project'
+        ? '/.kosmos-panel/skills'
+        : '~/.config/kosmos-panel/skills';
+      const fullPath = skillPath ? `${basePath}/${skillPath}` : `${basePath}/${skillName}`;
+
+      document.getElementById('skillCreatePath').textContent = `Путь: ${fullPath}/SKILL.md`;
+      document.getElementById('skillCreateName').value = skillName;
+      document.getElementById('skillCreateName').disabled = true; // нельзя менять имя при редактировании
+      document.getElementById('skillCreateContent').value = 'Загрузка...';
+      document.getElementById('skillCreateError').classList.add('hidden');
+      document.querySelector('.skill-create-title').textContent = 'Редактировать Skill';
+      document.getElementById('skillCreateSave').textContent = 'Сохранить';
+
+      document.getElementById('skillCreateOverlay').classList.remove('hidden');
+      document.getElementById('skillCreateDialog').classList.remove('hidden');
+
+      // Запрашиваем содержимое skill
+      ws.send(JSON.stringify({
+        type: 'skill_get_content',
+        source: source,
+        path: skillPath
+      }));
+    }
+
+    function handleSkillContent(content, error) {
+      if (error) {
+        document.getElementById('skillCreateContent').value = '';
+        document.getElementById('skillCreateError').textContent = error;
+        document.getElementById('skillCreateError').classList.remove('hidden');
+      } else {
+        document.getElementById('skillCreateContent').value = content || '';
+        document.getElementById('skillCreateContent').focus();
+      }
+    }
+
+    function closeCreateSkillDialog() {
+      document.getElementById('skillCreateOverlay').classList.add('hidden');
+      document.getElementById('skillCreateDialog').classList.add('hidden');
+      document.getElementById('skillCreateName').disabled = false;
+      editMode = false;
+      editSkillOriginalName = '';
+    }
+
+    function validateSkillName(name) {
+      if (!name) return 'Имя не может быть пустым';
+      if (!/^[a-z0-9_-]+$/i.test(name)) return 'Имя может содержать только латинские буквы, цифры, дефис и подчёркивание';
+      if (name.length > 50) return 'Имя слишком длинное (макс. 50 символов)';
+
+      // В режиме редактирования не проверяем уникальность
+      if (editMode) return null;
+
+      // Проверяем уникальность
+      const fullPath = createSkillPath ? `${createSkillPath}/${name}` : name;
+      const existingSkill = availableSkills.find(s =>
+        s.source === createSkillSource &&
+        (s.path === fullPath || s.path === name)
+      );
+      if (existingSkill) return `Skill с именем "${name}" уже существует в этой папке`;
+
+      return null;
+    }
+
+    function saveNewSkill() {
+      const nameInput = document.getElementById('skillCreateName');
+      const contentInput = document.getElementById('skillCreateContent');
+      const errorEl = document.getElementById('skillCreateError');
+
+      const name = nameInput.value.trim();
+      const content = contentInput.value;
+
+      const nameError = validateSkillName(name);
+      if (nameError) {
+        errorEl.textContent = nameError;
+        errorEl.classList.remove('hidden');
+        nameInput.focus();
+        return;
       }
 
-      function openEditSkillDialog(skillId, source, skillPath) {
-        editMode = true;
-        createSkillSource = source || 'remote';
-        createSkillPath = skillPath || '';
-        
-        // Извлекаем имя skill из path (последняя часть)
-        const pathParts = (skillPath || '').split('/').filter(Boolean);
-        const skillName = pathParts.pop() || '';
-        editSkillOriginalName = skillName;
-        createSkillPath = pathParts.join('/'); // путь без имени skill
-        
-        const basePath = source === 'project' 
-          ? '/.kosmos-panel/skills' 
-          : '~/.config/kosmos-panel/skills';
-        const fullPath = skillPath ? `${basePath}/${skillPath}` : `${basePath}/${skillName}`;
-        
-        document.getElementById('skillCreatePath').textContent = `Путь: ${fullPath}/SKILL.md`;
-        document.getElementById('skillCreateName').value = skillName;
-        document.getElementById('skillCreateName').disabled = true; // нельзя менять имя при редактировании
-        document.getElementById('skillCreateContent').value = 'Загрузка...';
-        document.getElementById('skillCreateError').classList.add('hidden');
-        document.querySelector('.skill-create-title').textContent = 'Редактировать Skill';
-        document.getElementById('skillCreateSave').textContent = 'Сохранить';
-        
-        document.getElementById('skillCreateOverlay').classList.remove('hidden');
-        document.getElementById('skillCreateDialog').classList.remove('hidden');
-        
-        // Запрашиваем содержимое skill
-        ws.send(JSON.stringify({
-          type: 'skill_get_content',
-          source: source,
-          path: skillPath
-        }));
+      if (!content.trim()) {
+        errorEl.textContent = 'Содержимое skill не может быть пустым';
+        errorEl.classList.remove('hidden');
+        contentInput.focus();
+        return;
       }
 
-      function handleSkillContent(content, error) {
-        if (error) {
-          document.getElementById('skillCreateContent').value = '';
-          document.getElementById('skillCreateError').textContent = error;
-          document.getElementById('skillCreateError').classList.remove('hidden');
-        } else {
-          document.getElementById('skillCreateContent').value = content || '';
-          document.getElementById('skillCreateContent').focus();
-        }
-      }
+      errorEl.classList.add('hidden');
 
-      function closeCreateSkillDialog() {
-        document.getElementById('skillCreateOverlay').classList.add('hidden');
-        document.getElementById('skillCreateDialog').classList.add('hidden');
-        document.getElementById('skillCreateName').disabled = false;
-        editMode = false;
-        editSkillOriginalName = '';
-      }
+      // Отправляем запрос на создание
+      const msg = {
+        type: 'skill_create',
+        source: createSkillSource,
+        path: createSkillPath,
+        name: name,
+        content: content
+      };
+      console.log('[skill_create] Sending:', msg);
+      ws.send(JSON.stringify(msg));
 
-      function validateSkillName(name) {
-        if (!name) return 'Имя не может быть пустым';
-        if (!/^[a-z0-9_-]+$/i.test(name)) return 'Имя может содержать только латинские буквы, цифры, дефис и подчёркивание';
-        if (name.length > 50) return 'Имя слишком длинное (макс. 50 символов)';
-        
-        // В режиме редактирования не проверяем уникальность
-        if (editMode) return null;
-        
-        // Проверяем уникальность
-        const fullPath = createSkillPath ? `${createSkillPath}/${name}` : name;
-        const existingSkill = availableSkills.find(s => 
-          s.source === createSkillSource && 
-          (s.path === fullPath || s.path === name)
-        );
-        if (existingSkill) return `Skill с именем "${name}" уже существует в этой папке`;
-        
-        return null;
-      }
+      // Временно дизейблим кнопку
+      document.getElementById('skillCreateSave').disabled = true;
+      document.getElementById('skillCreateSave').textContent = 'Сохранение...';
+    }
 
-      function saveNewSkill() {
-        const nameInput = document.getElementById('skillCreateName');
-        const contentInput = document.getElementById('skillCreateContent');
+    function handleSkillCreateResult(success, error) {
+      const saveBtn = document.getElementById('skillCreateSave');
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Сохранить';
+
+      if (success) {
+        closeCreateSkillDialog();
+        // Обновляем список skills
+        ws.send(JSON.stringify({ type: 'skills_list' }));
+        term.writeln(`\r\n\x1b[1;32m[Skills] Skill успешно создан\x1b[0m`);
+      } else {
         const errorEl = document.getElementById('skillCreateError');
-        
-        const name = nameInput.value.trim();
-        const content = contentInput.value;
-        
-        const nameError = validateSkillName(name);
-        if (nameError) {
-          errorEl.textContent = nameError;
-          errorEl.classList.remove('hidden');
-          nameInput.focus();
-          return;
-        }
-        
-        if (!content.trim()) {
-          errorEl.textContent = 'Содержимое skill не может быть пустым';
-          errorEl.classList.remove('hidden');
-          contentInput.focus();
-          return;
-        }
-        
-        errorEl.classList.add('hidden');
-        
-        // Отправляем запрос на создание
-        const msg = {
-          type: 'skill_create',
-          source: createSkillSource,
-          path: createSkillPath,
-          name: name,
-          content: content
-        };
-        console.log('[skill_create] Sending:', msg);
-        ws.send(JSON.stringify(msg));
-        
-        // Временно дизейблим кнопку
-        document.getElementById('skillCreateSave').disabled = true;
-        document.getElementById('skillCreateSave').textContent = 'Сохранение...';
+        errorEl.textContent = error || 'Ошибка при создании skill';
+        errorEl.classList.remove('hidden');
       }
+    }
 
-      function handleSkillCreateResult(success, error) {
-        const saveBtn = document.getElementById('skillCreateSave');
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Сохранить';
-        
-        if (success) {
-          closeCreateSkillDialog();
-          // Обновляем список skills
-          ws.send(JSON.stringify({ type: 'skills_list' }));
-          term.writeln(`\r\n\x1b[1;32m[Skills] Skill успешно создан\x1b[0m`);
-        } else {
-          const errorEl = document.getElementById('skillCreateError');
-          errorEl.textContent = error || 'Ошибка при создании skill';
-          errorEl.classList.remove('hidden');
-        }
+    // Create skill dialog event handlers
+    document.getElementById('skillCreateClose').onclick = closeCreateSkillDialog;
+    document.getElementById('skillCreateCancel').onclick = closeCreateSkillDialog;
+    document.getElementById('skillCreateOverlay').onclick = closeCreateSkillDialog;
+    document.getElementById('skillCreateSave').onclick = saveNewSkill;
+    document.getElementById('skillCreateName').onkeydown = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('skillCreateContent').focus();
       }
+      if (e.key === 'Escape') closeCreateSkillDialog();
+    };
+    document.getElementById('skillCreateContent').onkeydown = (e) => {
+      if (e.key === 'Escape') closeCreateSkillDialog();
+    };
 
-      // Create skill dialog event handlers
-      document.getElementById('skillCreateClose').onclick = closeCreateSkillDialog;
-      document.getElementById('skillCreateCancel').onclick = closeCreateSkillDialog;
-      document.getElementById('skillCreateOverlay').onclick = closeCreateSkillDialog;
-      document.getElementById('skillCreateSave').onclick = saveNewSkill;
-      document.getElementById('skillCreateName').onkeydown = (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          document.getElementById('skillCreateContent').focus();
-        }
-        if (e.key === 'Escape') closeCreateSkillDialog();
-      };
-      document.getElementById('skillCreateContent').onkeydown = (e) => {
-        if (e.key === 'Escape') closeCreateSkillDialog();
-      };
+    // ========== Draggable Create Skill Dialog ==========
+    (function () {
+      const dialog = document.getElementById('skillCreateDialog');
+      const header = document.getElementById('skillCreateHeader');
+      let isDragging = false;
+      let startX, startY, startLeft, startTop;
 
-      // ========== Draggable Create Skill Dialog ==========
-      (function() {
-        const dialog = document.getElementById('skillCreateDialog');
-        const header = document.getElementById('skillCreateHeader');
-        let isDragging = false;
-        let startX, startY, startLeft, startTop;
-
-        header.addEventListener('mousedown', (e) => {
-          if (e.target.closest('.skill-create-close')) return;
-          isDragging = true;
-          startX = e.clientX;
-          startY = e.clientY;
-          const rect = dialog.getBoundingClientRect();
-          startLeft = rect.left;
-          startTop = rect.top;
-          dialog.style.transform = 'none';
-          dialog.style.left = startLeft + 'px';
-          dialog.style.top = startTop + 'px';
-          document.body.style.userSelect = 'none';
-        });
-
-        document.addEventListener('mousemove', (e) => {
-          if (!isDragging) return;
-          const dx = e.clientX - startX;
-          const dy = e.clientY - startY;
-          dialog.style.left = Math.max(0, Math.min(window.innerWidth - dialog.offsetWidth, startLeft + dx)) + 'px';
-          dialog.style.top = Math.max(0, Math.min(window.innerHeight - dialog.offsetHeight, startTop + dy)) + 'px';
-        });
-
-        document.addEventListener('mouseup', () => {
-          if (isDragging) {
-            isDragging = false;
-            document.body.style.userSelect = '';
-          }
-        });
-      })();
-
-      // Skills popup event handlers
-      document.getElementById('skillsBtn').onclick = showSkillsPopup;
-      document.getElementById('skillsClose').onclick = hideSkillsPopup;
-      document.getElementById('skillExecuteBtn').onclick = executeSelectedSkill;
-      document.getElementById('skillParamsInput').onkeydown = (e) => {
-        if (e.key === 'Enter') executeSelectedSkill();
-        else if (e.key === 'Escape') hideSkillsPopup();
-      };
-      
-      // Skill input panel event handlers
-      document.getElementById('skillInputSend').onclick = sendSkillUserInput;
-      document.getElementById('skillInputCancel').onclick = cancelSkill;
-      document.getElementById('skillUserInput').onkeydown = (e) => {
-        if (e.key === 'Enter') sendSkillUserInput();
-        else if (e.key === 'Escape') cancelSkill();
-      };
-      
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-          hideSkillsPopup();
-          closeCreateSkillDialog();
-          if (skillActive) cancelSkill();
-        }
+      header.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.skill-create-close')) return;
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        const rect = dialog.getBoundingClientRect();
+        startLeft = rect.left;
+        startTop = rect.top;
+        dialog.style.transform = 'none';
+        dialog.style.left = startLeft + 'px';
+        dialog.style.top = startTop + 'px';
+        document.body.style.userSelect = 'none';
       });
 
-      // ========== Draggable Skills Popup ==========
-      (function() {
-        const popup = document.getElementById('skillsPopup');
-        const header = document.getElementById('skillsHeader');
-        let isDragging = false;
-        let startX, startY, startLeft, startTop;
+      document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        dialog.style.left = Math.max(0, Math.min(window.innerWidth - dialog.offsetWidth, startLeft + dx)) + 'px';
+        dialog.style.top = Math.max(0, Math.min(window.innerHeight - dialog.offsetHeight, startTop + dy)) + 'px';
+      });
 
-        header.addEventListener('mousedown', (e) => {
-          if (e.target.closest('.skills-close')) return;
-          isDragging = true;
-          startX = e.clientX;
-          startY = e.clientY;
-          const rect = popup.getBoundingClientRect();
-          startLeft = rect.left;
-          startTop = rect.top;
-          popup.style.transform = 'none';
-          popup.style.left = startLeft + 'px';
-          popup.style.top = startTop + 'px';
-          document.body.style.userSelect = 'none';
-        });
-
-        document.addEventListener('mousemove', (e) => {
-          if (!isDragging) return;
-          const dx = e.clientX - startX;
-          const dy = e.clientY - startY;
-          popup.style.left = Math.max(0, Math.min(window.innerWidth - popup.offsetWidth, startLeft + dx)) + 'px';
-          popup.style.top = Math.max(0, Math.min(window.innerHeight - popup.offsetHeight, startTop + dy)) + 'px';
-        });
-
-        document.addEventListener('mouseup', () => {
+      document.addEventListener('mouseup', () => {
+        if (isDragging) {
           isDragging = false;
           document.body.style.userSelect = '';
-        });
-      })();
-    </script>
-  </body>
+        }
+      });
+    })();
+
+    // ========== Skills Dialog Event Handlers ==========
+    document.getElementById('skillDialogClose').onclick = closeSkillDialog;
+    document.getElementById('skillDialogSendBtn').onclick = sendSkillMessage;
+    document.getElementById('skillDialogInput').onkeydown = (e) => {
+      if (e.key === 'Enter') sendSkillMessage();
+      else if (e.key === 'Escape') closeSkillDialog();
+    };
+    document.getElementById('skillDialogHistoryBtn').onclick = toggleSkillHistory;
+
+    // Skills popup event handlers
+    document.getElementById('skillsBtn').onclick = showSkillsPopup;
+    document.getElementById('skillsClose').onclick = hideSkillsPopup;
+    document.getElementById('skillExecuteBtn').onclick = executeSelectedSkill;
+    document.getElementById('skillParamsInput').onkeydown = (e) => {
+      if (e.key === 'Enter') executeSelectedSkill();
+      else if (e.key === 'Escape') hideSkillsPopup();
+    };
+
+    // Skill input panel event handlers
+    document.getElementById('skillInputSend').onclick = sendSkillUserInput;
+    document.getElementById('skillInputCancel').onclick = cancelSkill;
+    document.getElementById('skillUserInput').onkeydown = (e) => {
+      if (e.key === 'Enter') sendSkillUserInput();
+      else if (e.key === 'Escape') cancelSkill();
+    };
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        hideSkillsPopup();
+        closeCreateSkillDialog();
+        if (skillActive) cancelSkill();
+      }
+    });
+
+    // ========== Draggable Skills Popup ==========
+    (function () {
+      const popup = document.getElementById('skillsPopup');
+      const header = document.getElementById('skillsHeader');
+      let isDragging = false;
+      let startX, startY, startLeft, startTop;
+
+      header.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.skills-close')) return;
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        const rect = popup.getBoundingClientRect();
+        startLeft = rect.left;
+        startTop = rect.top;
+        popup.style.left = startLeft + 'px';
+        popup.style.top = startTop + 'px';
+        popup.style.transform = 'none';
+        document.body.style.userSelect = 'none';
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        popup.style.left = Math.max(0, Math.min(window.innerWidth - popup.offsetWidth, startLeft + dx)) + 'px';
+        popup.style.top = Math.max(0, Math.min(window.innerHeight - popup.offsetHeight, startTop + dy)) + 'px';
+      });
+
+      document.addEventListener('mouseup', () => {
+        isDragging = false;
+        document.body.style.userSelect = '';
+      });
+    })();
+
+    // ========== Draggable Skills Dialog ==========
+    (function () {
+      const dialog = document.getElementById('skillDialog');
+      const header = document.getElementById('skillDialogHeader');
+      let isDragging = false;
+      let startX, startY, startLeft, startTop;
+
+      header.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.skill-dialog-close') || e.target.closest('.skill-dialog-history-btn')) return;
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        const rect = dialog.getBoundingClientRect();
+        startLeft = rect.left;
+        startTop = rect.top;
+        document.body.style.userSelect = 'none';
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        dialog.style.left = Math.max(0, Math.min(window.innerWidth - dialog.offsetWidth, startLeft + dx)) + 'px';
+        dialog.style.top = Math.max(0, Math.min(window.innerHeight - dialog.offsetHeight, startTop + dy)) + 'px';
+        dialog.style.right = 'auto';
+      });
+
+      document.addEventListener('mouseup', () => {
+        if (isDragging) {
+          isDragging = false;
+          document.body.style.userSelect = '';
+        }
+      });
+    })();
+  </script>
+</body>
+
 </html>

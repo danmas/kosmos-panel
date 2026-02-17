@@ -21,6 +21,7 @@ class InventoryEditor {
     this.reformatBtn = document.getElementById('reformat-btn');
     this.addServerBtn = document.getElementById('add-server-btn');
     this.addCredentialBtn = document.getElementById('add-credential-btn');
+    this.reloadConfigBtn = document.getElementById('reload-config-btn');
     
     this.serverList = document.getElementById('server-list');
     this.lineColStatus = document.getElementById('line-col');
@@ -39,6 +40,9 @@ class InventoryEditor {
     this.jsonTab = document.getElementById('json-tab');
     this.previewTab = document.getElementById('preview-tab');
     this.previewContent = document.getElementById('preview-content');
+    this.aiConfigTab = document.getElementById('ai-config-tab');
+    this.aiConfigForm = document.getElementById('ai-config-form');
+    this.loadConfigBtn = document.getElementById('load-config-btn');
   }
   
   initCodeMirror() {
@@ -99,6 +103,11 @@ class InventoryEditor {
     this.reformatBtn.addEventListener('click', () => this.reformatJson());
     this.addServerBtn.addEventListener('click', () => this.addServer());
     this.addCredentialBtn.addEventListener('click', () => this.addCredential());
+    this.reloadConfigBtn.addEventListener('click', () => this.reloadConfig());
+    
+    // AI Config
+    this.aiConfigForm.addEventListener('submit', (e) => this.saveAiConfig(e));
+    this.loadConfigBtn.addEventListener('click', () => this.loadAiConfig());
     
     // Вкладки
     this.tabs.forEach(tab => {
@@ -433,10 +442,17 @@ class InventoryEditor {
     if (tabName === 'json') {
       this.jsonTab.style.display = 'flex';
       this.previewTab.style.display = 'none';
-    } else {
+      this.aiConfigTab.style.display = 'none';
+    } else if (tabName === 'preview') {
       this.jsonTab.style.display = 'none';
       this.previewTab.style.display = 'flex';
+      this.aiConfigTab.style.display = 'none';
       this.updatePreview();
+    } else if (tabName === 'ai-config') {
+      this.jsonTab.style.display = 'none';
+      this.previewTab.style.display = 'none';
+      this.aiConfigTab.style.display = 'flex';
+      this.loadAiConfig();
     }
   }
   
@@ -561,6 +577,91 @@ class InventoryEditor {
       this.jsonEditor.style.display = 'block';
     }
     this.jsonEditor.value = value;
+  }
+  
+  // AI Config methods
+  async reloadConfig() {
+    try {
+      this.setSaveStatus('loading', 'Reloading config...');
+      const response = await fetch('/api/reload-config', { method: 'POST' });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const result = await response.json();
+      this.setSaveStatus('saved', result.message || 'Config reloaded');
+      alert('Config.json reloaded successfully!');
+      
+    } catch (error) {
+      console.error('Failed to reload config:', error);
+      this.setSaveStatus('error', 'Reload failed');
+      alert('Failed to reload config: ' + error.message);
+    }
+  }
+  
+  async loadAiConfig() {
+    try {
+      const response = await fetch('/api/config');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const config = await response.json();
+      
+      // Fill form fields
+      const form = this.aiConfigForm;
+      Object.keys(config).forEach(key => {
+        const input = form.querySelector(`[name="${key}"]`);
+        if (input) {
+          input.value = config[key] || '';
+        }
+      });
+      
+    } catch (error) {
+      console.error('Failed to load AI config:', error);
+      alert('Failed to load AI config: ' + error.message);
+    }
+  }
+  
+  async saveAiConfig(event) {
+    event.preventDefault();
+    
+    try {
+      this.setSaveStatus('saving', 'Saving AI config...');
+      
+      const form = this.aiConfigForm;
+      const formData = new FormData(form);
+      const config = {};
+      
+      // Convert FormData to plain object
+      for (const [key, value] of formData.entries()) {
+        config[key] = value;
+      }
+      
+      const response = await fetch('/api/config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(config)
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+      
+      const result = await response.json();
+      this.setSaveStatus('saved', 'AI config saved');
+      alert(result.message || 'AI config saved successfully!');
+      
+    } catch (error) {
+      console.error('Failed to save AI config:', error);
+      this.setSaveStatus('error', 'Save failed');
+      alert('Failed to save AI config: ' + error.message);
+    }
   }
 }
 
