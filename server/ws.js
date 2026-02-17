@@ -501,7 +501,7 @@ function handleTerminal(ws, url) {
         // Проверяем, есть ли промпт в буфере (команда завершилась)
         const checkForPromptAndFlush = () => {
           // Ищем промпт типа "user@host:path$ " или "root@host:path# "
-          const promptRegex = /\w+@\w+[^$#>]*[\$#>]\s*$/m;
+          const promptRegex = /\w+@[\w.-]+[^$#>]*[\$#>]\s*$/m;
 
           if (promptRegex.test(stdoutBuffer)) {
             logger.debug('terminal', 'Обнаружен промпт, сохраняем вывод команды в лог');
