@@ -14,7 +14,8 @@ const {
   buildInitialUserPrompt,
   callSkillAI,
   parseSkillResponse,
-  getRemoteKnowledge
+  getRemoteKnowledge,
+  cleanOutputForAI
 } = require('./skill-ai');
 
 const router = express.Router();
@@ -66,43 +67,6 @@ const skillSessions = {};
 //   }
 // }
 
-// Функция очистки output перед отправкой AI
-function cleanOutputForAI(rawOutput) {
-  if (!rawOutput) return '(no output)';
-
-  let clean = rawOutput
-    // Удаляем ANSI escape sequences
-    .replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '')
-    // Удаляем OSC sequences (заголовок окна)
-    .replace(/\x1b\][^\x07]*\x07/g, '')
-    .replace(/]0;[^\x07]*[\x07\x00]/g, '')
-    .replace(/]0;[^\n]*/g, '')
-    // Удаляем промпты Windows/Linux
-    .replace(/^[a-zA-Z0-9_-]+@[a-zA-Z0-9_.-]+[^>$#]*[>$#]\s*/gm, '')
-    // Удаляем Microsoft Windows banner
-    .replace(/Microsoft Windows \[Version[^\]]*\][^\n]*\n/g, '')
-    .replace(/\(c\) Microsoft Corporation[^\n]*\n/g, '')
-    // Удаляем пустые строки и лишние пробелы
-    .replace(/\r/g, '')
-    .split('\n')
-    .map(l => l.trim())
-    .filter(l => l.length > 0)
-    .join('\n');
-
-  // Удаляем дубликаты строк
-  const lines = clean.split('\n');
-  const uniqueLines = [];
-  const seen = new Set();
-  for (const line of lines) {
-    if (!seen.has(line)) {
-      seen.add(line);
-      uniqueLines.push(line);
-    }
-  }
-  clean = uniqueLines.join('\n');
-
-  return clean || '(no output)';
-}
 
 // Output subscribers - called when terminal output is received
 const outputSubscribers = {};
@@ -698,7 +662,7 @@ router.post('/:skillSessionId/command-result', async (req, res) => {
     } else {
       // Use provided stdout (from frontend) or buffered output (fallback)
       const rawOutput = stdout || session.outputBuffer.join('\n') || '';
-      const cleanedOutput = cleanOutputForAI(rawOutput);
+      const cleanedOutput = cleanOutputForAI(rawOutput, session.pendingCommand);
       userContent = `Command output:\n${cleanedOutput}\n\n[Step ${session.step} of ${session.maxSteps}]`;
 
       logger.info('skills-api', 'Command output received', {
@@ -718,7 +682,7 @@ router.post('/:skillSessionId/command-result', async (req, res) => {
     // Логируем command output
     if (!skipped) {
       const rawOutput = stdout || '(buffer empty)';
-      const cleanedOutput = cleanOutputForAI(rawOutput);
+      const cleanedOutput = cleanOutputForAI(rawOutput, session.pendingCommand);
       appendToSkillsLog({
         id: uuidv4(),
         skill_log_id: skillSessionId,

@@ -38,7 +38,7 @@
 
 | Файл | Описание | Ключевые темы | Актуализация |
 |------|----------|---------------|--------------|
-| [README_AI.md](./README_AI.md) | Контекст для AI и сценарии | AI-команды ai:, подгрузка знаний (kosmos-panel.md), AI Skills (SKILL.md), RAG | 2026-02-15 |
+| [README_AI.md](./README_AI.md) | Контекст для AI и сценарии | AI-команды ai:, подгрузка знаний (ai_system_promt.md), AI Skills (SKILL.md), RAG | 2026-02-15 |
 | [README_AI_promt.md](./README_AI_promt.md) | Тексты системных промптов | Terminal AI Assistant, Multi-step Skill, AI Helper | — |
 
 ---

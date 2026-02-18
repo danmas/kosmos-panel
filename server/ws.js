@@ -7,7 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 const { findServer, resolvePrivateKey } = require('./ws-utils');
 const logger = require('./logger');
 const { getPrompt } = require('./prompts');
-const { buildSkillSystemPrompt, buildInitialUserPrompt, parseSkillResponse, getRemoteKnowledge } = require('./skill-ai');
+const { buildSkillSystemPrompt, buildInitialUserPrompt, parseSkillResponse, getRemoteKnowledge, cleanOutputForAI } = require('./skill-ai');
 
 // Lazy load skills module to avoid circular dependency
 let skillsModule = null;
@@ -502,31 +502,21 @@ function handleTerminal(ws, url) {
 
         // Проверяем, есть ли промпт в буфере (команда завершилась)
         const checkForPromptAndFlush = () => {
-          // Ищем промпт типа "user@host:path$ " или "root@host:path# "
-          const promptRegex = /\w+@[\w.-]+[^$#>]*[\$#>]\s*$/m;
+          // Ищем промпт типа "user@host:path$ " или "C:\Path> "
+          const promptRegex = /(\w+@[\w.-]+[^$#>]*[\$#>]\s*|[a-zA-Z]:\\[^>]*>\s*)$/m;
 
-          if (promptRegex.test(stdoutBuffer)) {
+          const match = stdoutBuffer.match(promptRegex);
+          if (match) {
             logger.debug('terminal', 'Обнаружен промпт, сохраняем вывод команды в лог');
 
-            // Разделяем буфер на вывод команды и промпт
-            const lines = stdoutBuffer.split('\n');
-            let commandOutput = '';
-            let promptFound = false;
-
-            for (let i = 0; i < lines.length; i++) {
-              if (promptRegex.test(lines[i])) {
-                // Нашли строку с промптом
-                promptFound = true;
-                break;
-              } else {
-                commandOutput += lines[i] + '\n';
-              }
-            }
+            // Вывод - это всё, что ДО промпта
+            const commandOutput = stdoutBuffer.substring(0, match.index);
 
             // Записываем только вывод команды (без промпта)
             let cleanOutput = '';
             if (commandOutput.trim()) {
-              cleanOutput = stripAnsi(commandOutput).trim();
+              const lastCmd = activeSkill ? activeSkill.lastCommand : null;
+              cleanOutput = cleanOutputForAI(commandOutput, lastCmd);
 
               // Фильтруем эхо ввода ai: команд
               if (cleanOutput && !cleanOutput.includes('ai:')) {
@@ -560,13 +550,14 @@ function handleTerminal(ws, url) {
               skills.notifyOutputSubscribers(sessionId, cleanOutput);
             }
 
-            // ========== Multi-step Skill: продолжить после выполнения команды ==========
             if (activeSkill && activeSkill.waitingForOutput) {
               activeSkill.waitingForOutput = false;
+              activeSkill.lastCommand = null; // Сбрасываем после получения вывода
               const outputForAI = cleanOutput || '(no output)';
               logger.debug('skills', 'Command output received, continuing skill', {
                 step: activeSkill.step,
-                outputLength: outputForAI.length
+                outputLength: outputForAI.length,
+                preview: outputForAI.substring(0, 100)
               });
 
               // Асинхронно продолжаем skill
@@ -581,8 +572,8 @@ function handleTerminal(ws, url) {
               });
             }
 
-            // Очищаем буфер
-            stdoutBuffer = '';
+            // Очищаем буфер до конца текущего совпадения промпта
+            stdoutBuffer = stdoutBuffer.substring(match.index + match[0].length);
           }
         };
 
@@ -770,6 +761,7 @@ function handleTerminal(ws, url) {
                     });
 
                     ws.send(JSON.stringify({ type: 'data', data: `\x1b[90m$ ${command}\x1b[0m\r\n` }));
+                    activeSkill.lastCommand = command; // Сохраняем для фильтрации эха в выводе
                     stream.write(command + '\r');
 
                     const stdinId = uuidv4();
@@ -859,6 +851,7 @@ function handleTerminal(ws, url) {
                         ...serverInfo
                       });
                       ws.send(JSON.stringify({ type: 'data', data: `\x1b[90m$ ${command}\x1b[0m\r\n` }));
+                      activeSkill.lastCommand = command;
                       stream.write(command + '\r');
                       const stdinId = uuidv4();
                       appendToLog({
@@ -1181,16 +1174,16 @@ function handleTerminal(ws, url) {
                 const baseSystemPrompt = getPrompt('AI_SYSTEM_PROMPT');
 
                 // --- START: Получение знаний ---
-                // Приоритет: 1) ./.kosmos-panel/kosmos-panel.md  2) ~/.config/kosmos-panel/kosmos-panel.md
+                // Приоритет: 1) ./.kosmos-panel/ai_system_promt.md  2) ~/.config/kosmos-panel/ai_system_promt.md
                 const getRemoteKnowledge = (sshConn) => new Promise((resolve) => {
                   let commandTimeout;
                   let cmd;
 
                   if (remoteOS === 'windows') {
-                    cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p1 = Join-Path (Get-Location) '.kosmos-panel\\kosmos-panel.md'; $p2 = Join-Path $env:USERPROFILE '.config\\kosmos-panel\\kosmos-panel.md'; if (Test-Path $p1) { [System.IO.File]::ReadAllText($p1, [System.Text.Encoding]::UTF8) } elseif (Test-Path $p2) { [System.IO.File]::ReadAllText($p2, [System.Text.Encoding]::UTF8) }"`;
+                    cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p1 = Join-Path (Get-Location) '.kosmos-panel\\ai_system_promt.md'; $p2 = Join-Path $env:USERPROFILE '.config\\kosmos-panel\\ai_system_promt.md'; if (Test-Path $p1) { [System.IO.File]::ReadAllText($p1, [System.Text.Encoding]::UTF8) } elseif (Test-Path $p2) { [System.IO.File]::ReadAllText($p2, [System.Text.Encoding]::UTF8) }"`;
                   } else {
-                    const primaryPath = './.kosmos-panel/kosmos-panel.md';
-                    const fallbackPath = '~/.config/kosmos-panel/kosmos-panel.md';
+                    const primaryPath = './.kosmos-panel/ai_system_promt.md';
+                    const fallbackPath = '~/.config/kosmos-panel/ai_system_promt.md';
                     cmd = `cat ${primaryPath} 2>/dev/null || cat ${fallbackPath} 2>/dev/null`;
                   }
 
