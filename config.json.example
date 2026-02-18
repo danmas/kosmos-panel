@@ -1,7 +1,6 @@
 {
   "AI_KOSMOS_MODEL_BASE_URL": "http://usa:3002/v1",
   "AI_MODEL": "CHEAP",
-  "AI_SYSTEM_PROMPT": "You are a terminal AI assistant. Convert user requests to shell commands. CRITICAL: Return ONLY the command, no explanations, no text, no markdown. Examples: User: \"show files\" → Response: \"ls -la\". User: \"check disk space\" → Response: \"df -h\" ",
   "AI_SERVER_URL_HELP": "",
   "AI_MODEL_HELP": "",
   "AI_PROVIDER_HELP": "",

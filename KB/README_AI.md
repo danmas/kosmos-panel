@@ -165,10 +165,14 @@ params:
 
 Skills можно создавать как локально (Project), так и на удалённом сервере (Remote).
 
-**Протокол ответов AI для skills:**
-AI должен отвечать в одном из трёх форматов:
+**Протокол ответов AI для skills (единый для WS и REST):**
+
+AI отвечает в одном из форматов (описание и парсинг в `server/skill-ai.js`):
+
 - `[CMD] команда` — выполнить shell-команду, AI получит вывод
-- `[MESSAGE] текст` — показать сообщение пользователю и ждать ввода
+- `[ASK] вопрос` — задать вопрос и **ждать обязательного ответа** пользователя
+- `[ASK:optional] вопрос` — задать вопрос, пользователь может пропустить (Enter)
+- `[MESSAGE] текст` — показать информационное сообщение и **сразу продолжить** (без ожидания ввода)
 - `[DONE] текст` — skill завершён, показать итоговое сообщение
 
 **WS-сообщения:**
@@ -177,7 +181,7 @@ AI должен отвечать в одном из трёх форматов:
 - `{type: "skills_list"}` — запросить список skills
 - `{type: "skill_invoke", name, path, source, params, prompt}` — запустить skill
   - `name` — имя skill (из frontmatter)
-  - `path` — относительный путь (например, `windows/check-openssh-server`)
+  - `path` — относительный путь (например, `win/git-quick-commit` или `check-openssh-server`)
   - `source` — источник: `"project"` или `"remote"`
   - `params` — объект с параметрами
   - `prompt` — дополнительный промпт от пользователя
@@ -194,29 +198,79 @@ AI должен отвечать в одном из трёх форматов:
   - Каждый skill содержит: `{id, name, description, params, path, source}`
 - `{type: "skill_step", step, max}` — текущий шаг (1-100)
 - `{type: "skill_create_result", success, error}` — результат создания skill
-- `{type: "skill_message", text}` — вопрос от AI (ждёт ввода)
+- `{type: "skill_message", text, required?}` — вопрос от AI (ждёт ввода; `required: false` для опционального)
 - `{type: "skill_complete", text}` — skill завершён
 - `{type: "skill_error", error}` — ошибка
 
 **Технические детали:**
-- Skills читаются с удалённого сервера через SSH при каждом вызове
+- Skills читаются с удалённого сервера через SSH при каждом вызове (remote); локальные — с диска проекта (project)
 - Максимум 100 шагов (итераций) на один skill
-- Таймаут на выполнение команды: 30 секунд
+- Таймаут на выполнение команды: 30 секунд (в REST API — на запрос к AI тоже 30 с)
 - История сообщений сохраняется для контекста AI
-- AI использует специальный системный промпт для multi-step выполнения
+- Единый системный промпт и парсинг ответов в `server/skill-ai.js` (используют и ws.js, и skills.js)
 - Поддержка knowledge файлов с удалённого сервера (`./.kosmos-panel/kosmos-panel.md` или `~/.config/kosmos-panel/kosmos-panel.md`)
 
 **Реализация:**
-- Backend: `server/ws.js`
-  - `getProjectSkills()` — рекурсивный поиск skills в локальном проекте
-  - `getRemoteSkills(sshConn, remoteOS)` — рекурсивный поиск skills на удалённом сервере (с учётом ОС)
-  - `getProjectSkill(skillPath)` — загрузка конкретного skill из проекта
-  - `getRemoteSkill(sshConn, skillName, remoteOS, skillPath)` — загрузка конкретного skill с удалённого сервера
-  - `activeSkill` state, `processSkillResponse()`, хук в `checkForPromptAndFlush()`
-- Frontend: `web/term.html`
-  - Построение дерева skills из плоского списка с группировкой по `source` и разбиением `path` на части
-  - Отображение с отступами по глубине вложенности
-  - UI для списка skills, ввода параметров и ответов на вопросы AI
+- `server/skill-ai.js` — общий модуль: системный промпт, `buildSkillSystemPrompt()`, `parseSkillResponse()`, `callSkillAI()`, `getRemoteKnowledge()`
+- Backend WebSocket: `server/ws.js`
+  - `getProjectSkills()`, `getRemoteSkills()`, `getProjectSkill()`, `getRemoteSkill()` — загрузка списка и контента skills
+  - использует `buildSkillSystemPrompt`, `parseSkillResponse`, `getRemoteKnowledge` из `skill-ai.js`
+  - `activeSkill` state, `processSkillResponse()` по единому протоколу, хук в `checkForPromptAndFlush()`
+- Backend REST API: `server/skills.js` — `POST /api/skills/start`, `/:id/message`, `/:id/continue` и др.; использует `skill-ai.js`
+- Frontend:
+  - `web/term.html` — standalone-терминал с плавающим окном Skills
+  - `web/workspace.html` + `web/workspace.js` — Workspace-режим (терминал + логи + Skills в левой панели)
+  - Оба клиента используют одинаковую модель поведения Enter и обработки выводов для Skills
+
+#### Поведение Enter для шагов Skills
+
+Когда AI возвращает шаг `[CMD]`:
+
+- Клиент (`term.html` или `workspace.js`) переводит сессию Skills в состояние `waiting_cmd` и:
+  - показывает в UI блок **«Предложена команда»** с текстом команды;
+  - вставляет команду в терминал через `term.paste(...)` и ждёт нажатия Enter.
+- При **любом непустом Enter в состоянии `waiting_cmd`**:
+  - текущая строка терминала (после промпта) считается **результирующей командой шага**, даже если пользователь **изменил** предложенную команду;
+  - клиент начинает собирать вывод команды:
+    - в браузере — в `skillDialogState.outputBuffer` (все чанки `data/err` за время выполнения);
+    - на сервере — через `subscribeToOutput(...)` в `server/skills.js` (последние 7 строк `session.outputBuffer`);
+  - через небольшой таймаут (сейчас ~2 секунды, чтобы дождаться вывода) клиент вызывает:
+    - `GET /api/skills/:skillSessionId/output` (фоллбек, если локальный буфер пуст);
+    - `POST /api/skills/:skillSessionId/command-result` с полем `stdout`, собранным из:
+      - локального буфера браузера **или**
+      - серверного `session.outputBuffer` (если локальный буфер пуст).
+- После `command-result`:
+  - REST-слой формирует для AI сообщение вида  
+    `Command output:\n<очищенный вывод>\n\n[Step N of M]`;
+  - вызывает `callSkillAI(...)`, парсит ответ через `parseSkillResponse(...)` и возвращает следующий шаг (`CMD` / `ASK` / `MESSAGE` / `DONE`) в браузер.
+
+Важно:
+
+- **Сравнения текста команды больше нет** — результат шага всегда основан на фактическом выводе той команды, которая реально была запущена пользователем в терминале в состоянии `waiting_cmd`. Это позволяет:
+  - править команду, добавлять флаги, менять путь и т.п.;
+  - запускать вообще другую команду, если так удобнее, а Skill просто продолжит с её выводом.
+- Специальные команды:
+  - `skill:skip` — пропуск шага без выполнения команды:
+    - не отправляется в shell, строка очищается (`Ctrl+U`);
+    - клиент сразу шлёт `POST /api/skills/:id/command-result { skipped: true }`;
+  - `skill:cancel` — полная отмена Skills-сессии:
+    - не отправляется в shell;
+    - клиент вызывает `DELETE /api/skills/:id`, переводит состояние в `done` и сохраняет сессию в историю с `status: cancelled`.
+- В standalone-терминале (`term.html`) дополнительно есть кнопка **«Я выполнил команду»**:
+  - это запасной ручной путь: если Enter не был перехвачен (нестандартный случай), пользователь может нажать кнопку, и клиент соберёт вывод из буферов и вызовет `command-result` явно.
+
+### Где используется WebSocket, где REST
+
+| Функция | WebSocket | REST |
+|--------|----------|------|
+| **Терминал в браузере** (ввод/вывод, pty) | ✅ единственный путь: `/ws/terminal` | — |
+| **Tail логов в браузере** | ✅ единственный путь: `/ws/tail` | — |
+| **Skills из браузера** | ✅ по тому же WS: `skill_invoke`, `skill_user_input` и др. (`term.html`, `app.js`, `workspace.js`) | ✅ альтернатива: `POST /api/skills/start`, `.../message`, `.../continue`, `.../command-result` и т.д. |
+| **Терминал без браузера** (скрипты, внешний API) | — | ✅ `POST /api/v1/terminal/sessions`, `.../exec` и то же для v2 |
+| **Управление уже открытыми WS-сессиями** (отправка команды в браузерный терминал) | — | ✅ `GET /api/ws-terminal/sessions`, `POST /api/ws-terminal/:sessionId/command` и др. |
+
+- **WS**: эндпоинты `/ws/terminal`, `/ws/tail`; обработка в `server/ws.js`; клиенты — `web/term.html`, `web/app.js`, `web/workspace.js`.
+- **REST**: терминал — `server/terminal.js` (v1/v2); skills — `server/skills.js` (`/api/skills/*`); мост к WS — `server.js` (`/api/ws-terminal/*`).
 
 ## Известные места/долги
 - Нет auth в веб‑панели (при необходимости — JWT + роли).
@@ -244,4 +298,4 @@ npm start
 
 ---
 
-**Последнее обновление:** 2026-02-16
+**Последнее обновление:** 2026-02-18

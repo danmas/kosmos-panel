@@ -15,7 +15,6 @@
 {
   "AI_KOSMOS_MODEL_BASE_URL": "http://usa:3002/v1",
   "AI_MODEL": "FAST",
-  "AI_SYSTEM_PROMPT": "You are a terminal AI assistant...",
   "AI_SERVER_URL_HELP": "http://localhost:3002/api/send-request",
   "AI_MODEL_HELP": "moonshotai/kimi-dev-72b:free",
   "AI_PROVIDER_HELP": "openroute",
@@ -24,13 +23,14 @@
 }
 ```
 
+Промпты для терминального AI и для skills хранятся в **prompts.json** (ключи `AI_SYSTEM_PROMPT`, `SKILL_SYSTEM_PROMPT_WITH_ASK`). См. `prompts.json.example`. Если в `prompts.json` нет `AI_SYSTEM_PROMPT`, используется значение из config/env.
+
 ### Описание полей
 
 | Поле | Назначение | Пример |
 |------|------------|--------|
 | `AI_KOSMOS_MODEL_BASE_URL` | Base URL AI-сервера для терминальных команд | `http://usa:3002/v1` |
 | `AI_MODEL` | Модель для терминального AI | `FAST`, `CHEAP`, `SMART` |
-| `AI_SYSTEM_PROMPT` | Системный промпт для терминального AI | "You are a terminal AI assistant..." |
 | `AI_SERVER_URL_HELP` | URL AI-сервера для системы помощи | `http://localhost:3002/api/send-request` |
 | `AI_MODEL_HELP` | Модель для AI-помощника | `moonshotai/kimi-dev-72b:free` |
 | `AI_PROVIDER_HELP` | Провайдер AI для помощника | `openroute`, `groq` |
@@ -71,10 +71,11 @@ function loadConfig() {
 После загрузки, все переменные из `config.json` доступны через `process.env`:
 
 ```javascript
-// В server/ws.js
+// В server/ws.js — URL и модель из config/env
 const aiBaseUrl = process.env.AI_KOSMOS_MODEL_BASE_URL || 'http://localhost:3002/v1';
 const aiModel = process.env.AI_MODEL || 'CHEAP';
-const systemPrompt = process.env.AI_SYSTEM_PROMPT || 'Default prompt';
+// Системный промпт — из prompts.json (fallback: config/env), см. server/prompts.js
+const systemPrompt = getPrompt('AI_SYSTEM_PROMPT');
 ```
 
 ## REST API

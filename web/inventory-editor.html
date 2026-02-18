@@ -1,490 +1,539 @@
 <!doctype html>
 <html lang="ru">
-  <head>
-    <meta charset="utf-8" />
-    <title>Kosmos Panel - Редактор Inventory</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="./styles.css" />
-    
-    <!-- CodeMirror для подсветки синтаксиса -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/selection/active-line.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldcode.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/brace-fold.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.css">
-    <style>
-      .editor-container {
-        display: flex;
-        flex-direction: column;
-        height: 100vh;
-        padding: 0;
+
+<head>
+  <meta charset="utf-8" />
+  <title>Kosmos Panel - Редактор Inventory</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="./themes.css" />
+  <link rel="stylesheet" href="./styles.css" />
+  <script src="./theme-manager.js"></script>
+
+  <!-- CodeMirror для подсветки синтаксиса -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/selection/active-line.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/brace-fold.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.css">
+  <style>
+    .editor-container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      padding: 0;
+    }
+
+    .editor-header {
+      background: var(--bg-tile);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .editor-title {
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: var(--text);
+    }
+
+    .editor-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .btn {
+      padding: 0.5rem 1rem;
+      border: 1px solid var(--border);
+      background: var(--bg-dark);
+      color: var(--text);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: all 0.2s;
+    }
+
+    .btn:hover {
+      background: var(--accent);
+      color: var(--bg-dark);
+    }
+
+    .btn.primary {
+      background: var(--accent);
+      color: var(--bg-dark);
+      border-color: var(--accent);
+    }
+
+    .btn.danger {
+      background: var(--error);
+      border-color: var(--error);
+      color: var(--text-inverted);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .editor-main {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .editor-sidebar {
+      width: 280px;
+      background: var(--bg-tile);
+      border-right: 1px solid var(--border);
+      padding: 1rem;
+      overflow-y: auto;
+      flex-shrink: 0;
+    }
+
+    .editor-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      max-width: calc(100vw - 300px);
+    }
+
+    .editor-tabs {
+      display: flex;
+      background: var(--bg-tile);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1rem;
+      flex-shrink: 0;
+    }
+
+    .tab-content {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .editor-tab {
+      padding: 0.75rem 1rem;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+
+    .editor-tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    .editor-tab:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .json-editor {
+      flex: 1;
+      width: 100%;
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      font-size: 14px;
+      background: var(--bg-dark);
+      color: var(--text);
+      border: none;
+      padding: 1rem;
+      outline: none;
+      resize: none;
+      line-height: 1.5;
+      tab-size: 2;
+      box-sizing: border-box;
+    }
+
+    .json-editor:focus {
+      background: var(--bg-hover);
+    }
+
+    /* CodeMirror стили */
+    .CodeMirror {
+      height: 100%;
+      flex: 1;
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      font-size: 14px;
+      line-height: 1.5;
+      border: none;
+      background: var(--bg-dark) !important;
+    }
+
+    .CodeMirror-gutters {
+      background: var(--bg-tile) !important;
+      border-right: 1px solid var(--border) !important;
+    }
+
+    .CodeMirror-linenumber {
+      color: var(--text-muted) !important;
+      padding: 0 8px !important;
+    }
+
+    .CodeMirror-cursor {
+      border-left: 2px solid var(--accent) !important;
+    }
+
+    .CodeMirror-selected {
+      background: rgba(96, 165, 250, 0.2) !important;
+    }
+
+    .CodeMirror-activeline-background {
+      background: rgba(255, 255, 255, 0.03) !important;
+    }
+
+    /* JSON подсветка */
+    .cm-string {
+      color: var(--success) !important;
+    }
+
+    .cm-number {
+      color: var(--warning) !important;
+    }
+
+    .cm-atom {
+      color: #c678dd !important;
+    }
+
+    .cm-keyword {
+      color: var(--primary) !important;
+    }
+
+    .cm-property {
+      color: var(--error) !important;
+    }
+
+    .cm-punctuation {
+      color: var(--text) !important;
+    }
+
+    .cm-comment {
+      color: var(--text-muted) !important;
+      font-style: italic;
+    }
+
+    .editor-codemirror {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .status-bar {
+      background: var(--bg-tile);
+      border-top: 1px solid var(--border);
+      padding: 0.5rem 1rem;
+      font-size: 0.85rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--text-muted);
+    }
+
+    .status-info {
+      display: flex;
+      gap: 1rem;
+    }
+
+    .validation-error {
+      color: var(--error);
+      background: var(--error-dim);
+      padding: 0.25rem 0.5rem;
+      border-radius: 3px;
+      font-family: monospace;
+      font-size: 0.8rem;
+    }
+
+    .validation-ok {
+      color: var(--success);
+    }
+
+    .sidebar-section {
+      margin-bottom: 1.5rem;
+    }
+
+    .sidebar-title {
+      font-weight: bold;
+      margin-bottom: 0.5rem;
+      color: var(--text);
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .server-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .server-item {
+      padding: 0.5rem;
+      background: var(--bg-dark);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 0.85rem;
+    }
+
+    .server-item:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: var(--accent);
+    }
+
+    .server-name {
+      font-weight: bold;
+      color: var(--text);
+    }
+
+    .server-env {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+
+    .server-services {
+      margin-top: 0.25rem;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .modal.show {
+      display: flex;
+    }
+
+    .modal-content {
+      background: var(--bg-tile);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.5rem;
+      max-width: 500px;
+      width: 90%;
+    }
+
+    .modal-title {
+      font-size: 1.1rem;
+      font-weight: bold;
+      margin-bottom: 1rem;
+      color: var(--text);
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: flex-end;
+      margin-top: 1rem;
+    }
+
+    .auto-save-indicator {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.8rem;
+    }
+
+    .save-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      animation: pulse 2s infinite;
+    }
+
+    .save-dot.saving {
+      background: var(--warning);
+      animation: none;
+    }
+
+    .save-dot.error {
+      background: var(--error);
+      animation: none;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1;
       }
-      
-      .editor-header {
-        background: var(--bg-tile);
-        border-bottom: 1px solid var(--border);
-        padding: 1rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        flex-shrink: 0;
-      }
-      
-      .editor-title {
-        font-size: 1.2rem;
-        font-weight: bold;
-        color: var(--text);
-      }
-      
-      .editor-actions {
-        display: flex;
-        gap: 0.5rem;
-      }
-      
-      .btn {
-        padding: 0.5rem 1rem;
-        border: 1px solid var(--border);
-        background: var(--bg-dark);
-        color: var(--text);
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 0.9rem;
-        transition: all 0.2s;
-      }
-      
-      .btn:hover {
-        background: var(--accent);
-        color: var(--bg-dark);
-      }
-      
-      .btn.primary {
-        background: var(--accent);
-        color: var(--bg-dark);
-        border-color: var(--accent);
-      }
-      
-      .btn.danger {
-        background: #dc3545;
-        border-color: #dc3545;
-        color: white;
-      }
-      
-      .btn:disabled {
+
+      50% {
         opacity: 0.5;
-        cursor: not-allowed;
       }
-      
-      .editor-main {
-        display: flex;
-        flex: 1;
-        min-height: 0;
-      }
-      
-      .editor-sidebar {
-        width: 280px;
-        background: var(--bg-tile);
-        border-right: 1px solid var(--border);
-        padding: 1rem;
-        overflow-y: auto;
-        flex-shrink: 0;
-      }
-      
-      .editor-content {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        min-width: 0;
-        max-width: calc(100vw - 300px);
-      }
-      
-      .editor-tabs {
-        display: flex;
-        background: var(--bg-tile);
-        border-bottom: 1px solid var(--border);
-        padding: 0 1rem;
-        flex-shrink: 0;
-      }
-      
-      .tab-content {
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        min-height: 0;
-      }
-      
-      .editor-tab {
-        padding: 0.75rem 1rem;
-        border: none;
-        background: transparent;
-        color: var(--text-muted);
-        cursor: pointer;
-        border-bottom: 2px solid transparent;
-        transition: all 0.2s;
-      }
-      
-      .editor-tab.active {
-        color: var(--accent);
-        border-bottom-color: var(--accent);
-      }
-      
-      .editor-tab:hover {
-        color: var(--text);
-        background: rgba(255, 255, 255, 0.05);
-      }
-      
-      .json-editor {
-        flex: 1;
-        width: 100%;
-        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-        font-size: 14px;
-        background: var(--bg-dark);
-        color: var(--text);
-        border: none;
-        padding: 1rem;
-        outline: none;
-        resize: none;
-        line-height: 1.5;
-        tab-size: 2;
-        box-sizing: border-box;
-      }
-      
-      .json-editor:focus {
-        background: #1a1a1a;
-      }
-      
-      /* CodeMirror стили */
-      .CodeMirror {
-        height: 100%;
-        flex: 1;
-        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-        font-size: 14px;
-        line-height: 1.5;
-        border: none;
-        background: var(--bg-dark) !important;
-      }
-      
-      .CodeMirror-gutters {
-        background: var(--bg-tile) !important;
-        border-right: 1px solid var(--border) !important;
-      }
-      
-      .CodeMirror-linenumber {
-        color: var(--text-muted) !important;
-        padding: 0 8px !important;
-      }
-      
-      .CodeMirror-cursor {
-        border-left: 2px solid var(--accent) !important;
-      }
-      
-      .CodeMirror-selected {
-        background: rgba(96, 165, 250, 0.2) !important;
-      }
-      
-      .CodeMirror-activeline-background {
-        background: rgba(255, 255, 255, 0.03) !important;
-      }
-      
-      /* JSON подсветка */
-      .cm-string { color: #98d982 !important; }
-      .cm-number { color: #d19a66 !important; }
-      .cm-atom { color: #c678dd !important; }
-      .cm-keyword { color: #61afef !important; }
-      .cm-property { color: #e06c75 !important; }
-      .cm-punctuation { color: var(--text) !important; }
-      .cm-comment { color: var(--text-muted) !important; font-style: italic; }
-      
-      .editor-codemirror {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-      }
-      
-      .status-bar {
-        background: var(--bg-tile);
-        border-top: 1px solid var(--border);
-        padding: 0.5rem 1rem;
-        font-size: 0.85rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        color: var(--text-muted);
-      }
-      
-      .status-info {
-        display: flex;
-        gap: 1rem;
-      }
-      
-      .validation-error {
-        color: #dc3545;
-        background: rgba(220, 53, 69, 0.1);
-        padding: 0.25rem 0.5rem;
-        border-radius: 3px;
-        font-family: monospace;
-        font-size: 0.8rem;
-      }
-      
-      .validation-ok {
-        color: #28a745;
-      }
-      
-      .sidebar-section {
-        margin-bottom: 1.5rem;
-      }
-      
-      .sidebar-title {
-        font-weight: bold;
-        margin-bottom: 0.5rem;
-        color: var(--text);
-        font-size: 0.9rem;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-      }
-      
-      .server-list {
-        display: flex;
-        flex-direction: column;
-        gap: 0.25rem;
-      }
-      
-      .server-item {
-        padding: 0.5rem;
-        background: var(--bg-dark);
-        border: 1px solid var(--border);
-        border-radius: 4px;
-        cursor: pointer;
-        transition: all 0.2s;
-        font-size: 0.85rem;
-      }
-      
-      .server-item:hover {
-        background: rgba(255, 255, 255, 0.05);
-        border-color: var(--accent);
-      }
-      
-      .server-name {
-        font-weight: bold;
-        color: var(--text);
-      }
-      
-      .server-env {
-        color: var(--text-muted);
-        font-size: 0.8rem;
-      }
-      
-      .server-services {
-        margin-top: 0.25rem;
-        font-size: 0.75rem;
-        color: var(--text-muted);
-      }
-      
-      .modal {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.7);
-        display: none;
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
-      }
-      
-      .modal.show {
-        display: flex;
-      }
-      
-      .modal-content {
-        background: var(--bg-tile);
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        padding: 1.5rem;
-        max-width: 500px;
-        width: 90%;
-      }
-      
-      .modal-title {
-        font-size: 1.1rem;
-        font-weight: bold;
-        margin-bottom: 1rem;
-        color: var(--text);
-      }
-      
-      .modal-actions {
-        display: flex;
-        gap: 0.5rem;
-        justify-content: flex-end;
-        margin-top: 1rem;
-      }
-      
-      .auto-save-indicator {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        font-size: 0.8rem;
-      }
-      
-      .save-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: #28a745;
-        animation: pulse 2s infinite;
-      }
-      
-      .save-dot.saving {
-        background: #ffc107;
-        animation: none;
-      }
-      
-      .save-dot.error {
-        background: #dc3545;
-        animation: none;
-      }
-      
-      @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="editor-container">
-      <div class="editor-header">
-        <div class="editor-title">
-          <a href="/" style="color: var(--accent); text-decoration: none; margin-right: 1rem;">← Назад</a>
-          Редактор Inventory
+    }
+  </style>
+</head>
+
+<body>
+  <div class="editor-container">
+    <div class="editor-header">
+      <div class="editor-title">
+        <a href="/" style="color: var(--accent); text-decoration: none; margin-right: 1rem;">← Назад</a>
+        Редактор Inventory
+      </div>
+      <div class="editor-actions">
+        <button class="btn" id="reformat-btn">Форматировать</button>
+        <button class="btn" id="validate-btn">Проверить</button>
+        <button class="btn primary" id="save-btn">Сохранить</button>
+        <button class="btn danger" id="reload-btn">Перезагрузить</button>
+        <button class="btn" id="reload-config-btn">Reload Config</button>
+      </div>
+    </div>
+
+    <div class="editor-main">
+      <div class="editor-sidebar">
+        <div class="sidebar-section">
+          <div class="sidebar-title">Серверы</div>
+          <div class="server-list" id="server-list">
+            <!-- Серверы будут загружены динамически -->
+          </div>
         </div>
-        <div class="editor-actions">
-          <button class="btn" id="reformat-btn">Форматировать</button>
-          <button class="btn" id="validate-btn">Проверить</button>
-          <button class="btn primary" id="save-btn">Сохранить</button>
-          <button class="btn danger" id="reload-btn">Перезагрузить</button>
-          <button class="btn" id="reload-config-btn">Reload Config</button>
+
+        <div class="sidebar-section">
+          <div class="sidebar-title">Действия</div>
+          <button class="btn" id="add-server-btn" style="width: 100%; margin-bottom: 0.5rem;">Добавить сервер</button>
+          <button class="btn" id="add-credential-btn" style="width: 100%;">Добавить ключ</button>
         </div>
       </div>
-      
-      <div class="editor-main">
-        <div class="editor-sidebar">
-          <div class="sidebar-section">
-            <div class="sidebar-title">Серверы</div>
-            <div class="server-list" id="server-list">
-              <!-- Серверы будут загружены динамически -->
-            </div>
-          </div>
-          
-          <div class="sidebar-section">
-            <div class="sidebar-title">Действия</div>
-            <button class="btn" id="add-server-btn" style="width: 100%; margin-bottom: 0.5rem;">Добавить сервер</button>
-            <button class="btn" id="add-credential-btn" style="width: 100%;">Добавить ключ</button>
-          </div>
+
+      <div class="editor-content">
+        <div class="editor-tabs">
+          <button class="editor-tab active" data-tab="json">JSON</button>
+          <button class="editor-tab" data-tab="preview">Предварительный просмотр</button>
+          <button class="editor-tab" data-tab="ai-config">AI Config</button>
         </div>
-        
-        <div class="editor-content">
-          <div class="editor-tabs">
-            <button class="editor-tab active" data-tab="json">JSON</button>
-            <button class="editor-tab" data-tab="preview">Предварительный просмотр</button>
-            <button class="editor-tab" data-tab="ai-config">AI Config</button>
-          </div>
-          
-          <div class="tab-content" id="json-tab">
-            <div class="editor-codemirror" id="json-editor-container"></div>
-            <textarea class="json-editor" id="json-editor" placeholder="Загрузка inventory.json..." style="display: none;"></textarea>
-          </div>
-          
-          <div class="tab-content" id="preview-tab" style="display: none; padding: 1rem; overflow-y: auto;">
-            <div id="preview-content">Выберите вкладку JSON для загрузки предварительного просмотра</div>
-          </div>
-          
-          <div class="tab-content" id="ai-config-tab" style="display: none; padding: 1rem; overflow-y: auto;">
-            <div style="max-width: 800px; margin: 0 auto;">
-              <h3 style="color: var(--text); margin-bottom: 1rem;">AI Configuration</h3>
-              <form id="ai-config-form">
-                <div style="display: flex; flex-direction: column; gap: 1rem;">
-                  <div>
-                    <label style="display: block; color: var(--text); margin-bottom: 0.5rem; font-weight: bold;">AI_KOSMOS_MODEL_BASE_URL</label>
-                    <input type="text" name="AI_KOSMOS_MODEL_BASE_URL" class="config-input" style="width: 100%; padding: 0.5rem; background: var(--bg-dark); border: 1px solid var(--border); color: var(--text); border-radius: 4px;" />
-                  </div>
-                  
-                  <div>
-                    <label style="display: block; color: var(--text); margin-bottom: 0.5rem; font-weight: bold;">AI_MODEL</label>
-                    <input type="text" name="AI_MODEL" class="config-input" style="width: 100%; padding: 0.5rem; background: var(--bg-dark); border: 1px solid var(--border); color: var(--text); border-radius: 4px;" />
-                  </div>
-                  
-                  <div>
-                    <label style="display: block; color: var(--text); margin-bottom: 0.5rem; font-weight: bold;">AI_SYSTEM_PROMPT</label>
-                    <textarea name="AI_SYSTEM_PROMPT" class="config-input" rows="4" style="width: 100%; padding: 0.5rem; background: var(--bg-dark); border: 1px solid var(--border); color: var(--text); border-radius: 4px; font-family: monospace;"></textarea>
-                  </div>
-                  
-                  <div>
-                    <label style="display: block; color: var(--text); margin-bottom: 0.5rem; font-weight: bold;">AI_SERVER_URL_HELP</label>
-                    <input type="text" name="AI_SERVER_URL_HELP" class="config-input" style="width: 100%; padding: 0.5rem; background: var(--bg-dark); border: 1px solid var(--border); color: var(--text); border-radius: 4px;" />
-                  </div>
-                  
-                  <div>
-                    <label style="display: block; color: var(--text); margin-bottom: 0.5rem; font-weight: bold;">AI_MODEL_HELP</label>
-                    <input type="text" name="AI_MODEL_HELP" class="config-input" style="width: 100%; padding: 0.5rem; background: var(--bg-dark); border: 1px solid var(--border); color: var(--text); border-radius: 4px;" />
-                  </div>
-                  
-                  <div>
-                    <label style="display: block; color: var(--text); margin-bottom: 0.5rem; font-weight: bold;">AI_PROVIDER_HELP</label>
-                    <input type="text" name="AI_PROVIDER_HELP" class="config-input" style="width: 100%; padding: 0.5rem; background: var(--bg-dark); border: 1px solid var(--border); color: var(--text); border-radius: 4px;" />
-                  </div>
-                  
-                  <div>
-                    <label style="display: block; color: var(--text); margin-bottom: 0.5rem; font-weight: bold;">AI_SYSTEM_PROMPT_HELP</label>
-                    <textarea name="AI_SYSTEM_PROMPT_HELP" class="config-input" rows="3" style="width: 100%; padding: 0.5rem; background: var(--bg-dark); border: 1px solid var(--border); color: var(--text); border-radius: 4px; font-family: monospace;"></textarea>
-                  </div>
-                  
-                  <div>
-                    <label style="display: block; color: var(--text); margin-bottom: 0.5rem; font-weight: bold;">AI_HELP_CONTEXT_FILES</label>
-                    <input type="text" name="AI_HELP_CONTEXT_FILES" class="config-input" style="width: 100%; padding: 0.5rem; background: var(--bg-dark); border: 1px solid var(--border); color: var(--text); border-radius: 4px;" placeholder="README_AI.md,KB/README_INVENTORY_EDITOR.md" />
-                  </div>
-                  
-                  <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-                    <button type="submit" class="btn primary">Save AI Config</button>
-                    <button type="button" class="btn" id="load-config-btn">Load Current Config</button>
-                  </div>
+
+        <div class="tab-content" id="json-tab">
+          <div class="editor-codemirror" id="json-editor-container"></div>
+          <textarea class="json-editor" id="json-editor" placeholder="Загрузка inventory.json..."
+            style="display: none;"></textarea>
+        </div>
+
+        <div class="tab-content" id="preview-tab" style="display: none; padding: 1rem; overflow-y: auto;">
+          <div id="preview-content">Выберите вкладку JSON для загрузки предварительного просмотра</div>
+        </div>
+
+        <div class="tab-content" id="ai-config-tab" style="display: none; padding: 1rem; overflow-y: auto;">
+          <div style="max-width: 800px; margin: 0 auto;">
+            <h3 style="color: var(--text); margin-bottom: 1rem;">AI Configuration</h3>
+            <form id="ai-config-form">
+              <div style="display: flex; flex-direction: column; gap: 1rem;">
+                <div>
+                  <label
+                    style="display: block; color: var(--text); margin-bottom: 0.5rem; font-weight: bold;">AI_KOSMOS_MODEL_BASE_URL</label>
+                  <input type="text" name="AI_KOSMOS_MODEL_BASE_URL" class="config-input"
+                    style="width: 100%; padding: 0.5rem; background: var(--bg-dark); border: 1px solid var(--border); color: var(--text); border-radius: 4px;" />
                 </div>
-              </form>
-            </div>
+
+                <div>
+                  <label
+                    style="display: block; color: var(--text); margin-bottom: 0.5rem; font-weight: bold;">AI_MODEL</label>
+                  <input type="text" name="AI_MODEL" class="config-input"
+                    style="width: 100%; padding: 0.5rem; background: var(--bg-dark); border: 1px solid var(--border); color: var(--text); border-radius: 4px;" />
+                </div>
+
+                <div>
+                  <label
+                    style="display: block; color: var(--text); margin-bottom: 0.5rem; font-weight: bold;">AI_SYSTEM_PROMPT</label>
+                  <textarea name="AI_SYSTEM_PROMPT" class="config-input" rows="4"
+                    style="width: 100%; padding: 0.5rem; background: var(--bg-dark); border: 1px solid var(--border); color: var(--text); border-radius: 4px; font-family: monospace;"></textarea>
+                </div>
+
+                <div>
+                  <label
+                    style="display: block; color: var(--text); margin-bottom: 0.5rem; font-weight: bold;">AI_SERVER_URL_HELP</label>
+                  <input type="text" name="AI_SERVER_URL_HELP" class="config-input"
+                    style="width: 100%; padding: 0.5rem; background: var(--bg-dark); border: 1px solid var(--border); color: var(--text); border-radius: 4px;" />
+                </div>
+
+                <div>
+                  <label
+                    style="display: block; color: var(--text); margin-bottom: 0.5rem; font-weight: bold;">AI_MODEL_HELP</label>
+                  <input type="text" name="AI_MODEL_HELP" class="config-input"
+                    style="width: 100%; padding: 0.5rem; background: var(--bg-dark); border: 1px solid var(--border); color: var(--text); border-radius: 4px;" />
+                </div>
+
+                <div>
+                  <label
+                    style="display: block; color: var(--text); margin-bottom: 0.5rem; font-weight: bold;">AI_PROVIDER_HELP</label>
+                  <input type="text" name="AI_PROVIDER_HELP" class="config-input"
+                    style="width: 100%; padding: 0.5rem; background: var(--bg-dark); border: 1px solid var(--border); color: var(--text); border-radius: 4px;" />
+                </div>
+
+                <div>
+                  <label
+                    style="display: block; color: var(--text); margin-bottom: 0.5rem; font-weight: bold;">AI_SYSTEM_PROMPT_HELP</label>
+                  <textarea name="AI_SYSTEM_PROMPT_HELP" class="config-input" rows="3"
+                    style="width: 100%; padding: 0.5rem; background: var(--bg-dark); border: 1px solid var(--border); color: var(--text); border-radius: 4px; font-family: monospace;"></textarea>
+                </div>
+
+                <div>
+                  <label
+                    style="display: block; color: var(--text); margin-bottom: 0.5rem; font-weight: bold;">AI_HELP_CONTEXT_FILES</label>
+                  <input type="text" name="AI_HELP_CONTEXT_FILES" class="config-input"
+                    style="width: 100%; padding: 0.5rem; background: var(--bg-dark); border: 1px solid var(--border); color: var(--text); border-radius: 4px;"
+                    placeholder="README_AI.md,KB/README_INVENTORY_EDITOR.md" />
+                </div>
+
+                <!-- Кнопки убраны, функционал перенесен в кнопку 'Сохранить' в шапке -->
+
+              </div>
+            </form>
           </div>
         </div>
       </div>
-      
-      <div class="status-bar">
-        <div class="status-info">
-          <span id="line-col">Строка 1, Столбец 1</span>
-          <span id="file-size">0 байт</span>
-          <span id="validation-status" class="validation-ok">✓ JSON корректен</span>
-        </div>
-        <div class="auto-save-indicator">
-          <div class="save-dot" id="save-dot"></div>
-          <span id="save-status">Сохранено</span>
-        </div>
-      </div>
     </div>
 
-    <!-- Модальные окна -->
-    <div class="modal" id="confirm-modal">
-      <div class="modal-content">
-        <div class="modal-title" id="modal-title">Подтверждение</div>
-        <div id="modal-message">Вы уверены?</div>
-        <div class="modal-actions">
-          <button class="btn" id="modal-cancel">Отмена</button>
-          <button class="btn danger" id="modal-confirm">Подтвердить</button>
-        </div>
+    <div class="status-bar">
+      <div class="status-info">
+        <span id="line-col">Строка 1, Столбец 1</span>
+        <span id="file-size">0 байт</span>
+        <span id="validation-status" class="validation-ok">✓ JSON корректен</span>
+      </div>
+      <div class="auto-save-indicator">
+        <div class="save-dot" id="save-dot"></div>
+        <span id="save-status">Сохранено</span>
       </div>
     </div>
+  </div>
 
-    <script src="./inventory-editor.js"></script>
-  </body>
+  <!-- Модальные окна -->
+  <div class="modal" id="confirm-modal">
+    <div class="modal-content">
+      <div class="modal-title" id="modal-title">Подтверждение</div>
+      <div id="modal-message">Вы уверены?</div>
+      <div class="modal-actions">
+        <button class="btn" id="modal-cancel">Отмена</button>
+        <button class="btn danger" id="modal-confirm">Подтвердить</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./inventory-editor.js"></script>
+</body>
+
 </html>

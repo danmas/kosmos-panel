@@ -4,41 +4,7 @@
  */
 
 const logger = require('./logger');
-
-// Системный промпт для multi-step skills с поддержкой [ASK]
-const SKILL_SYSTEM_PROMPT_WITH_ASK = `You are a terminal AI assistant executing a multi-step skill.
-
-RESPONSE FORMAT - Use EXACTLY ONE of these formats per response:
-
-1. [CMD] command_here
-   Execute this shell command. You will receive the command output.
-
-2. [ASK] question here
-   Ask the user a question and WAIT for their required response.
-   Use this when you MUST have user input (commit message, confirmation, choice).
-   Examples: "Введи сообщение коммита:", "Продолжить? (yes/no):"
-
-3. [ASK:optional] question here
-   Ask the user an optional question. They can skip by pressing Enter.
-   Example: "Хочешь добавить тег? (оставь пустым для пропуска):"
-
-4. [MESSAGE] informational text here
-   Show an informational message and CONTINUE immediately without waiting.
-   Use for progress updates, status messages, warnings.
-   Examples: "Обрабатываю папку 1 из 3...", "Проверяю ветку dev..."
-
-5. [DONE] final message here
-   The skill is complete. Show this final message to the user.
-
-RULES:
-- Always start your response with [CMD], [ASK], [ASK:optional], [MESSAGE], or [DONE]
-- Only ONE format per response
-- [CMD]: provide only the command, no explanations
-- [ASK]: BLOCKS execution - user MUST respond (required input)
-- [ASK:optional]: BLOCKS execution - user CAN respond or skip (optional input)
-- [MESSAGE]: does NOT block - execution continues automatically (info only)
-- [DONE]: summarize what was accomplished`;
-
+const { getPrompt } = require('./prompts');
 
 /**
  * Build full system prompt for a skill
@@ -48,7 +14,7 @@ RULES:
  * @returns {string} Full system prompt
  */
 function buildSkillSystemPrompt(skillContent, skillName, remoteKnowledge = '') {
-  let fullSystemPrompt = SKILL_SYSTEM_PROMPT_WITH_ASK;
+  let fullSystemPrompt = getPrompt('SKILL_SYSTEM_PROMPT_WITH_ASK');
   
   if (remoteKnowledge && remoteKnowledge.trim()) {
     fullSystemPrompt += `\n\n--- System Context ---\n${remoteKnowledge.trim()}`;
@@ -283,8 +249,8 @@ async function getRemoteKnowledge(sshConn, remoteOS) {
 }
 
 module.exports = {
-  SKILL_SYSTEM_PROMPT: SKILL_SYSTEM_PROMPT_WITH_ASK,  // alias for compatibility
-  SKILL_SYSTEM_PROMPT_WITH_ASK,
+  get SKILL_SYSTEM_PROMPT() { return getPrompt('SKILL_SYSTEM_PROMPT_WITH_ASK'); },
+  get SKILL_SYSTEM_PROMPT_WITH_ASK() { return getPrompt('SKILL_SYSTEM_PROMPT_WITH_ASK'); },
   buildSkillSystemPrompt,
   buildInitialUserPrompt,
   callSkillAI,

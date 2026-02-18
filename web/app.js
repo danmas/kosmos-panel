@@ -18,7 +18,12 @@ function ensureTerm() {
   xterm = new window.Terminal({
     convertEol: true,
     cursorBlink: true,
-    theme: { background: '#000000', foreground: '#00ff00' }
+    theme: window.themeManager ? window.themeManager.getTerminalTheme() : { background: '#000000', foreground: '#00ff00' }
+  });
+  window.addEventListener('theme-changed', () => {
+    if (xterm && window.themeManager) {
+      xterm.options.theme = window.themeManager.getTerminalTheme();
+    }
   });
   fitAddon = new window.FitAddon.FitAddon();
   xterm.loadAddon(fitAddon);
@@ -450,6 +455,19 @@ function openTerminalWindow(server, mode, arg) {
 
   // xterm per window
   const term = new window.Terminal({ convertEol: true, cursorBlink: true, theme: { background: '#000000', foreground: '#00ff00' } });
+
+  if (window.themeManager) {
+    term.options.theme = window.themeManager.getTerminalTheme();
+  } else {
+    // Lazy load theme manager into main window if missing (unlikely given index.html changes)
+    const script = document.createElement('script');
+    script.src = './theme-manager.js';
+    script.onload = () => {
+      if (window.themeManager) term.options.theme = window.themeManager.getTerminalTheme();
+    };
+    document.head.appendChild(script);
+  }
+
   const fit = new window.FitAddon.FitAddon(); term.loadAddon(fit); term.open(termDiv); setTimeout(() => { try { fit.fit(); } catch { } }, 0);
 
   const wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws';

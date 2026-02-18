@@ -1,192 +1,226 @@
 <!doctype html>
 <html lang="ru">
-  <head>
-    <meta charset="utf-8" />
-    <title>Сырой лог terminal_log.json</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <style>
-      html, body { 
-        height:100%; 
-        margin:0; 
-        background:#0b0f1a; 
-        color:#e6ecff; 
-        font-family: 'Courier New', monospace; 
-      }
-      .header { 
-        padding:12px 20px; 
-        background:#0e1322; 
-        border-bottom:1px solid #1c2333; 
-        display:flex; 
-        justify-content:space-between; 
-        align-items:center; 
-      }
-      .title { 
-        font-weight:700; 
-        font-size:18px; 
-      }
-      .controls { 
-        display:flex; 
-        gap:8px; 
-        align-items:center; 
-      }
-      .status { 
-        font-size:12px; 
-        color:#888; 
-        padding:4px 8px; 
-        background:#1b2544; 
-        border-radius:4px; 
-      }
-      button { 
-        background:#1b2544; 
-        border:1px solid #223055; 
-        color:#e6ecff; 
-        border-radius:6px; 
-        padding:6px 12px; 
-        cursor:pointer; 
-        font-size:12px; 
-      }
-      button:hover { 
-        background:#2d4a87; 
-      }
-      .content { 
-        height:calc(100vh - 60px); 
-        padding:20px; 
-        overflow:auto; 
-      }
-      .json-container { 
-        background:#0e1322; 
-        border:1px solid #1c2333; 
-        border-radius:8px; 
-        padding:16px; 
-        font-size:13px; 
-        line-height:1.4; 
-        white-space:pre-wrap; 
-        word-break:break-all; 
-      }
-      .loading { 
-        text-align:center; 
-        color:#4a9eff; 
-        margin-top:100px; 
-      }
-      .error { 
-        text-align:center; 
-        color:#ff6b6b; 
-        margin-top:100px; 
-      }
-      /* JSON syntax highlighting */
-      .json-key { color:#4a9eff; }
-      .json-string { color:#98d982; }
-      .json-number { color:#f5a623; }
-      .json-boolean { color:#d73a49; }
-      .json-null { color:#6f42c1; }
-      .json-punctuation { color:#e6ecff; }
-    </style>
-  </head>
-  <body>
-    <div class="header">
-      <div class="title">terminal_log.json (сырой формат)</div>
-      <div class="controls">
-        <div class="status" id="status">Загрузка...</div>
-        <button onclick="location.href='/logs.html'">📋 Логи (красиво)</button>
-        <button onclick="location.href='/'">← Главная</button>
-        <button onclick="refreshData()">Обновить</button>
-        <button onclick="downloadJSON()">💾 Скачать</button>
-      </div>
-    </div>
-    
-    <div class="content">
-      <div class="json-container" id="jsonContent">
-        <div class="loading">Загрузка terminal_log.json...</div>
-      </div>
-    </div>
 
-    <script>
-      let rawData = null;
+<head>
+  <meta charset="utf-8" />
+  <title>Сырой лог terminal_log.json</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="./themes.css" />
+  <script src="./theme-manager.js"></script>
+  <style>
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg-main);
+      color: var(--text-main);
+      font-family: 'Courier New', monospace;
+    }
 
-      async function loadData() {
-        try {
-          document.getElementById('status').textContent = 'Загрузка...';
-          
-          const response = await fetch('/api/logs?t=' + Date.now());
-          rawData = await response.json();
-          
-          displayJSON(rawData);
-          
-          const count = rawData.length;
-          const lastEntry = rawData[rawData.length - 1];
-          const lastTime = lastEntry ? new Date(lastEntry.timestamp).toLocaleString('ru-RU') : 'нет';
-          
-          document.getElementById('status').textContent = `${count} записей, последняя: ${lastTime}`;
-          
-        } catch (err) {
-          console.error('Ошибка загрузки данных:', err);
-          document.getElementById('jsonContent').innerHTML = `
+    .header {
+      padding: 12px 20px;
+      background: var(--bg-header);
+      border-bottom: 1px solid var(--border-light);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .title {
+      font-weight: 700;
+      font-size: 18px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .status {
+      font-size: 12px;
+      color: var(--text-dim);
+      padding: 4px 8px;
+      background: var(--bg-card);
+      border-radius: 4px;
+    }
+
+    button {
+      background: var(--bg-card);
+      border: 1px solid var(--border-light);
+      color: var(--text-main);
+      border-radius: 6px;
+      padding: 6px 12px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    button:hover {
+      background: var(--bg-hover);
+    }
+
+    .content {
+      height: calc(100vh - 60px);
+      padding: 20px;
+      overflow: auto;
+    }
+
+    .json-container {
+      background: var(--bg-header);
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      padding: 16px;
+      font-size: 13px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .loading {
+      text-align: center;
+      color: var(--primary);
+      margin-top: 100px;
+    }
+
+    .error {
+      text-align: center;
+      color: var(--error);
+      margin-top: 100px;
+    }
+
+    /* JSON syntax highlighting */
+    .json-key {
+      color: var(--primary);
+    }
+
+    .json-string {
+      color: var(--success);
+    }
+
+    .json-number {
+      color: var(--warning);
+    }
+
+    .json-boolean {
+      color: var(--error);
+    }
+
+    .json-null {
+      color: var(--text-dim);
+    }
+
+    .json-punctuation {
+      color: var(--text-main);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="header">
+    <div class="title">terminal_log.json (сырой формат)</div>
+    <div class="controls">
+      <div class="status" id="status">Загрузка...</div>
+      <button onclick="location.href='/logs.html'">📋 Логи (красиво)</button>
+      <button onclick="location.href='/'">← Главная</button>
+      <button onclick="refreshData()">Обновить</button>
+      <button onclick="downloadJSON()">💾 Скачать</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="json-container" id="jsonContent">
+      <div class="loading">Загрузка terminal_log.json...</div>
+    </div>
+  </div>
+
+  <script>
+    let rawData = null;
+
+    async function loadData() {
+      try {
+        document.getElementById('status').textContent = 'Загрузка...';
+
+        const response = await fetch('/api/logs?t=' + Date.now());
+        rawData = await response.json();
+
+        displayJSON(rawData);
+
+        const count = rawData.length;
+        const lastEntry = rawData[rawData.length - 1];
+        const lastTime = lastEntry ? new Date(lastEntry.timestamp).toLocaleString('ru-RU') : 'нет';
+
+        document.getElementById('status').textContent = `${count} записей, последняя: ${lastTime}`;
+
+      } catch (err) {
+        console.error('Ошибка загрузки данных:', err);
+        document.getElementById('jsonContent').innerHTML = `
             <div class="error">
               <div>Ошибка загрузки данных</div>
               <div style="font-size:12px; margin-top:8px;">${err.message}</div>
             </div>
           `;
-          document.getElementById('status').textContent = 'Ошибка';
-        }
+        document.getElementById('status').textContent = 'Ошибка';
       }
+    }
 
-      function displayJSON(data) {
-        const container = document.getElementById('jsonContent');
-        
-        // Простое форматирование JSON с отступами
-        const formatted = JSON.stringify(data, null, 2);
-        
-        // Базовая подсветка синтаксиса
-        const highlighted = formatted
-          .replace(/("([^"\\\\]|\\\\.)*")\s*:/g, '<span class="json-key">$1</span>:')
-          .replace(/:\s*("([^"\\\\]|\\\\.)*")/g, ': <span class="json-string">$1</span>')
-          .replace(/:\s*(\d+\.?\d*)/g, ': <span class="json-number">$1</span>')
-          .replace(/:\s*(true|false)/g, ': <span class="json-boolean">$1</span>')
-          .replace(/:\s*(null)/g, ': <span class="json-null">$1</span>')
-          .replace(/([{}[\],])/g, '<span class="json-punctuation">$1</span>');
-        
-        container.innerHTML = highlighted;
-      }
+    function displayJSON(data) {
+      const container = document.getElementById('jsonContent');
 
-      function refreshData() {
-        loadData();
-      }
+      // Простое форматирование JSON с отступами
+      const formatted = JSON.stringify(data, null, 2);
 
-      function downloadJSON() {
-        if (!rawData) {
-          alert('Нет данных для скачивания');
-          return;
-        }
-        
-        const blob = new Blob([JSON.stringify(rawData, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `terminal_log_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        
-        URL.revokeObjectURL(url);
-      }
+      // Базовая подсветка синтаксиса
+      const highlighted = formatted
+        .replace(/("([^"\\\\]|\\\\.)*")\s*:/g, '<span class="json-key">$1</span>:')
+        .replace(/:\s*("([^"\\\\]|\\\\.)*")/g, ': <span class="json-string">$1</span>')
+        .replace(/:\s*(\d+\.?\d*)/g, ': <span class="json-number">$1</span>')
+        .replace(/:\s*(true|false)/g, ': <span class="json-boolean">$1</span>')
+        .replace(/:\s*(null)/g, ': <span class="json-null">$1</span>')
+        .replace(/([{}[\],])/g, '<span class="json-punctuation">$1</span>');
 
-      // Горячие клавиши
-      document.addEventListener('keydown', (e) => {
-        if (e.code === 'F5' || (e.ctrlKey && e.code === 'KeyR')) {
-          e.preventDefault();
-          refreshData();
-        } else if (e.ctrlKey && e.code === 'KeyS') {
-          e.preventDefault();
-          downloadJSON();
-        }
-      });
+      container.innerHTML = highlighted;
+    }
 
-      // Автообновление каждые 60 секунд
-      setInterval(refreshData, 60000);
-
-      // Загружаем при старте
+    function refreshData() {
       loadData();
-    </script>
-  </body>
+    }
+
+    function downloadJSON() {
+      if (!rawData) {
+        alert('Нет данных для скачивания');
+        return;
+      }
+
+      const blob = new Blob([JSON.stringify(rawData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `terminal_log_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      URL.revokeObjectURL(url);
+    }
+
+    // Горячие клавиши
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'F5' || (e.ctrlKey && e.code === 'KeyR')) {
+        e.preventDefault();
+        refreshData();
+      } else if (e.ctrlKey && e.code === 'KeyS') {
+        e.preventDefault();
+        downloadJSON();
+      }
+    });
+
+    // Автообновление каждые 60 секунд
+    setInterval(refreshData, 60000);
+
+    // Загружаем при старте
+    loadData();
+  </script>
+</body>
+
 </html>
