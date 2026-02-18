@@ -1,56 +1,62 @@
 <!doctype html>
 <html lang="ru">
-  <head>
-    <meta charset="utf-8" />
-    <title>Kosmos Panel</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="./styles.css" />
-    <link rel="stylesheet" href="https://unpkg.com/xterm/css/xterm.css" />
-    <script src="https://unpkg.com/xterm/lib/xterm.js"></script>
-    <script src="https://unpkg.com/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
-  </head>
-  <body>
-    <div class="topbar">
-      <div class="brand">Kosmos</div>
-      <div class="ai-search">
-        <input type="text" id="ai-search-input" placeholder="Задать вопрос по системе..." />
-        <button id="ai-search-btn">🔍</button>
+
+<head>
+  <meta charset="utf-8" />
+  <title>Kosmos Panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="./themes.css" />
+  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="https://unpkg.com/xterm/css/xterm.css" />
+  <script src="https://unpkg.com/xterm/lib/xterm.js"></script>
+  <script src="https://unpkg.com/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+</head>
+
+<body>
+  <div class="topbar">
+    <div class="brand">Kosmos</div>
+    <div class="ai-search">
+      <input type="text" id="ai-search-input" placeholder="Задать вопрос по системе..." />
+      <button id="ai-search-btn">🔍</button>
+    </div>
+    <div class="topbar-actions">
+      <a href="/logs.html" class="topbar-link" title="Лог команд терминала">📋 Логи</a>
+      <a href="/raw-logs.html" class="topbar-link" title="Сырой лог JSON">📄 Raw</a>
+      <a href="/inventory-editor.html" class="topbar-link" title="Редактор конфигурации">⚙️ Настройки</a>
+      <select class="theme-selector topbar-link"
+        style="background:transparent; color:var(--text-muted); padding:4px; max-width:80px;"
+        title="Тема оформления"></select>
+      <div class="ts" id="ts"></div>
+    </div>
+  </div>
+  <div id="grid" class="grid"></div>
+  <div id="tooltip" class="tooltip hidden"></div>
+
+  <!-- Server Actions Modal -->
+  <div id="actionsModal" class="actions-modal">
+    <div class="actions-modal-content">
+      <div class="actions-modal-header">
+        <div class="actions-modal-title" id="actionsModalTitle">Действия</div>
+        <button class="actions-modal-close" id="actionsModalClose">×</button>
       </div>
-      <div class="topbar-actions">
-        <a href="/logs.html" class="topbar-link" title="Лог команд терминала">📋 Логи</a>
-        <a href="/raw-logs.html" class="topbar-link" title="Сырой лог JSON">📄 Raw</a>
-        <a href="/inventory-editor.html" class="topbar-link" title="Редактор конфигурации">⚙️ Настройки</a>
-        <div class="ts" id="ts"></div>
+      <div class="actions-modal-body" id="actionsModalBody"></div>
+    </div>
+  </div>
+
+  <div id="overlay" class="overlay hidden">
+    <div class="overlay-content">
+      <div class="overlay-top">
+        <div class="overlay-title" id="overlay-title"></div>
+        <button id="overlay-close">Закрыть</button>
+      </div>
+      <div class="overlay-body">
+        <div id="terminal" class="terminal"></div>
       </div>
     </div>
-    <div id="grid" class="grid"></div>
-    <div id="tooltip" class="tooltip hidden"></div>
+  </div>
 
-    <!-- Server Actions Modal -->
-    <div id="actionsModal" class="actions-modal">
-      <div class="actions-modal-content">
-        <div class="actions-modal-header">
-          <div class="actions-modal-title" id="actionsModalTitle">Действия</div>
-          <button class="actions-modal-close" id="actionsModalClose">×</button>
-        </div>
-        <div class="actions-modal-body" id="actionsModalBody"></div>
-      </div>
-    </div>
+  <script src="./theme-manager.js"></script>
+  <script src="./app.js"></script>
+</body>
 
-    <div id="overlay" class="overlay hidden">
-      <div class="overlay-content">
-        <div class="overlay-top">
-          <div class="overlay-title" id="overlay-title"></div>
-          <button id="overlay-close">Закрыть</button>
-        </div>
-        <div class="overlay-body">
-          <div id="terminal" class="terminal"></div>
-        </div>
-      </div>
-    </div>
-
-    <script src="./app.js"></script>
-  </body>
-  </html>
-
-
+</html>

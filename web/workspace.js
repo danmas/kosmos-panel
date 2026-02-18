@@ -27,10 +27,18 @@ wsLeftTop.style.height = layout.topHeight + '%';
 
 // ========== Terminal Setup ==========
 const termDiv = document.getElementById('wsTerm');
+const initialTheme = window.themeManager ? window.themeManager.getTerminalTheme() : { background: '#000000', foreground: '#00ff00' };
 const term = new Terminal({
     convertEol: true,
     cursorBlink: true,
-    theme: { background: '#000000', foreground: '#00ff00' }
+    theme: initialTheme
+});
+
+// Update terminal theme on change
+window.addEventListener('theme-changed', () => {
+    if (term && window.themeManager) {
+        term.options.theme = window.themeManager.getTerminalTheme();
+    }
 });
 const fitAddon = new window.FitAddon.FitAddon();
 term.loadAddon(fitAddon);
@@ -183,14 +191,13 @@ term.attachCustomKeyEventHandler((arg) => {
                     return false;
                 }
 
-                // Check pending skill command
-                if (skillDialogState.state === 'waiting_cmd' && skillDialogState.pendingCommand) {
-                    const pendingNormalized = normalizeCommand(skillDialogState.pendingCommand);
-                    const currentNormalized = normalizeCommand(cleanCommand);
-
-                    if (pendingNormalized === currentNormalized) {
+                // Skill: если скилл ждёт выполнения команды, любой непустой Enter
+                // считает текущую команду результатом шага (даже если пользователь её изменил)
+                if (skillDialogState.state === 'waiting_cmd') {
+                    if (cleanCommand.length > 0) {
                         skillDialogState.commandMatched = true;
-                        setTimeout(() => onSkillCommandExecuted(), 1500);
+                        // даём чуть больше времени на сбор вывода
+                        setTimeout(() => onSkillCommandExecuted(), 2000);
                     }
                 }
 
@@ -580,6 +587,7 @@ function handleSkillsList(skills, error) {
             const skill = node.skill;
             return `
         <div class="ws-skill-item" data-skill="${skill.id}" style="margin-left:${depth * 8}px">
+          <button class="ws-skill-edit-btn" data-skill-id="${skill.id}" data-source="${skill.source}" data-path="${skill.path || ''}" title="Редактировать">✎</button>
           <div class="ws-skill-name">${escapeHtml(node.name)}</div>
           <div class="ws-skill-desc">${escapeHtml(skill.description || 'Без описания')}</div>
         </div>`;
@@ -592,6 +600,12 @@ function handleSkillsList(skills, error) {
     // Attach click handlers
     panel.querySelectorAll('.ws-skill-item').forEach(item => {
         item.onclick = () => selectSkill(item.dataset.skill);
+    });
+    panel.querySelectorAll('.ws-skill-edit-btn').forEach(btn => {
+        btn.onclick = (e) => {
+            e.stopPropagation();
+            openEditSkillDialog(btn.dataset.skillId, btn.dataset.source, btn.dataset.path);
+        };
     });
 }
 
@@ -1008,22 +1022,135 @@ function saveSkillToHistory(status) {
     } catch { }
 }
 
-// ========== Skill WS handlers (create, content) ==========
+// ========== Skill Create/Edit Dialog ==========
 let createSkillSource = 'remote';
 let createSkillPath = '';
+let editMode = false;
+let editSkillOriginalName = '';
+
+function openEditSkillDialog(skillId, source, skillPath) {
+    editMode = true;
+    createSkillSource = source || 'remote';
+    createSkillPath = skillPath || '';
+    const pathParts = (skillPath || '').split('/').filter(Boolean);
+    const skillName = pathParts.pop() || '';
+    editSkillOriginalName = skillName;
+    createSkillPath = pathParts.join('/');
+
+    const basePath = source === 'project' ? '/.kosmos-panel/skills' : '~/.config/kosmos-panel/skills';
+    const fullPath = skillPath ? `${basePath}/${skillPath}` : `${basePath}/${skillName}`;
+
+    document.getElementById('wsSkillCreatePath').textContent = `Путь: ${fullPath}/SKILL.md`;
+    document.getElementById('wsSkillCreateName').value = skillName;
+    document.getElementById('wsSkillCreateName').disabled = true;
+    document.getElementById('wsSkillCreateContent').value = 'Загрузка...';
+    document.getElementById('wsSkillCreateError').classList.add('hidden');
+    document.getElementById('wsSkillCreateTitle').textContent = 'Редактировать Skill';
+    document.getElementById('wsSkillCreateSave').textContent = 'Сохранить';
+
+    document.getElementById('wsSkillCreateOverlay').classList.remove('hidden');
+    document.getElementById('wsSkillCreateDialog').classList.remove('hidden');
+
+    ws.send(JSON.stringify({ type: 'skill_get_content', source: source, path: skillPath }));
+}
 
 function handleSkillContent(content, error) {
-    // Not used in workspace (no edit dialog), but keep for compatibility
-    console.log('[workspace] skill_content received', error || 'ok');
+    if (error) {
+        document.getElementById('wsSkillCreateContent').value = '';
+        document.getElementById('wsSkillCreateError').textContent = error;
+        document.getElementById('wsSkillCreateError').classList.remove('hidden');
+    } else {
+        document.getElementById('wsSkillCreateContent').value = content || '';
+        document.getElementById('wsSkillCreateError').classList.add('hidden');
+        document.getElementById('wsSkillCreateContent').focus();
+    }
+}
+
+function closeCreateSkillDialog() {
+    document.getElementById('wsSkillCreateOverlay').classList.add('hidden');
+    document.getElementById('wsSkillCreateDialog').classList.add('hidden');
+    document.getElementById('wsSkillCreateName').disabled = false;
+    editMode = false;
+    editSkillOriginalName = '';
+}
+
+function validateSkillName(name) {
+    if (!name) return 'Имя не может быть пустым';
+    if (!/^[a-z0-9_-]+$/i.test(name)) return 'Имя может содержать только латинские буквы, цифры, дефис и подчёркивание';
+    if (name.length > 50) return 'Имя слишком длинное (макс. 50 символов)';
+    if (editMode) return null;
+    const fullPath = createSkillPath ? `${createSkillPath}/${name}` : name;
+    const existingSkill = availableSkills.find(s =>
+        s.source === createSkillSource && (s.path === fullPath || s.path === name)
+    );
+    if (existingSkill) return `Skill с именем "${name}" уже существует в этой папке`;
+    return null;
+}
+
+function saveNewSkill() {
+    const nameInput = document.getElementById('wsSkillCreateName');
+    const contentInput = document.getElementById('wsSkillCreateContent');
+    const errorEl = document.getElementById('wsSkillCreateError');
+
+    const name = nameInput.value.trim();
+    const content = contentInput.value;
+
+    const nameError = validateSkillName(name);
+    if (nameError) {
+        errorEl.textContent = nameError;
+        errorEl.classList.remove('hidden');
+        nameInput.focus();
+        return;
+    }
+    if (!content.trim()) {
+        errorEl.textContent = 'Содержимое skill не может быть пустым';
+        errorEl.classList.remove('hidden');
+        contentInput.focus();
+        return;
+    }
+
+    errorEl.classList.add('hidden');
+
+    const msg = {
+        type: 'skill_create',
+        source: createSkillSource,
+        path: createSkillPath,
+        name: name,
+        content: content
+    };
+    ws.send(JSON.stringify(msg));
+
+    document.getElementById('wsSkillCreateSave').disabled = true;
+    document.getElementById('wsSkillCreateSave').textContent = 'Сохранение...';
 }
 
 function handleSkillCreateResult(success, error) {
-    console.log('[workspace] skill_create_result', success, error);
+    const saveBtn = document.getElementById('wsSkillCreateSave');
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Сохранить';
+
     if (success) {
+        closeCreateSkillDialog();
         ws.send(JSON.stringify({ type: 'skills_list' }));
-        term.writeln(`\r\n\x1b[1;32m[Skills] Skill успешно создан\x1b[0m`);
+        term.writeln(`\r\n\x1b[1;32m[Skills] Skill успешно сохранён\x1b[0m`);
+    } else {
+        const errorEl = document.getElementById('wsSkillCreateError');
+        errorEl.textContent = error || 'Ошибка при сохранении skill';
+        errorEl.classList.remove('hidden');
     }
 }
+
+// Skill create/edit dialog event handlers
+document.getElementById('wsSkillCreateClose').onclick = closeCreateSkillDialog;
+document.getElementById('wsSkillCreateCancel').onclick = closeCreateSkillDialog;
+document.getElementById('wsSkillCreateOverlay').onclick = closeCreateSkillDialog;
+document.getElementById('wsSkillCreateSave').onclick = saveNewSkill;
+document.getElementById('wsSkillCreateName').onkeydown = (e) => {
+    if (e.key === 'Escape') closeCreateSkillDialog();
+};
+document.getElementById('wsSkillCreateContent').onkeydown = (e) => {
+    if (e.key === 'Escape') closeCreateSkillDialog();
+};
 
 // ========== Cleanup ==========
 window.addEventListener('beforeunload', () => {

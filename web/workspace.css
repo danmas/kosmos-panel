@@ -1,9 +1,10 @@
 /* ========== Workspace Super-Terminal ========== */
-html, body {
+html,
+body {
   height: 100%;
   margin: 0;
-  background: #0b0f1a;
-  color: #e6ecff;
+  background: var(--bg-main);
+  color: var(--text-main);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
   overflow: hidden;
 }
@@ -12,8 +13,8 @@ html, body {
 .ws-topbar {
   height: 40px;
   padding: 0 12px;
-  background: #0e1322;
-  border-bottom: 1px solid #1c2333;
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border-main);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -23,14 +24,14 @@ html, body {
 .ws-topbar-title {
   font-weight: 700;
   font-size: 14px;
-  color: #4a9eff;
+  color: var(--primary);
 }
 
 .ws-topbar-server {
   font-size: 12px;
-  color: #22c55e;
+  color: var(--success);
   font-family: monospace;
-  background: rgba(34, 197, 94, 0.1);
+  background: var(--success-dim);
   padding: 3px 8px;
   border-radius: 4px;
   border: 1px solid rgba(34, 197, 94, 0.3);
@@ -38,9 +39,9 @@ html, body {
 
 .ws-topbar-session {
   font-size: 11px;
-  color: #4a9eff;
+  color: var(--primary);
   font-family: monospace;
-  background: rgba(74, 158, 255, 0.1);
+  background: var(--primary-dim);
   padding: 3px 8px;
   border-radius: 4px;
   border: 1px solid rgba(74, 158, 255, 0.2);
@@ -52,12 +53,14 @@ html, body {
   background: rgba(74, 158, 255, 0.25);
 }
 
-.ws-topbar-spacer { flex: 1; }
+.ws-topbar-spacer {
+  flex: 1;
+}
 
 .ws-topbar button {
-  background: #1b2544;
-  border: 1px solid #223055;
-  color: #e6ecff;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  color: var(--text-main);
   border-radius: 6px;
   padding: 4px 10px;
   cursor: pointer;
@@ -66,11 +69,12 @@ html, body {
 }
 
 .ws-topbar button:hover {
-  background: #223055;
+  background: var(--border-light);
 }
 
 .ws-topbar .btn-close {
   background: #3a1c1c;
+  /* Keep specific alert colors or add --bg-danger-dim */
   border-color: #5a2c2c;
   color: #ff8888;
 }
@@ -105,7 +109,7 @@ html, body {
   max-width: 60%;
   display: flex;
   flex-direction: column;
-  background: #0b0f1a;
+  background: var(--bg-panel);
   overflow: hidden;
 }
 
@@ -113,7 +117,7 @@ html, body {
 .ws-drag-v {
   width: 5px;
   cursor: col-resize;
-  background: #1c2333;
+  background: var(--border-main);
   flex-shrink: 0;
   transition: background 0.15s;
   position: relative;
@@ -121,21 +125,21 @@ html, body {
 
 .ws-drag-v:hover,
 .ws-drag-v.active {
-  background: #4a9eff;
+  background: var(--primary);
 }
 
 /* ========== Horizontal Drag Handle (top|bottom) ========== */
 .ws-drag-h {
   height: 5px;
   cursor: row-resize;
-  background: #1c2333;
+  background: var(--border-main);
   flex-shrink: 0;
   transition: background 0.15s;
 }
 
 .ws-drag-h:hover,
 .ws-drag-h.active {
-  background: #4a9eff;
+  background: var(--primary);
 }
 
 /* ========== Right Panel (Terminal) ========== */
@@ -150,7 +154,7 @@ html, body {
 
 .ws-term {
   flex: 1;
-  background: #000;
+  background: var(--bg-term);
   overflow: hidden;
 }
 
@@ -176,8 +180,8 @@ html, body {
 .ws-tabs {
   display: flex;
   gap: 0;
-  background: #0e1322;
-  border-bottom: 1px solid #1c2333;
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border-main);
   flex-shrink: 0;
   overflow-x: auto;
 }
@@ -185,7 +189,7 @@ html, body {
 .ws-tab {
   background: transparent;
   border: none;
-  color: #667;
+  color: var(--text-dim);
   padding: 8px 14px;
   cursor: pointer;
   font-size: 12px;
@@ -196,13 +200,13 @@ html, body {
 }
 
 .ws-tab:hover {
-  color: #e6ecff;
-  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-main);
+  background: var(--bg-active);
 }
 
 .ws-tab.active {
-  color: #4a9eff;
-  border-bottom-color: #4a9eff;
+  color: var(--primary);
+  border-bottom-color: var(--tab-active-border);
 }
 
 /* ========== Panel Content ========== */
@@ -217,11 +221,11 @@ html, body {
 }
 
 .ws-panel-content::-webkit-scrollbar-track {
-  background: #0b0f1a;
+  background: var(--bg-main);
 }
 
 .ws-panel-content::-webkit-scrollbar-thumb {
-  background: #223055;
+  background: var(--border-light);
   border-radius: 3px;
 }
 
@@ -241,78 +245,141 @@ html, body {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #4a9eff;
+  color: var(--primary);
 }
 
 .ws-log-content {
-  background: #0b0f1a;
+  background: var(--bg-main);
   padding: 8px 10px;
   border-radius: 4px;
-  border-left: 3px solid #4a9eff;
+  border-left: 3px solid var(--primary);
   white-space: pre-wrap;
   word-break: break-all;
   font-family: 'Courier New', monospace;
   font-size: 12px;
   line-height: 1.5;
   margin: 0;
+  color: var(--text-main);
 }
 
 .ws-log-timestamp {
   font-size: 10px;
-  color: #555;
+  color: var(--text-dim);
   margin-left: auto;
 }
 
 .ws-log-session-badge {
   font-size: 10px;
-  color: #555;
+  color: var(--text-dim);
   margin-bottom: 2px;
 }
 
 .ws-log-session-badge span {
-  background: rgba(74, 158, 255, 0.15);
+  background: var(--primary-dim);
   padding: 1px 5px;
   border-radius: 3px;
   margin-right: 4px;
 }
 
 /* Log type colors */
-.log-ai-query .ws-log-content { border-left-color: #ffa500; }
-.log-ai-query .ws-log-type { color: #ffa500; }
-.log-stdin .ws-log-content { border-left-color: #00ff00; }
-.log-stdin .ws-log-type { color: #00ff00; }
-.log-stdout .ws-log-content { border-left-color: #4a9eff; }
-.log-stderr .ws-log-content { border-left-color: #ef4444; }
-.log-stderr .ws-log-type { color: #ef4444; }
-.log-skill-start .ws-log-content { border-left-color: #10b981; }
-.log-skill-start .ws-log-type { color: #10b981; }
-.log-skill-command .ws-log-content { border-left-color: #8b5cf6; }
-.log-skill-command .ws-log-type { color: #8b5cf6; }
-.log-skill-message .ws-log-content { border-left-color: #f59e0b; }
-.log-skill-message .ws-log-type { color: #f59e0b; }
-.log-skill-command-output .ws-log-content { border-left-color: #06b6d4; }
-.log-skill-command-output .ws-log-type { color: #06b6d4; }
-.log-skill-user-input .ws-log-content { border-left-color: #ec4899; }
-.log-skill-user-input .ws-log-type { color: #ec4899; }
-.log-skill-ask .ws-log-content { border-left-color: #a855f7; }
-.log-skill-ask .ws-log-type { color: #a855f7; }
-.log-skill-complete .ws-log-content { border-left-color: #22c55e; }
-.log-skill-complete .ws-log-type { color: #22c55e; }
+.log-ai-query .ws-log-content {
+  border-left-color: var(--log-ai);
+}
+
+.log-ai-query .ws-log-type {
+  color: var(--log-ai);
+}
+
+.log-stdin .ws-log-content {
+  border-left-color: var(--log-stdin);
+}
+
+.log-stdin .ws-log-type {
+  color: var(--log-stdin);
+}
+
+.log-stdout .ws-log-content {
+  border-left-color: var(--log-stdout);
+}
+
+.log-stderr .ws-log-content {
+  border-left-color: var(--log-stderr);
+}
+
+.log-stderr .ws-log-type {
+  color: var(--log-stderr);
+}
+
+.log-skill-start .ws-log-content {
+  border-left-color: var(--log-skill-start);
+}
+
+.log-skill-start .ws-log-type {
+  color: var(--log-skill-start);
+}
+
+.log-skill-command .ws-log-content {
+  border-left-color: var(--log-skill-cmd);
+}
+
+.log-skill-command .ws-log-type {
+  color: var(--log-skill-cmd);
+}
+
+.log-skill-message .ws-log-content {
+  border-left-color: var(--log-skill-msg);
+}
+
+.log-skill-message .ws-log-type {
+  color: var(--log-skill-msg);
+}
+
+.log-skill-command-output .ws-log-content {
+  border-left-color: var(--log-skill-output);
+}
+
+.log-skill-command-output .ws-log-type {
+  color: var(--log-skill-output);
+}
+
+.log-skill-user-input .ws-log-content {
+  border-left-color: var(--log-skill-input);
+}
+
+.log-skill-user-input .ws-log-type {
+  color: var(--log-skill-input);
+}
+
+.log-skill-ask .ws-log-content {
+  border-left-color: var(--log-skill-ask);
+}
+
+.log-skill-ask .ws-log-type {
+  color: var(--log-skill-ask);
+}
+
+.log-skill-complete .ws-log-content {
+  border-left-color: var(--log-skill-complete);
+}
+
+.log-skill-complete .ws-log-type {
+  color: var(--log-skill-complete);
+}
 
 /* ========== Filters ========== */
 .ws-filters {
   display: flex;
   gap: 4px;
   padding: 6px 8px;
-  background: #0e1322;
+  background: var(--bg-header);
   flex-shrink: 0;
   flex-wrap: wrap;
 }
 
 .ws-filter-btn {
-  background: #1b2544;
-  border: 1px solid #223055;
-  color: #889;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  color: var(--text-dim);
   border-radius: 4px;
   padding: 3px 8px;
   cursor: pointer;
@@ -321,14 +388,14 @@ html, body {
 }
 
 .ws-filter-btn:hover {
-  background: #223055;
-  color: #e6ecff;
+  background: var(--border-light);
+  color: var(--text-main);
 }
 
 .ws-filter-btn.active {
-  background: #2d4a87;
-  border-color: #4a9eff;
-  color: #e6ecff;
+  background: var(--primary-dim);
+  border-color: var(--primary);
+  color: var(--text-main);
 }
 
 /* ========== Skills Panel ========== */
@@ -339,17 +406,47 @@ html, body {
 }
 
 .ws-skill-item {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--bg-active);
+  border: 1px solid var(--bg-hover);
   border-radius: 6px;
   padding: 10px;
+  padding-right: 36px;
   cursor: pointer;
   transition: all 0.2s ease;
   position: relative;
 }
 
+.ws-skill-edit-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: transparent;
+  border: 1px solid var(--border-light);
+  color: var(--text-dim);
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all 0.15s ease;
+}
+
+.ws-skill-item:hover .ws-skill-edit-btn {
+  opacity: 1;
+}
+
+.ws-skill-edit-btn:hover {
+  background: var(--primary-dim);
+  border-color: var(--primary);
+  color: var(--text-main);
+}
+
 .ws-skill-item:hover {
-  background: rgba(74, 158, 255, 0.12);
+  background: var(--primary-dim);
   border-color: rgba(74, 158, 255, 0.4);
   transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
@@ -362,7 +459,7 @@ html, body {
   top: 0;
   bottom: 0;
   width: 3px;
-  background: #22c55e;
+  background: var(--success);
   opacity: 0;
   transition: opacity 0.2s;
   border-radius: 6px 0 0 6px;
@@ -374,7 +471,7 @@ html, body {
 
 .ws-skill-name {
   font-weight: 600;
-  color: #22c55e;
+  color: var(--success);
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 13px;
   margin-bottom: 3px;
@@ -382,12 +479,12 @@ html, body {
 
 .ws-skill-desc {
   font-size: 11px;
-  color: rgba(230, 236, 255, 0.5);
+  color: var(--text-dim);
   line-height: 1.3;
 }
 
 .ws-skill-dir {
-  color: #7aa2ff;
+  color: var(--text-muted);
   font-size: 12px;
   font-weight: 500;
   margin-top: 6px;
@@ -396,7 +493,7 @@ html, body {
   justify-content: space-between;
   padding: 3px 6px;
   border-radius: 4px;
-  background: rgba(74, 158, 255, 0.05);
+  background: var(--bg-hover);
 }
 
 .ws-skill-root {
@@ -407,17 +504,205 @@ html, body {
 }
 
 .ws-skills-loading {
-  color: #4a9eff;
+  color: var(--primary);
   text-align: center;
   padding: 16px;
   font-size: 12px;
 }
 
 .ws-skills-empty {
-  color: #666;
+  color: var(--text-dim);
   text-align: center;
   padding: 16px;
   font-size: 12px;
+}
+
+/* ========== Skill Create/Edit Dialog ========== */
+.ws-skill-create-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-overlay, rgba(0, 0, 0, 0.6));
+  z-index: 1009;
+}
+
+.ws-skill-create-overlay.hidden {
+  display: none;
+}
+
+.ws-skill-create-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 600px;
+  max-width: 95%;
+  max-height: 85%;
+  background: var(--bg-card);
+  border: 2px solid var(--primary);
+  border-radius: 8px;
+  z-index: 1010;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.ws-skill-create-dialog.hidden {
+  display: none;
+}
+
+.ws-skill-create-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border-light);
+  cursor: move;
+  user-select: none;
+}
+
+.ws-skill-create-title {
+  color: var(--primary);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.ws-skill-create-close {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.ws-skill-create-close:hover {
+  color: var(--text-main);
+}
+
+.ws-skill-create-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.ws-skill-create-path {
+  color: var(--primary);
+  font-size: 11px;
+  font-family: monospace;
+  padding: 6px 10px;
+  background: var(--primary-dim, rgba(74, 158, 255, 0.1));
+  border-radius: 4px;
+  border: 1px solid var(--border-light);
+}
+
+.ws-skill-create-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ws-skill-create-label {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.ws-skill-create-input {
+  background: var(--bg-active);
+  border: 1px solid var(--border-light);
+  color: var(--text-main);
+  padding: 10px 12px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 14px;
+}
+
+.ws-skill-create-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.ws-skill-create-textarea {
+  background: var(--bg-active);
+  border: 1px solid var(--border-light);
+  color: var(--text-main);
+  padding: 12px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 13px;
+  min-height: 300px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.ws-skill-create-textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.ws-skill-create-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-light);
+  background: var(--bg-header);
+}
+
+.ws-skill-create-btn {
+  padding: 8px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.ws-skill-create-btn-cancel {
+  background: transparent;
+  border: 1px solid var(--border-light);
+  color: var(--text-muted);
+}
+
+.ws-skill-create-btn-cancel:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
+.ws-skill-create-btn-save {
+  background: var(--success);
+  border: 1px solid var(--success);
+  color: #fff;
+}
+
+.ws-skill-create-btn-save:hover {
+  opacity: 0.9;
+}
+
+.ws-skill-create-btn-save:disabled {
+  background: var(--bg-active);
+  border-color: var(--border-light);
+  color: var(--text-dim);
+  cursor: not-allowed;
+}
+
+.ws-skill-create-error {
+  color: #ef4444;
+  font-size: 12px;
+  padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 4px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.ws-skill-create-error.hidden {
+  display: none;
 }
 
 /* ========== Skill Dialog (embedded in bottom panel) ========== */
@@ -433,19 +718,19 @@ html, body {
   justify-content: space-between;
   gap: 8px;
   padding: 8px 10px;
-  background: #0e1322;
-  border-bottom: 1px solid #223055;
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border-light);
   flex-shrink: 0;
 }
 
 .ws-skill-dialog-title {
-  color: #22c55e;
+  color: var(--success);
   font-weight: 600;
   font-size: 13px;
 }
 
 .ws-skill-dialog-title span {
-  color: #fff;
+  color: var(--text-main);
 }
 
 .ws-skill-dialog-close {
@@ -479,8 +764,8 @@ html, body {
 
 .ws-skill-dialog-footer {
   padding: 8px;
-  background: #0e1322;
-  border-top: 1px solid #223055;
+  background: var(--bg-header);
+  border-top: 1px solid var(--border-light);
   flex-shrink: 0;
 }
 
@@ -491,9 +776,9 @@ html, body {
 
 .ws-skill-dialog-input-row input {
   flex: 1;
-  background: #000;
+  background: var(--bg-input);
   border: 1px solid #333;
-  color: #00ff00;
+  color: var(--log-stdin);
   padding: 7px 10px;
   border-radius: 4px;
   font-family: monospace;
@@ -502,12 +787,12 @@ html, body {
 
 .ws-skill-dialog-input-row input:focus {
   outline: none;
-  border-color: #22c55e;
+  border-color: var(--success);
 }
 
 .ws-skill-dialog-input-row button {
-  background: #22c55e;
-  border: 1px solid #16a34a;
+  background: var(--success);
+  border: 1px solid var(--success-hover);
   color: #fff;
   padding: 7px 12px;
   border-radius: 4px;
@@ -517,7 +802,7 @@ html, body {
 }
 
 .ws-skill-dialog-input-row button:hover {
-  background: #16a34a;
+  background: var(--success-hover);
 }
 
 .ws-skill-quick-actions {
@@ -528,7 +813,7 @@ html, body {
 }
 
 .ws-skill-quick-actions button {
-  background: #1b2544;
+  background: var(--bg-card);
   border: 1px solid #333;
   color: #aaa;
   padding: 3px 8px;
@@ -541,13 +826,13 @@ html, body {
 .ws-skill-quick-actions button:hover {
   background: #2a3654;
   color: #fff;
-  border-color: #4a9eff;
+  border-color: var(--primary);
 }
 
 .ws-skill-cmd-done-btn {
   width: 100%;
   margin-top: 6px;
-  background: #ffa500;
+  background: var(--warning);
   border: 1px solid #cc8400;
   color: #000;
   padding: 8px;
@@ -558,7 +843,7 @@ html, body {
 }
 
 .ws-skill-cmd-done-btn:hover {
-  background: #ffb733;
+  background: var(--warning-hover);
 }
 
 /* Skill message types */
@@ -572,19 +857,19 @@ html, body {
 
 .ws-skill-msg-ai {
   background: #1e3a5f;
-  border-left: 3px solid #4a9eff;
-  color: #e6ecff;
+  border-left: 3px solid var(--primary);
+  color: var(--text-main);
 }
 
 .ws-skill-msg-user {
   background: #2d4a3e;
-  border-left: 3px solid #22c55e;
-  color: #e6ecff;
+  border-left: 3px solid var(--success);
+  color: var(--text-main);
 }
 
 .ws-skill-msg-cmd {
   background: #3d2e1f;
-  border-left: 3px solid #ffa500;
+  border-left: 3px solid var(--warning);
   color: #ffd700;
 }
 
@@ -592,10 +877,10 @@ html, body {
   display: block;
   margin-top: 3px;
   padding: 4px 6px;
-  background: #000;
+  background: var(--bg-input);
   border-radius: 3px;
   font-family: monospace;
-  color: #00ff00;
+  color: var(--log-stdin);
   font-size: 11px;
 }
 
@@ -619,19 +904,19 @@ html, body {
 
 .ws-skill-msg-done {
   background: #1f4a2d;
-  border-left: 3px solid #22c55e;
+  border-left: 3px solid var(--success);
   color: #88ff88;
 }
 
 .ws-skill-msg-error {
   background: #4a1f1f;
-  border-left: 3px solid #ff4444;
+  border-left: 3px solid var(--error);
   color: #ff8888;
 }
 
 .ws-skill-msg-ask {
   background: #3d2e4f;
-  border-left: 3px solid #a855f7;
+  border-left: 3px solid var(--log-skill-ask);
   color: #e9d5ff;
 }
 
@@ -642,7 +927,7 @@ html, body {
 }
 
 .ws-skill-params-title {
-  color: #4a9eff;
+  color: var(--primary);
   font-size: 12px;
   margin-bottom: 6px;
 }
@@ -654,9 +939,9 @@ html, body {
 
 .ws-skill-param-input input {
   flex: 1;
-  background: #000;
+  background: var(--bg-input);
   border: 1px solid #333;
-  color: #00ff00;
+  color: var(--log-stdin);
   padding: 7px 10px;
   border-radius: 4px;
   font-family: monospace;
@@ -665,12 +950,12 @@ html, body {
 
 .ws-skill-param-input input:focus {
   outline: none;
-  border-color: #4a9eff;
+  border-color: var(--primary);
 }
 
 .ws-skill-execute-btn {
-  background: #22c55e;
-  border: 1px solid #16a34a;
+  background: var(--success);
+  border: 1px solid var(--success-hover);
   color: #fff;
   padding: 7px 14px;
   border-radius: 4px;
@@ -680,7 +965,7 @@ html, body {
 }
 
 .ws-skill-execute-btn:hover {
-  background: #16a34a;
+  background: var(--success-hover);
 }
 
 /* ========== Command Confirm Panel ========== */
@@ -689,8 +974,8 @@ html, body {
   bottom: 0;
   left: 0;
   right: 0;
-  background: linear-gradient(180deg, #1a2744 0%, #0e1322 100%);
-  border-top: 2px solid #ffa500;
+  background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-main) 100%);
+  border-top: 2px solid var(--warning);
   padding: 10px 14px;
   z-index: 100;
   display: flex;
@@ -701,8 +986,15 @@ html, body {
 }
 
 @keyframes wsSlideUp {
-  from { transform: translateY(100%); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 .ws-command-confirm-header {
@@ -710,12 +1002,12 @@ html, body {
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: #ffa500;
+  color: var(--warning);
   font-weight: 600;
 }
 
 .ws-command-confirm-badge {
-  background: #ffa500;
+  background: var(--warning);
   color: #000;
   padding: 2px 6px;
   border-radius: 4px;
@@ -725,11 +1017,11 @@ html, body {
 
 .ws-command-confirm-text {
   font-family: 'Courier New', monospace;
-  background: #000;
+  background: var(--bg-input);
   padding: 8px 10px;
   border-radius: 4px;
   border: 1px solid #333;
-  color: #00ff00;
+  color: var(--log-stdin);
   font-size: 12px;
   word-break: break-all;
   max-height: 80px;
@@ -751,25 +1043,34 @@ html, body {
 }
 
 .ws-btn-confirm {
-  background: #22c55e;
-  border: 1px solid #16a34a;
+  background: var(--success);
+  border: 1px solid var(--success-hover);
   color: #fff;
 }
-.ws-btn-confirm:hover { background: #16a34a; }
+
+.ws-btn-confirm:hover {
+  background: var(--success-hover);
+}
 
 .ws-btn-reject {
-  background: #ef4444;
-  border: 1px solid #dc2626;
+  background: var(--error);
+  border: 1px solid var(--error-hover);
   color: #fff;
 }
-.ws-btn-reject:hover { background: #dc2626; }
+
+.ws-btn-reject:hover {
+  background: var(--error-hover);
+}
 
 .ws-btn-skip {
-  background: #3b82f6;
+  background: var(--info);
   border: 1px solid #2563eb;
   color: #fff;
 }
-.ws-btn-skip:hover { background: #2563eb; }
+
+.ws-btn-skip:hover {
+  background: #2563eb;
+}
 
 /* ========== Empty State ========== */
 .ws-empty {

@@ -191,7 +191,7 @@ ws://localhost:3000/ws/terminal?serverId=usa&cols=120&rows=30
 3. Сервер в `ws.js`:
    - Стирает ввод в shell (backspace по длине строки).
    - Пишет в лог запись `ai_query`.
-   - Опционально читает контекст с удалённого сервера: `./.kosmos-panel/kosmos-panel.md` или `~/.config/kosmos-panel/kosmos-panel.md` (по SSH), добавляет его в системный промпт.
+   - Опционально читает контекст с удалённого сервера: `./.kosmos-panel/ai_system_promt.md` или `~/.config/kosmos-panel/ai_system_promt.md` (по SSH), добавляет его в системный промпт.
    - Вызывает OpenAI-совместимый API (из `.env`: `AI_KOSMOS_MODEL_BASE_URL`, `AI_MODEL` и т.д.), получает одну shell-команду.
    - Выполняет её в том же PTY (`stream.write(command + '\r')`) и создаёт связанную запись `stdin` с `ai_query_id`.
 4. Вывод команды попадает в лог как `stdout` с `stdin_id`.

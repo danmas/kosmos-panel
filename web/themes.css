@@ -1,0 +1,186 @@
+/* Base Theme (Dark - Default) */
+:root {
+    /* Backgrounds */
+    --bg-main: #0b0f1a;
+    --bg-secondary: #0e1322;
+    --bg-panel: #0b0f1a;
+    --bg-card: #12182b;
+    --bg-header: #0e1322;
+    --bg-input: #000000;
+    --bg-term: #000000;
+    --bg-hover: rgba(255, 255, 255, 0.05);
+    --bg-active: rgba(255, 255, 255, 0.03);
+    --bg-tooltip: #10162a;
+    --bg-overlay: rgba(0, 0, 0, 0.6);
+    --bg-modal: #0d1426;
+
+    --term-bg: #000000;
+    --term-fg: #00ff00;
+
+    /* Borders */
+    --border-main: #1f2840;
+    --border-light: #223055;
+    --border-focus: #60a5fa;
+
+    /* Text */
+    --text-main: #e6ecff;
+    --text-muted: #9fb0ff;
+    --text-dim: #64748b;
+    --text-inverted: #000000;
+
+    /* Brand / Accents */
+    --primary: #60a5fa;
+    --primary-hover: #4f94d4;
+    --primary-dim: rgba(96, 165, 250, 0.15);
+
+    /* Status Colors */
+    --success: #22c55e;
+    --success-hover: #16a34a;
+    --success-dim: rgba(34, 197, 94, 0.1);
+
+    --warning: #f59e0b;
+    --warning-hover: #d97706;
+    --warning-dim: rgba(245, 158, 11, 0.1);
+
+    --error: #ef4444;
+    --error-hover: #dc2626;
+    --error-dim: rgba(239, 68, 68, 0.1);
+
+    --info: #3b82f6;
+    --info-hover: #2563eb;
+
+    /* Terminal / Logs specific */
+    --log-ai: #ffa500;
+    --log-stdin: #00ff00;
+    --log-stdout: #4a9eff;
+    --log-stderr: #ef4444;
+    --log-skill-start: #10b981;
+    --log-skill-cmd: #8b5cf6;
+    --log-skill-msg: #f59e0b;
+    --log-skill-output: #06b6d4;
+    --log-skill-input: #ec4899;
+    --log-skill-ask: #a855f7;
+    --log-skill-complete: #22c55e;
+
+    /* UI Components */
+    --scrollbar-thumb: #2a355c;
+    --scrollbar-track: transparent;
+    --tab-active-border: #4a9eff;
+}
+
+/* Light Theme Example */
+[data-theme="light"] {
+    /* Backgrounds */
+    --bg-main: #f0f2f5;
+    --bg-secondary: #ffffff;
+    --bg-panel: #f8f9fa;
+    --bg-card: #ffffff;
+    --bg-header: #ffffff;
+    --bg-input: #ffffff;
+    --bg-term: #1e1e1e;
+    /* Terminal usually stays dark or needs specific high contrast */
+    --bg-hover: rgba(0, 0, 0, 0.05);
+    --bg-active: rgba(0, 0, 0, 0.03);
+    --bg-tooltip: #ffffff;
+    --bg-overlay: rgba(0, 0, 0, 0.2);
+    --bg-modal: #ffffff;
+
+    --term-bg: #1e1e1e;
+    --term-fg: #f0f0f0;
+
+    /* Borders */
+    --border-main: #d1d5db;
+    --border-light: #e5e7eb;
+    --border-focus: #3b82f6;
+
+    /* Text */
+    --text-main: #1f2937;
+    --text-muted: #6b7280;
+    --text-dim: #9ca3af;
+    --text-inverted: #ffffff;
+
+    /* Brand / Accents */
+    --primary: #3b82f6;
+    --primary-hover: #2563eb;
+    --primary-dim: rgba(59, 130, 246, 0.1);
+
+    /* Status Colors */
+    --success: #10b981;
+    --success-hover: #059669;
+    --warning: #f59e0b;
+    --error: #ef4444;
+
+    /* Scrollbar */
+    --scrollbar-thumb: #cbd5e1;
+}
+
+/* Cyberpunk Theme Example */
+[data-theme="cyberpunk"] {
+    --bg-main: #000b1e;
+    --bg-secondary: #051628;
+    --bg-panel: #000b1e;
+    --bg-card: #021a35;
+    --bg-header: #051628;
+    --bg-input: #000000;
+    --bg-term: #0d0221;
+
+    --term-bg: #0d0221;
+    --term-fg: #00f0ff;
+
+    --border-main: #00f0ff;
+    --border-light: #00a8aa;
+    --border-focus: #ff003c;
+
+    --text-main: #00f0ff;
+    --text-muted: #00a8aa;
+    --text-dim: #005f60;
+
+    --primary: #ffee00;
+    --primary-hover: #ffaa00;
+
+    --success: #00ff9f;
+    --error: #ff003c;
+    --warning: #ffee00;
+
+    --tab-active-border: #ffee00;
+}
+
+/* themes.css */
+/* Cyber-HUD Theme */
+[data-theme="cyber-hud"] {
+    --bg-main: #000508;
+    --bg-secondary: #000a0f;
+    --bg-card: #00111a;
+    --bg-panel: #000508;
+    --bg-header: #000a0f;
+    --bg-input: #000000;
+    --bg-term: #000000;
+    --bg-hover: rgba(0, 242, 255, 0.08);
+    --bg-active: rgba(0, 242, 255, 0.15);
+    --bg-tooltip: #001a26;
+    --bg-overlay: rgba(0, 5, 8, 0.9);
+    --bg-modal: #00111a;
+    --term-bg: #000000;
+    --term-fg: #00f2ff;
+    --border-main: #002a3a;
+    --border-light: #00405a;
+    --border-focus: #00f2ff;
+    --text-main: #00f2ff;
+    --text-muted: #00a3b3;
+    --text-dim: #005c66;
+    --text-inverted: #000000;
+    --primary: #00f2ff;
+    --primary-hover: #00e5f2;
+    --primary-dim: rgba(0, 242, 255, 0.1);
+    --success: #00ff88;
+    --warning: #ffcc00;
+    --error: #ff2244;
+    --info: #00d9ff;
+    --log-ai: #00ffff;
+    --log-stdin: #00ff88;
+    --log-stdout: #00f2ff;
+    --log-stderr: #ff2244;
+    --scrollbar-thumb: #002a3a;
+    --tab-active-border: #00f2ff;
+}
+

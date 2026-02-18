@@ -1,61 +1,58 @@
 # AI Промпты в Kosmos Panel
 
-В Kosmos Panel используется несколько типов промптов для работы с ИИ:
+Как устроены и где используются системные промпты для ИИ.
 
-## 1. **Terminal AI Assistant** (основной промпт для команд)
-```
-You are a terminal AI assistant. Your task is to convert the user's request into a valid shell command, and return ONLY the shell command itself without any explanation.
-```
+---
 
-## 2. **Multi-step Skill System Prompt** (для сложных операций)
-```
-You are a terminal AI assistant executing a multi-step skill.
+## 1. Терминальные команды (AI_SYSTEM_PROMPT)
 
-RESPONSE FORMAT - Use EXACTLY ONE of these formats per response:
+**Ключ:** `AI_SYSTEM_PROMPT` в `prompts.json` (fallback: `process.env` / config.json, иначе встроенный дефолт в `server/prompts.js`).
 
-1. [CMD] command_here
-   Execute this shell command. You will receive the command output.
+**Где срабатывает:** Пользователь вводит в WebSocket-терминале строку с префиксом `ai:` (например `ai: покажи файлы`). Обработка — `server/ws.js` (блок AI-запроса по WebSocket).
 
-2. [MESSAGE] your message here
-   Show this message to the user and wait for their response.
-   Use this to ask questions or request input (like commit messages).
+**Как используется:**
+- Системный промпт для чата: `getPrompt('AI_SYSTEM_PROMPT')`.
+- Опционально в начало системного промпта добавляется контекст с **удалённой машины**: содержимое `./.kosmos-panel/ai_system_promt.md` или `~/.config/kosmos-panel/ai_system_promt.md` (читается по SSH с той же сессии).
+- В `user` передаётся текст запроса пользователя (без префикса `ai:`).
+- Ожидается **одна** shell-команда в ответ. Она выполняется на удалённом сервере по SSH, вывод возвращается в терминал.
 
-3. [DONE] final message here
-   The skill is complete. Show this final message to the user.
+**Итог:** один запрос к AI → одна команда → один запуск на сервере.
 
-RULES:
-- Always start your response with [CMD], [MESSAGE], or [DONE]
-- Only ONE format per response
-- For [CMD]: provide only the command, no explanations
-- For [MESSAGE]: ask clear, specific questions
-- For [DONE]: summarize what was accomplished
-```
+---
 
-## 3. **AI Helper System Prompt** (для справки)
-```
-Ты - AI помощник для системы мониторинга Kosmos Panel. 
-Отвечай на русском языке, кратко и по делу.
-Используй предоставленную документацию для ответов.
-Если вопрос не относится к системе, вежливо объясни это.
-```
+## 2. Multi-step Skills (SKILL_SYSTEM_PROMPT_WITH_ASK)
 
-## 4. **Командный префикс**
-- `ai:` - префикс для ИИ команд в терминале
+**Ключ:** `SKILL_SYSTEM_PROMPT_WITH_ASK` в `prompts.json` (fallback: встроенный дефолт в `server/prompts.js`).
 
-## 5. **Контекстные знания**
-ИИ также использует файлы знаний:
-- `./.kosmos-panel/kosmos-panel.md`
-- `~/.config/kosmos-panel/kosmos-panel.md`
+**Где срабатывает:** Запуск скилла из терминала (например команда-скилл) или через API скиллов. Сборка промпта — `server/skill-ai.js` → `buildSkillSystemPrompt()`.
 
-## 6. **Переменные окружения для настройки**
-Все промпты можно настраивать через переменные окружения:
-- `AI_SYSTEM_PROMPT` - основной системный промпт для команд
-- `AI_SYSTEM_PROMPT_HELP` - промпт для справочной системы
-- `AI_KOSMOS_MODEL_BASE_URL` - URL AI сервера (по умолчанию: `http://localhost:3002/v1`)
-- `AI_MODEL` - модель ИИ (по умолчанию: `CHEAP`)
-- `AI_COMMAND_PREFIX` - префикс команд (по умолчанию: `ai:`)
+**Как используется:**
+- Базовый системный промпт: `getPrompt('SKILL_SYSTEM_PROMPT_WITH_ASK')`.
+- К нему добавляются: опционально контекст с удалённой машины (как в п.1), затем блок **Active Skill** — содержимое SKILL.md выбранного скилла.
+- Модель должна отвечать **строго** в одном из форматов: `[CMD]`, `[ASK]`, `[ASK:optional]`, `[MESSAGE]`, `[DONE]`. Ответ разбирается в `parseSkillResponse()`.
+- Цикл: запрос к AI → разбор ответа → выполнение команды / показ вопроса пользователю / информационного сообщения / завершение. До появления `[DONE]` история дополняется и отправляется следующий запрос.
 
-## Расположение в коде
-- Основные промпты: `server/ws.js` (строки 637-656, 1089)
-- Промпт для справки: `server.js` (строки 292-297)
-- Обработка AI команд: `server/ws.js` (строки 1063-1212)
+**Итог:** скилл — пошаговый сценарий с командами, обязательными и опциональными вопросами к пользователю и информационными сообщениями.
+
+---
+
+## 3. Справка по системе (AI_SYSTEM_PROMPT_HELP)
+
+**Ключ:** `AI_SYSTEM_PROMPT_HELP` в config.json (или `process.env`). Не в prompts.json.
+
+**Где срабатывает:** POST `/api/ai-help` в `server.js`. Вызывается из веб-интерфейса (вопрос пользователя по документации).
+
+**Как используется:**
+- Системный промпт: `process.env.AI_SYSTEM_PROMPT_HELP` (есть встроенный дефолт в коде).
+- К нему дописывается блок «Документация системы»: содержимое файлов из `AI_HELP_CONTEXT_FILES` (config) или по умолчанию файлы из папки `KB/`.
+- В `user` — текст вопроса. Ответ модели возвращается клиенту как текст справки (обычно на русском).
+
+**Итог:** один запрос — один ответ по документации системы, без выполнения команд.
+
+---
+
+## 4. Общее
+
+- **Префикс команд в терминале:** по умолчанию `ai:`; настраивается через `AI_COMMAND_PREFIX` (config/env). Только такие строки обрабатываются как запрос к AI (п.1).
+- **Контекстные файлы на удалённой машине** (`.kosmos-panel/ai_system_promt.md`, `~/.config/kosmos-panel/ai_system_promt.md`) используются только для **терминального AI** (п.1) и опционально для **скиллов** (п.2).
+- **Загрузка промптов:** `server/prompts.js` → `getPrompt(key)`. Источник для `AI_SYSTEM_PROMPT` и `SKILL_SYSTEM_PROMPT_WITH_ASK` — `prompts.json` в корне проекта; пример — `prompts.json.example`. Промпт справки (п.3) берётся только из config/env.

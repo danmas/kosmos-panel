@@ -52,3 +52,4 @@ output_docs/
 Thumbs.db 
 config.json
 
+"tmp/" 
