@@ -2,6 +2,9 @@
 
 Агент‑less панель в стиле «космической приборки»: опрашивает сервера по SSH/HTTP/TCP, показывает статусы, даёт быстрый доступ к терминалу (xterm.js) и хвостам логов. **Встроенный AI-помощник** преобразует команды на естественном языке в shell-команды прямо в терминале. Фронт — чистый JavaScript, бэк — Node.js.
 
+Agentless dashboard in a "space cockpit" style: polls servers via SSH/HTTP/TCP, displays their statuses, and provides quick access to the terminal (xterm.js) and log tails. Built-in AI assistant converts natural language commands into shell commands directly in the terminal. Frontend — pure JavaScript, backend — Node.js.
+
+
 ## Возможности
 - Мониторинг без агентов:
   - HTTP, HTTP JSON (JSONPath), TCP порт, TLS срок сертификата
