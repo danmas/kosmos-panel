@@ -22,6 +22,7 @@
 |------|----------|---------------|------------|
 | [README_AI.md](./README_AI.md) | Памятка для LLM/агентов и обзор системы | Backend (server/, monitor, ws, terminal), Frontend (web/), inventory.json, .env, config.json, контракты API/WS, инварианты, как расширять, AI конфигурация | 2026-02-16 |
 | [README_CONFIG.md](./README_CONFIG.md) | Система управления AI-конфигурацией | config.json, REST API (/api/config, /api/reload-config), горячая перезагрузка, UI редактор, миграция с .env | 2026-02-16 |
+| [DEVELOPER_THEMING_GUIDE.md](./DEVELOPER_THEMING_GUIDE.md) | **Архитектура тем**: Гайд для разработчиков | CSS Variables, ThemeManager, xterm.js integration, Cross-tab sync | 2026-02-18 |
 
 ---
 
@@ -63,7 +64,7 @@
 
 | Файл | Описание | Ключевые темы | Актуализация |
 |------|----------|---------------|--------------|
-| [README_INDEX.md](./README_INDEX.md) | Этот файл — оглавление БЗ | Навигация по KB | 2026-02-15 |
+| [README_INDEX.md](./README_INDEX.md) | Этот файл — оглавление БЗ | Навигация по KB | 2026-02-18 |
 | [README_new_skin_instruct.md](./README_new_skin_instruct.md) | Инструкция по созданию новых тем (скинов) | CSS Variables, themes.css, theme-manager.js, примеры | 2026-02-17 |
 | [README_KB_RULES.md](./README_KB_RULES.md) | Правила ведения БЗ (кратко) | Чеклист, ссылки, актуализация, секции | 2026-02-15 |
 | [ИНСТРУКЦИЯ_ВЕДЕНИЕ_БЗ.md](./ИНСТРУКЦИЯ_ВЕДЕНИЕ_БЗ.md) | Инструкция по внедрению и ведению БЗ | Модель БЗ, шаблон индекса, правила, процесс | 2026-02-15 |
@@ -75,6 +76,7 @@
 - **Начать изучение:** [README_AI.md](./README_AI.md) (архитектура и обзор).
 - **AI конфигурация (config.json, горячая перезагрузка):** [README_CONFIG.md](./README_CONFIG.md).
 - **Рабочая панель (Workspace):** [README_WORKSPACE.md](./README_WORKSPACE.md).
+- **Архитектура тем (для разработчиков):** [DEVELOPER_THEMING_GUIDE.md](./DEVELOPER_THEMING_GUIDE.md).
 - **API и SSH:** основной [README.md](../README.md) в корне + [README_AUTH.md](./README_AUTH.md).
 - **Правила ведения KB:** [README_KB_RULES.md](./README_KB_RULES.md), полная инструкция — [ИНСТРУКЦИЯ_ВЕДЕНИЕ_БЗ.md](./ИНСТРУКЦИЯ_ВЕДЕНИЕ_БЗ.md).
 
