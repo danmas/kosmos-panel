@@ -6,6 +6,7 @@ Agentless dashboard in a "space cockpit" style: polls servers via SSH/HTTP/TCP, 
 
 ![Kosmos Panel Screenshot](mlF1sU4F82.png)
 
+[![Watch the demo](https://img.youtube.com/vi/FboP_IKQ5RM/0.jpg)](https://youtu.be/FboP_IKQ5RM)
 
 ## Возможности
 - Мониторинг без агентов:
