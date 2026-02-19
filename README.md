@@ -8,6 +8,8 @@ Agentless dashboard in a "space cockpit" style: polls servers via SSH/HTTP/TCP, 
 
 [![Watch the demo](https://img.youtube.com/vi/FboP_IKQ5RM/0.jpg)](https://youtu.be/FboP_IKQ5RM)
 
+[![Watch the demo](https://img.youtube.com/vi/UVaPy5kZiiE/0.jpg)](https://youtu.be/UVaPy5kZiiE)
+
 ## Возможности
 - Мониторинг без агентов:
   - HTTP, HTTP JSON (JSONPath), TCP порт, TLS срок сертификата
