@@ -4,6 +4,8 @@
 
 Agentless dashboard in a "space cockpit" style: polls servers via SSH/HTTP/TCP, displays their statuses, and provides quick access to the terminal (xterm.js) and log tails. Built-in AI assistant converts natural language commands into shell commands directly in the terminal. Frontend — pure JavaScript, backend — Node.js.
 
+![Kosmos Panel Screenshot](mlF1sU4F82.png)
+
 
 ## Возможности
 - Мониторинг без агентов:
