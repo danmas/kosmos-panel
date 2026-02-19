@@ -9,27 +9,11 @@
       "useAgent": "${USE_SSH_AGENT}"
     },
     {
-      "id": "cred-planshet",
-      "type": "ssh-key",
-      "privateKeyPath": "${SSH_KEY_PATH}",
-      "passphrase": "${SSH_PASSPHRASE}",
-      "password": "${SSH_PLANSHET_PASSWORD}",
-      "useAgent": "false"
-    },
-    {
       "id": "cred-w2-office",
       "type": "ssh-key",
       "privateKeyPath": "${SSH_KEY_PATH}",
       "passphrase": "${SSH_PASSPHRASE}",
       "password": "${SSH_OFFICE_W2_PASSWORD}",
-      "useAgent": "false"
-    },
-    {
-      "id": "cred-WSL",
-      "type": "ssh-key",
-      "privateKeyPath": "${SSH_KEY_PATH}",
-      "passphrase": "${SSH_PASSPHRASE}",
-      "password": "1",
       "useAgent": "false"
     }
   ],
@@ -64,51 +48,11 @@
           "timeoutMs": 3000
         },
         {
-          "id": "aian-model-history",
-          "type": "http",
-          "name": "AIAN Model History",
-          "url": "http://usa:3002/history.html",
-          "expectStatus": 200,
-          "timeoutMs": 3000
-        },
-        {
-          "id": "aian-vector",
-          "type": "http",
-          "name": "AIAN Vector (3005)",
-          "url": "http://usa:3005",
-          "expectStatus": 200,
-          "timeoutMs": 3000
-        },
-        {
-          "id": "LightRAG",
-          "type": "http",
-          "name": "LightRAG (9621)",
-          "url": "http://usa:9621",
-          "expectStatus": 200,
-          "timeoutMs": 3000
-        },
-        {
-          "id": "eng-teach",
-          "type": "http",
-          "name": "Eng Verbs (3000)",
-          "url": "http://usa:3000",
-          "expectStatus": 200,
-          "timeoutMs": 3000
-        },
-        {
           "id": "searxng-docker",
           "type": "dockerContainer",
           "name": "searxng (doc)",
           "description": "Метапоисковик для приватного поиска",
           "container": "searxng",
-          "timeoutMs": 3000
-        },
-        {
-          "id": "searxng-http",
-          "type": "http",
-          "name": "searxng (8080)",
-          "url": "http://usa:8080/search?q=tes",
-          "expectStatus": 200,
           "timeoutMs": 3000
         },
         {
@@ -123,113 +67,8 @@
       ]
     },
     {
-      "id": "localhostserver",
-      "name": "localhost Рабочий сервер",
-      "env": "test",
-      "ssh": {
-        "host": "127.0.0.1",
-        "port": 22,
-        "user": "roman",
-        "credentialId": "cred-sample"
-      },
-      "services": [
-        {
-          "id": "web 80",
-          "type": "http",
-          "name": "Web",
-          "url": "http://127.0.0.1:80/",
-          "expectStatus": 200,
-          "timeoutMs": 2000
-        },
-        {
-          "id": "kosmos-ssh-tunely",
-          "type": "http",
-          "name": "Kosmos ssh tunel",
-          "url": "http://127.0.0.1:3001/",
-          "expectStatus": 200,
-          "timeoutMs": 3000
-        },
-        {
-          "id": "kosmos-file-sync",
-          "type": "http",
-          "name": "Kosmos File Sync",
-          "url": "http://127.0.0.1:3003/",
-          "expectStatus": 200,
-          "timeoutMs": 3000
-        },
-        {
-          "id": "aian-model",
-          "type": "http",
-          "name": "AIAN Model (3002)",
-          "url": "http://127.0.0.1:3002",
-          "expectStatus": 200,
-          "timeoutMs": 3000
-        },
-        {
-          "id": "aian-model-history",
-          "type": "http",
-          "name": "AIAN Model History",
-          "url": "http://127.0.0.1t:3002/history.html",
-          "expectStatus": 200,
-          "timeoutMs": 3000
-        },
-        {
-          "id": "aian-vector",
-          "type": "http",
-          "name": "AIAN Vector (3005)",
-          "url": "http://127.0.0.1:3005",
-          "expectStatus": 200,
-          "timeoutMs": 3000
-        }
-      ]
-    },
-    {
-      "id": "WSL-server",
-      "name": "WSL на моем рабочем компе",
-      "env": "test",
-      "ssh": {
-        "host": "172.26.74.224",
-        "port": 22,
-        "user": "roman",
-        "password": "1",
-        "credentialId": "cred-WSL"
-      },
-      "services": [
-        {
-          "id": "n8n-docker",
-          "type": "dockerContainer",
-          "name": "n8n (doc)",
-          "container": "n8n",
-          "timeoutMs": 3000
-        },
-        {
-          "id": "pg-mcp--docker",
-          "type": "dockerContainer",
-          "name": "pg-mcp-js (doc)",
-          "container": "pg-mcp-js",
-          "timeoutMs": 3000
-        },
-        {
-          "id": "pg-mcp-js-8000",
-          "type": "http",
-          "name": "pg-mcp-js 8000",
-          "url": "http://wsl:8000/sse",
-          "expectStatus": 200,
-          "timeoutMs": 4000
-        },
-        {
-          "id": "ping-google",
-          "name": "Ping Google",
-          "type": "sshCommand",
-          "command": "ping -c 4 google.com",
-          "okPattern": "4 packets transmitted, 4 received",
-          "timeoutMs": 10000
-        }
-      ]
-    },
-    {
-      "id": "id-w2-from-office",
-      "name": "w2",
+      "id": "w2-server",
+      "name": "w2 Server",
       "env": "prod",
       "ssh": {
         "host": "${OFFICE_W2_HOST}",
@@ -241,7 +80,7 @@
         {
           "id": "api-http",
           "type": "http",
-          "name": "API",
+          "name": "API HTTP Check",
           "url": "http://127.0.0.1:8080/health",
           "expectStatus": 200,
           "timeoutMs": 2000
@@ -249,7 +88,7 @@
         {
           "id": "api-json",
           "type": "httpJson",
-          "name": "API JSON",
+          "name": "API JSON Check",
           "url": "http://127.0.0.1:8080/health",
           "timeoutMs": 2000,
           "rules": [
@@ -281,205 +120,6 @@
           "host": "127.0.0.1",
           "port": 6379,
           "timeoutMs": 1500
-        },
-        {
-          "id": "pg",
-          "type": "sshCommand",
-          "name": "postgres",
-          "description": "База данных PostgreSQL",
-          "command": "pg_isready",
-          "okPattern": "accepting connections",
-          "timeoutMs": 3000
-        },
-        {
-          "id": "tls-google",
-          "type": "tls",
-          "name": "google tls",
-          "host": "google.com",
-          "port": 443,
-          "minDaysLeft": 7
-        },
-        {
-          "id": "docker-api",
-          "type": "dockerContainer",
-          "name": "api-container",
-          "container": "api"
-        }
-      ]
-    },
-    {
-      "id": "wpl-2",
-      "name": "wpl-2",
-      "env": "prod",
-      "ssh": {
-        "__host": "${OFFICE_WPL-2_HOST}",
-        "host": "192.168.1.22",
-        "port": 22,
-        "user": "${SSH_OFFICE_W2_USER}",
-        "credentialId": "cred-w2-office"
-      },
-      "services": [
-        {
-          "id": "api-http",
-          "type": "http",
-          "name": "API",
-          "url": "http://127.0.0.1:8080/health",
-          "expectStatus": 200,
-          "timeoutMs": 2000
-        },
-        {
-          "id": "api-json",
-          "type": "httpJson",
-          "name": "API JSON",
-          "url": "http://127.0.0.1:8080/health",
-          "timeoutMs": 2000,
-          "rules": [
-            {
-              "name": "ok flag",
-              "path": "$.ok",
-              "equals": true
-            },
-            {
-              "name": "version exists",
-              "path": "$.version",
-              "exists": true
-            }
-          ]
-        },
-        {
-          "id": "nginx",
-          "type": "systemd",
-          "name": "nginx",
-          "description": "Веб-сервер и прокси",
-          "service": "nginx",
-          "timeoutMs": 3000
-        },
-        {
-          "id": "redis",
-          "type": "tcp",
-          "name": "redis",
-          "description": "Кэш и брокер сообщений",
-          "host": "127.0.0.1",
-          "port": 6379,
-          "timeoutMs": 1500
-        },
-        {
-          "id": "pg",
-          "type": "sshCommand",
-          "name": "postgres",
-          "description": "База данных PostgreSQL",
-          "command": "pg_isready",
-          "okPattern": "accepting connections",
-          "timeoutMs": 3000
-        },
-        {
-          "id": "tls-google",
-          "type": "tls",
-          "name": "google tls",
-          "host": "google.com",
-          "port": 443,
-          "minDaysLeft": 7
-        },
-        {
-          "id": "docker-api",
-          "type": "dockerContainer",
-          "name": "api-container",
-          "container": "api"
-        }
-      ]
-    },
-    {
-      "id": "planshet",
-      "name": "Планшет",
-      "env": "prod",
-      "ssh": {
-        "host": "${SSH_PLANSHET_HOST}",
-        "port": "${SSH_PLANSHET_PORT}",
-        "user": "${SSH_PLANSHET_USER}",
-        "credentialId": "cred-planshet"
-      },
-      "services": [
-        {
-          "id": "ping-google",
-          "name": "Ping Google",
-          "type": "sshCommand",
-          "command": "ping -c 4 google.com",
-          "okPattern": "4 packets transmitted, 4 received",
-          "timeoutMs": 10000
-        },
-        {
-          "id": "api-http",
-          "type": "http",
-          "name": "API",
-          "url": "http://127.0.0.1:8080/health",
-          "expectStatus": 200,
-          "timeoutMs": 2000
-        }
-      ]
-    },
-    {
-      "id": "api-prod-EXAMPLE",
-      "name": "API Prod EXAMPLE",
-      "env": "prod",
-      "ssh": {
-        "host": "127.0.0.1",
-        "port": 22,
-        "user": "ubuntu",
-        "credentialId": "cred-sample"
-      },
-      "services": [
-        {
-          "id": "api-http",
-          "type": "http",
-          "name": "API",
-          "url": "http://127.0.0.1:8080/health",
-          "expectStatus": 200,
-          "timeoutMs": 2000
-        },
-        {
-          "id": "api-json",
-          "type": "httpJson",
-          "name": "API JSON",
-          "url": "http://127.0.0.1:8080/health",
-          "timeoutMs": 2000,
-          "rules": [
-            {
-              "name": "ok flag",
-              "path": "$.ok",
-              "equals": true
-            },
-            {
-              "name": "version exists",
-              "path": "$.version",
-              "exists": true
-            }
-          ]
-        },
-        {
-          "id": "nginx",
-          "type": "systemd",
-          "name": "nginx",
-          "description": "Веб-сервер и прокси",
-          "service": "nginx",
-          "timeoutMs": 3000
-        },
-        {
-          "id": "redis",
-          "type": "tcp",
-          "name": "redis",
-          "description": "Кэш и брокер сообщений",
-          "host": "127.0.0.1",
-          "port": 6379,
-          "timeoutMs": 1500
-        },
-        {
-          "id": "pg",
-          "type": "sshCommand",
-          "name": "postgres",
-          "description": "База данных PostgreSQL",
-          "command": "pg_isready",
-          "okPattern": "accepting connections",
-          "timeoutMs": 3000
         },
         {
           "id": "tls-google",
