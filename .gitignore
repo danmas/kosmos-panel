@@ -3,6 +3,7 @@
 inventory.json.backup.*
 terminal_log.json
 data/
+docs/
 logs/
 backup/
 
