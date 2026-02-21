@@ -32,6 +32,7 @@
 |------|----------|---------------|--------------|
 | [README_WORKSPACE.md](./README_WORKSPACE.md) | **Новый интерфейс**: Рабочая панель (Super-Terminal) | 3-pane layout, Drag&Drop, Logs integration, Skills UI | 2026-02-17 |
 | [README_terminal.md](./README_terminal.md) | Техническое описание терминала (WS/REST) | WebSocket, REST API, logs, AI integration, Legacy term.html | 2026-02-15 |
+| [README_logs.md](./README_logs.md) | Техническое устройство логов бэкенда и терминала | server/logger.js, logs/*.log, terminal_log.json, skills_log.json, API /api/logs, /api/skills-logs | 2026-02-21 |
 
 ---
 
