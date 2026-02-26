@@ -265,7 +265,7 @@ router.post('/start', async (req, res) => {
 
     // Build prompts
     const activeSkillName = skill.name || skillName || skillPath || 'skill';
-    const systemPrompt = buildSkillSystemPrompt(skill.content, activeSkillName, remoteKnowledge);
+    const systemPrompt = await buildSkillSystemPrompt(skill.content, activeSkillName, remoteKnowledge);
     const userPrompt = buildInitialUserPrompt(activeSkillName, params, prompt, 1, 100);
 
     // Create skill session

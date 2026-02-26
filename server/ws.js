@@ -679,7 +679,7 @@ function handleTerminal(ws, url) {
 
                 const activeSkillName = skill.name || skillName || skillPath || 'skill';
                 const remoteKnowledge = await getRemoteKnowledge(conn, remoteOS);
-                const fullSystemPrompt = buildSkillSystemPrompt(skill.content, activeSkillName, remoteKnowledge);
+                const fullSystemPrompt = await buildSkillSystemPrompt(skill.content, activeSkillName, remoteKnowledge);
                 const firstUserPrompt = buildInitialUserPrompt(activeSkillName, skillParams, userPrompt, 1, 100);
 
                 // Инициализируем activeSkill
