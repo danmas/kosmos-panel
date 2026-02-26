@@ -1,17 +1,22 @@
 .crush.json
 
-.kosmos-panel/
 inventory.json.backup.*
 terminal_log.json
 data/
+docs/
 logs/
+backup/
 
 # Node modules
 node_modules/
 bun.lock
+package-lock.json
 
 # Configuration files with private data
+inventory/
 inventory.json
+
+bun.lock
 
 # Logs
 logs
@@ -47,4 +52,6 @@ output_docs/
 # OS specific
 .DS_Store
 Thumbs.db 
+config.json
 
+"tmp/" 

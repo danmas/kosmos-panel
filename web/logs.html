@@ -1,280 +1,650 @@
 <!doctype html>
 <html lang="ru">
-  <head>
-    <meta charset="utf-8" />
-    <title>Лог команд терминала</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <style>
-      html, body { 
-        height: 100%; 
-        margin: 0; 
-        background: #0b0f1a; 
-        color: #e6ecff; 
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      }
-      .wrap { 
-        height: 100%; 
-        display: flex; 
-        flex-direction: column; 
-      }
-      .header { 
-        padding: 12px 16px; 
-        background: #0e1322; 
-        border-bottom: 1px solid #1c2333; 
-        display: flex; 
-        gap: 12px; 
-        align-items: center;
-        justify-content: space-between;
-      }
-      .header-left {
-        display: flex;
-        gap: 12px;
-        align-items: center;
-      }
-      .header-title { 
-        font-weight: 700; 
-        font-size: 16px;
-      }
-      .session-info {
-        font-size: 12px;
-        color: #4a9eff;
-        font-family: monospace;
-        background: rgba(74, 158, 255, 0.1);
-        padding: 4px 8px;
-        border-radius: 4px;
-        border: 1px solid rgba(74, 158, 255, 0.3);
-      }
-      .filters {
-        display: flex;
-        gap: 8px;
-        align-items: center;
-      }
-      .filter-btn {
-        background: #1b2544;
-        border: 1px solid #223055;
-        color: #e6ecff;
-        border-radius: 6px;
-        padding: 6px 12px;
-        cursor: pointer;
-        font-size: 13px;
-        transition: all 0.2s;
-      }
-      .filter-btn:hover {
-        background: #223055;
-      }
-      .filter-btn.active {
-        background: #2d4a87;
-        border-color: #4a9eff;
-      }
-      .status {
-        font-size: 12px;
-        color: #888;
-      }
-      .content { 
-        flex: 1; 
-        padding: 16px; 
-        overflow-y: auto; 
-      }
-      .log-entry { 
-        margin-bottom: 16px; 
-      }
-      .log-entry-type {
-        color: #4a9eff;
-        font-weight: 600;
-        margin-bottom: 6px;
-        font-size: 13px;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-      .log-entry-content {
-        background: #0b0f1a;
-        padding: 12px;
-        border-radius: 6px;
-        border-left: 3px solid #4a9eff;
-        white-space: pre-wrap;
-        word-break: break-all;
-        font-family: 'Courier New', monospace;
-        font-size: 13px;
-        line-height: 1.6;
-      }
-      .log-entry-content code {
-        background: rgba(0, 0, 0, 0.3);
-        padding: 2px 4px;
-        border-radius: 3px;
-      }
-      .log-ai-query { border-left-color: #ffa500; }
-      .log-ai-query .log-entry-type { color: #ffa500; }
-      .log-stdin { border-left-color: #00ff00; }
-      .log-stdin .log-entry-type { color: #00ff00; }
-      .log-stdout { border-left-color: #4a9eff; }
-      .log-stderr { border-left-color: #ef4444; }
-      .log-stderr .log-entry-type { color: #ef4444; }
-      .empty {
-        text-align: center;
-        color: #888;
-        margin-top: 50px;
-        font-size: 14px;
-      }
-      .timestamp {
-        font-size: 11px;
-        color: #666;
-        margin-left: auto;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="wrap">
-      <div class="header">
-        <div class="header-left">
-          <div class="header-title">📋 Лог команд терминала</div>
-          <div class="session-info" id="sessionInfo">Session: ...</div>
-        </div>
-        <div class="filters">
-          <button class="filter-btn active" data-type="all">Все</button>
-          <button class="filter-btn" data-type="ai_query">AI</button>
-          <button class="filter-btn" data-type="stdin">Команды</button>
-          <button class="filter-btn" data-type="stdout">Вывод</button>
-          <button class="filter-btn" data-type="stderr">Ошибки</button>
-        </div>
-        <div class="status" id="status">Загрузка...</div>
-      </div>
-      <div class="content" id="content">
-        <div class="empty">Загрузка логов...</div>
-      </div>
+
+<head>
+  <meta charset="utf-8" />
+  <title>Лог команд терминала</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="./themes.css" />
+  <script src="./theme-manager.js"></script>
+  <style>
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg-main);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    .wrap {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header {
+      padding: 12px 16px;
+      background: var(--bg-header);
+      border-bottom: 1px solid var(--border-light);
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .header-left {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .header-title {
+      font-weight: 700;
+      font-size: 16px;
+    }
+
+    .session-info {
+      font-size: 12px;
+      color: var(--primary);
+      font-family: monospace;
+      background: var(--primary-dim);
+      padding: 4px 8px;
+      border-radius: 4px;
+      border: 1px solid var(--primary-dim);
+    }
+
+    .session-filter {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .session-filter label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .session-filter input[type="checkbox"] {
+      cursor: pointer;
+    }
+
+    .log-entry-session {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+    }
+
+    .log-entry-session span {
+      background: var(--bg-hover);
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-right: 6px;
+    }
+
+    .filters {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+      border-bottom: 1px solid var(--border-light);
+      padding: 0 16px;
+      background: var(--bg-header);
+    }
+
+    .tab {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 12px 20px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+
+    .tab:hover {
+      color: var(--text-main);
+      background: var(--bg-hover);
+    }
+
+    .tab.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+
+    .filter-btn {
+      background: var(--bg-card);
+      border: 1px solid var(--border-light);
+      color: var(--text-main);
+      border-radius: 6px;
+      padding: 6px 12px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+
+    .filter-btn:hover {
+      background: var(--bg-hover);
+    }
+
+    .filter-btn.active {
+      background: var(--primary-dim);
+      border-color: var(--primary);
+    }
+
+    .status {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .content {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+    }
+
+    .log-entry {
+      margin-bottom: 16px;
+    }
+
+    .log-entry-type {
+      color: var(--primary);
+      font-weight: 600;
+      margin-bottom: 6px;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .log-entry-content {
+      background: var(--bg-main);
+      padding: 12px;
+      border-radius: 6px;
+      border-left: 3px solid var(--primary);
+      white-space: pre-wrap;
+      word-break: break-all;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .log-entry-content code {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+
+    .log-ai-query {
+      border-left-color: var(--log-ai);
+    }
+
+    .log-ai-query .log-entry-type {
+      color: var(--log-ai);
+    }
+
+    .log-stdin {
+      border-left-color: var(--log-stdin);
+    }
+
+    .log-stdin .log-entry-type {
+      color: var(--log-stdin);
+    }
+
+    .log-stdout {
+      border-left-color: var(--log-stdout);
+    }
+
+    .log-stderr {
+      border-left-color: var(--log-stderr);
+    }
+
+    .log-stderr .log-entry-type {
+      color: var(--log-stderr);
+    }
+
+    .log-skill-start {
+      border-left-color: var(--log-skill-start);
+    }
+
+    .log-skill-start .log-entry-type {
+      color: var(--log-skill-start);
+    }
+
+    .log-skill-command {
+      border-left-color: var(--log-skill-cmd);
+    }
+
+    .log-skill-command .log-entry-type {
+      color: var(--log-skill-cmd);
+    }
+
+    .log-skill-message {
+      border-left-color: var(--log-skill-msg);
+    }
+
+    .log-skill-message .log-entry-type {
+      color: var(--log-skill-msg);
+    }
+
+    .log-skill-command-output {
+      border-left-color: var(--log-skill-output);
+    }
+
+    .log-skill-command-output .log-entry-type {
+      color: var(--log-skill-output);
+    }
+
+    .log-skill-user-input {
+      border-left-color: var(--log-skill-input);
+    }
+
+    .log-skill-user-input .log-entry-type {
+      color: var(--log-skill-input);
+    }
+
+    .log-skill-ask {
+      border-left-color: var(--log-skill-ask);
+    }
+
+    .log-skill-ask .log-entry-type {
+      color: var(--log-skill-ask);
+    }
+
+    .log-skill-complete {
+      border-left-color: var(--log-skill-complete);
+    }
+
+    .log-skill-complete .log-entry-type {
+      color: var(--log-skill-complete);
+    }
+
+    .empty {
+      text-align: center;
+      color: var(--text-dim);
+      margin-top: 50px;
+      font-size: 14px;
+    }
+
+    .timestamp {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-left: auto;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <!-- Вкладки -->
+    <div class="tabs">
+      <button class="tab active" data-tab="terminal">💻 Terminal</button>
+      <button class="tab" data-tab="skills">✨ Skills</button>
     </div>
-    <script>
-      const params = new URLSearchParams(location.search);
-      const sessionId = params.get('sessionId');
-      
-      if (!sessionId) {
-        document.getElementById('content').innerHTML = '<div class="empty">Session ID не указан</div>';
-        document.getElementById('sessionInfo').textContent = 'Session: не указан';
-      } else {
-        document.getElementById('sessionInfo').textContent = `Session: ${sessionId.substring(0, 8)}...`;
-      }
-      
-      let allLogs = [];
-      let currentFilter = 'all';
-      let lastUpdate = 0;
-      
-      function stripAnsi(str) {
-        return str.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
-      }
-      
-      async function loadLogs() {
-        if (!sessionId) return;
-        
-        try {
-          const response = await fetch(`/api/logs?sessionId=${encodeURIComponent(sessionId)}&t=${Date.now()}`);
-          const logs = await response.json();
-          
-          // Обновляем только если есть новые данные
-          if (logs.length !== allLogs.length || logs.length > 0 && logs[logs.length - 1].id !== allLogs[allLogs.length - 1]?.id) {
-            allLogs = logs;
-            lastUpdate = Date.now();
-            renderLogs();
-            updateStatus();
-          }
-        } catch (err) {
-          console.error('Ошибка загрузки логов:', err);
-          document.getElementById('status').textContent = 'Ошибка загрузки';
-        }
-      }
-      
-      function updateStatus() {
-        const statusEl = document.getElementById('status');
-        const count = getFilteredLogs().length;
-        const time = lastUpdate ? new Date(lastUpdate).toLocaleTimeString('ru-RU') : '';
-        statusEl.textContent = `${count} записей${time ? ' • ' + time : ''}`;
-      }
-      
-      function getFilteredLogs() {
-        if (currentFilter === 'all') return allLogs;
-        return allLogs.filter(log => log.type === currentFilter);
-      }
-      
-      function renderLogs() {
-        const contentEl = document.getElementById('content');
-        const logs = getFilteredLogs();
-        
-        if (logs.length === 0) {
-          contentEl.innerHTML = '<div class="empty">Логи не найдены</div>';
-          return;
-        }
-        
-        const html = logs.map(log => {
-          let typeLabel, content, className;
-          
-          switch (log.type) {
-            case 'ai_query':
-              typeLabel = '🤖 AI Запрос';
-              content = log.user_ai_query || '';
-              className = 'log-ai-query';
-              break;
-            case 'stdin':
-              typeLabel = '⚡ Команда';
-              content = log.executed_command || '';
-              className = 'log-stdin';
-              break;
-            case 'stdout':
-              typeLabel = '📤 Вывод';
-              content = stripAnsi(log.terminal_output || '');
-              className = 'log-stdout';
-              break;
-            case 'stderr':
-              typeLabel = '🔥 Ошибка';
-              content = stripAnsi(log.terminal_output || '');
-              className = 'log-stderr';
-              break;
-            default:
-              return '';
-          }
-          
-          // HTML escaping
-          content = content.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-          
-          const timestamp = log.timestamp ? new Date(log.timestamp).toLocaleString('ru-RU') : '';
-          
-          return `
-            <div class="log-entry ${className}">
-              <div class="log-entry-type">
-                ${typeLabel}
-                ${timestamp ? `<span class="timestamp">${timestamp}</span>` : ''}
-              </div>
-              <pre class="log-entry-content">${content}</pre>
-            </div>
-          `;
-        }).join('');
-        
-        contentEl.innerHTML = html;
-        
-        // Автопрокрутка к последнему логу если внизу
-        const wasAtBottom = contentEl.scrollHeight - contentEl.scrollTop <= contentEl.clientHeight + 100;
-        if (wasAtBottom) {
-          contentEl.scrollTop = contentEl.scrollHeight;
-        }
-      }
-      
-      // Фильтры
-      document.querySelectorAll('.filter-btn').forEach(btn => {
-        btn.onclick = () => {
-          document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-          btn.classList.add('active');
-          currentFilter = btn.dataset.type;
+
+    <div class="header">
+      <div class="header-left">
+        <div class="header-title" id="headerTitle">📋 Лог команд терминала</div>
+        <div class="session-filter">
+          <div class="session-info" id="sessionInfo">Session: ...</div>
+          <label title="Показать логи всех сессий">
+            <input type="checkbox" id="showAllSessions" />
+            All
+          </label>
+        </div>
+      </div>
+      <div class="filters" id="terminalFilters">
+        <button class="filter-btn active" data-type="all">Все</button>
+        <button class="filter-btn" data-type="ai_query">AI</button>
+        <button class="filter-btn" data-type="stdin">Команды</button>
+        <button class="filter-btn" data-type="stdout">Вывод</button>
+        <button class="filter-btn" data-type="stderr">Ошибки</button>
+      </div>
+      <div class="filters" id="skillsFilters" style="display: none;">
+        <button class="filter-btn active" data-type="all">Все</button>
+        <button class="filter-btn" data-type="skill_start">Запуск</button>
+        <button class="filter-btn" data-type="skill_command">Команды</button>
+        <button class="filter-btn" data-type="skill_command_output">Output</button>
+        <button class="filter-btn" data-type="skill_message">Инфо</button>
+        <button class="filter-btn" data-type="skill_ask">Вопросы</button>
+        <button class="filter-btn" data-type="skill_user_input">Ответы</button>
+        <button class="filter-btn" data-type="skill_complete">Завершение</button>
+      </div>
+      <div class="status" id="status">Загрузка...</div>
+    </div>
+    <div class="content" id="content">
+      <div class="empty">Загрузка логов...</div>
+    </div>
+  </div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const sessionId = params.get('sessionId');
+
+    let currentTab = 'terminal'; // 'terminal' или 'skills'
+    let allLogs = [];
+    let currentFilter = 'all';
+    let lastUpdate = 0;
+    let showAllSessions = false;
+
+    if (!sessionId) {
+      document.getElementById('sessionInfo').textContent = 'Session: не указан';
+    } else {
+      document.getElementById('sessionInfo').textContent = `Session: ${sessionId.substring(0, 8)}...`;
+    }
+
+    function stripAnsi(str) {
+      return str.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
+    }
+
+    async function loadLogs() {
+      if (!showAllSessions && !sessionId) return;
+
+      try {
+        const apiUrl = currentTab === 'skills' ? '/api/skills-logs' : '/api/logs';
+        const url = showAllSessions
+          ? `${apiUrl}?t=${Date.now()}`
+          : `${apiUrl}?sessionId=${encodeURIComponent(sessionId)}&t=${Date.now()}`;
+        const response = await fetch(url);
+        const logs = await response.json();
+
+        if (logs.length !== allLogs.length || (logs.length > 0 && logs[logs.length - 1].id !== allLogs[allLogs.length - 1]?.id)) {
+          allLogs = logs;
+          lastUpdate = Date.now();
           renderLogs();
           updateStatus();
-        };
-      });
-      
-      // Загружаем логи сразу и затем каждые 2 секунды
+        }
+      } catch (err) {
+        console.error('Ошибка загрузки логов:', err);
+        document.getElementById('status').textContent = 'Ошибка загрузки';
+      }
+    }
+
+    function updateStatus() {
+      const statusEl = document.getElementById('status');
+      const count = getFilteredLogs().length;
+      const time = lastUpdate ? new Date(lastUpdate).toLocaleTimeString('ru-RU') : '';
+      statusEl.textContent = `${count} записей${time ? ' • ' + time : ''}`;
+    }
+
+    function getFilteredLogs() {
+      if (currentFilter === 'all') return allLogs;
+      return allLogs.filter(log => log.type === currentFilter);
+    }
+
+    function escapeHtml(s) {
+      if (s == null) return '';
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function renderLogs() {
+      const contentEl = document.getElementById('content');
+      if (!showAllSessions && !sessionId) {
+        contentEl.innerHTML = '<div class="empty">Укажите sessionId в URL или включите All для просмотра логов</div>';
+        return;
+      }
+      const logs = getFilteredLogs();
+
+      if (logs.length === 0) {
+        contentEl.innerHTML = '<div class="empty">Логи не найдены</div>';
+        return;
+      }
+
+      const html = logs.map(log => {
+        if (currentTab === 'skills') {
+          return renderSkillLog(log);
+        } else {
+          return renderTerminalLog(log);
+        }
+      }).join('');
+
+      contentEl.innerHTML = html;
+
+      // Автопрокрутка к последнему логу если внизу
+      const wasAtBottom = contentEl.scrollHeight - contentEl.scrollTop <= contentEl.clientHeight + 100;
+      if (wasAtBottom) {
+        contentEl.scrollTop = contentEl.scrollHeight;
+      }
+    }
+
+    function renderTerminalLog(log) {
+      let typeLabel, content, className;
+
+      switch (log.type) {
+        case 'ai_query':
+          typeLabel = '🤖 AI Запрос';
+          content = log.user_ai_query || '';
+          className = 'log-ai-query';
+          break;
+        case 'stdin':
+          typeLabel = '⚡ Команда';
+          content = log.executed_command || '';
+          className = 'log-stdin';
+          break;
+        case 'stdout':
+          typeLabel = '📤 Вывод';
+          content = stripAnsi(log.terminal_output || '');
+          className = 'log-stdout';
+          break;
+        case 'stderr':
+          typeLabel = '🔥 Ошибка';
+          content = stripAnsi(log.terminal_output || '');
+          className = 'log-stderr';
+          break;
+        default:
+          return '';
+      }
+
+      content = content.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const timestamp = log.timestamp ? new Date(log.timestamp).toLocaleString('ru-RU') : '';
+      const sessionBadge = showAllSessions && (log.serverName || log.sessionId)
+        ? `<div class="log-entry-session"><span>${escapeHtml(log.serverName || log.serverId || '')}</span><span>${escapeHtml((log.sessionId || '').substring(0, 8))}…</span></div>`
+        : '';
+      return `
+          <div class="log-entry ${className}">
+            ${sessionBadge}
+            <div class="log-entry-type">
+              ${typeLabel}
+              ${timestamp ? `<span class="timestamp">${timestamp}</span>` : ''}
+            </div>
+            <pre class="log-entry-content">${content}</pre>
+          </div>
+        `;
+    }
+
+    function renderSkillLog(log) {
+      let typeLabel, content, className, extraInfo = '';
+
+      switch (log.type) {
+        case 'skill_start':
+          typeLabel = '✨ Запуск Skill';
+          content = `Skill: ${log.skill_name}\n${log.skill_description || ''}\n\nПараметры: ${JSON.stringify(log.skill_params, null, 2)}`;
+          // Добавляем AI контекст
+          if (log.ai_system_prompt) {
+            content += `\n\n--- AI System Prompt (preview) ---\n${log.ai_system_prompt}`;
+          }
+          className = 'log-skill-start';
+          break;
+        case 'skill_command':
+          typeLabel = '🐚 Команда';
+          content = log.command || '';
+          // Добавляем user content который был отправлен AI
+          if (log.user_content_sent_to_ai) {
+            content += `\n\n--- User Content Sent to AI ---\n${log.user_content_sent_to_ai}`;
+          }
+          // Добавляем AI response
+          if (log.ai_full_response) {
+            content += `\n\n--- AI Full Response ---\n${log.ai_full_response}`;
+          }
+          // Добавляем messages history
+          if (log.ai_messages_history && log.ai_messages_history.length > 0) {
+            content += `\n\n--- AI Messages History (${log.ai_messages_history.length} messages) ---\n`;
+            log.ai_messages_history.forEach((m, i) => {
+              content += `\n[${i + 1}] ${m.role}: ${m.content}`;
+            });
+          }
+          className = 'log-skill-command';
+          extraInfo = `Шаг: ${log.step}`;
+          break;
+        case 'skill_command_output':
+          typeLabel = '📤 Command Output';
+          // Показываем и сырой и очищенный output
+          content = '';
+          if (log.command_output_cleaned) {
+            content += `--- Cleaned (sent to AI) ---\n${log.command_output_cleaned}`;
+          }
+          if (log.command_output_raw) {
+            content += `\n\n--- Raw Output ---\n${log.command_output_raw}`;
+          }
+          // Старый формат (fallback)
+          if (!content && log.command_output) {
+            content = log.command_output;
+          }
+          content = content || '(no output)';
+          className = 'log-skill-command-output';
+          extraInfo = `Шаг: ${log.step} | Source: ${log.output_source || 'unknown'}`;
+          break;
+        case 'skill_message':
+          typeLabel = 'ℹ️ Инфо сообщение';
+          content = log.message || '';
+          if (log.user_content_sent_to_ai) {
+            content += `\n\n--- User Content Sent to AI ---\n${log.user_content_sent_to_ai}`;
+          }
+          if (log.ai_full_response) {
+            content += `\n\n--- AI Full Response ---\n${log.ai_full_response}`;
+          }
+          className = 'log-skill-message';
+          extraInfo = `Шаг: ${log.step}`;
+          break;
+        case 'skill_user_input':
+          typeLabel = '💬 Ответ пользователя';
+          content = log.user_input || '';
+          className = 'log-skill-user-input';
+          extraInfo = `Шаг: ${log.step}`;
+          break;
+        case 'skill_ask':
+          typeLabel = '❓ Вопрос AI';
+          content = log.question || '';
+          if (log.required === false) {
+            content += ' (опциональный)';
+          }
+          if (log.user_content_sent_to_ai) {
+            content += `\n\n--- User Content Sent to AI ---\n${log.user_content_sent_to_ai}`;
+          }
+          if (log.ai_full_response) {
+            content += `\n\n--- AI Full Response ---\n${log.ai_full_response}`;
+          }
+          className = 'log-skill-ask';
+          extraInfo = `Шаг: ${log.step}`;
+          break;
+        case 'skill_complete':
+          typeLabel = '✅ Завершение';
+          content = log.final_message || 'Skill completed';
+          if (log.user_content_sent_to_ai) {
+            content += `\n\n--- User Content Sent to AI ---\n${log.user_content_sent_to_ai}`;
+          }
+          if (log.ai_full_response) {
+            content += `\n\n--- AI Full Response ---\n${log.ai_full_response}`;
+          }
+          className = 'log-skill-complete';
+          extraInfo = `Шаг: ${log.step}`;
+          break;
+        default:
+          return '';
+      }
+
+      content = content.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const timestamp = log.timestamp ? new Date(log.timestamp).toLocaleString('ru-RU') : '';
+      const sessionBadge = showAllSessions && (log.serverName || log.session_id)
+        ? `<div class="log-entry-session"><span>${escapeHtml(log.serverName || log.serverId || '')}</span><span>${escapeHtml((log.session_id || '').substring(0, 8))}…</span></div>`
+        : '';
+      const skillBadge = `<div class="log-entry-session"><span>📦 ${escapeHtml(log.skill_name)}</span>${extraInfo ? `<span>${extraInfo}</span>` : ''}</div>`;
+
+      return `
+          <div class="log-entry ${className}">
+            ${sessionBadge}
+            ${skillBadge}
+            <div class="log-entry-type">
+              ${typeLabel}
+              ${timestamp ? `<span class="timestamp">${timestamp}</span>` : ''}
+            </div>
+            <pre class="log-entry-content">${content}</pre>
+          </div>
+        `;
+    }
+
+    // Чекбокс All — переключение текущая сессия / все сессии
+    document.getElementById('showAllSessions').addEventListener('change', function () {
+      showAllSessions = this.checked;
       loadLogs();
-      const intervalId = setInterval(loadLogs, 2000);
-      
-      // Останавливаем при закрытии окна
-      window.addEventListener('beforeunload', () => {
-        clearInterval(intervalId);
-      });
-    </script>
-  </body>
+    });
+
+    // Переключение табов
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.onclick = () => {
+        const tabName = tab.dataset.tab;
+        if (tabName === currentTab) return;
+
+        // Переключаем активный таб
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        currentTab = tabName;
+
+        // Обновляем заголовок
+        const headerTitle = document.getElementById('headerTitle');
+        if (tabName === 'skills') {
+          headerTitle.textContent = '✨ Логи Skills';
+        } else {
+          headerTitle.textContent = '📋 Лог команд терминала';
+        }
+
+        // Показываем соответствующие фильтры
+        document.getElementById('terminalFilters').style.display = tabName === 'terminal' ? 'flex' : 'none';
+        document.getElementById('skillsFilters').style.display = tabName === 'skills' ? 'flex' : 'none';
+
+        // Сбрасываем фильтр
+        currentFilter = 'all';
+        const activeFilters = tabName === 'terminal' ? '#terminalFilters .filter-btn' : '#skillsFilters .filter-btn';
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        document.querySelector(activeFilters + '[data-type="all"]').classList.add('active');
+
+        // Перезагружаем логи
+        allLogs = [];
+        loadLogs();
+      };
+    });
+
+    // Фильтры по типу
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentFilter = btn.dataset.type;
+        renderLogs();
+        updateStatus();
+      };
+    });
+
+    // Первый рендер (сообщение при отсутствии sessionId) и загрузка
+    renderLogs();
+    loadLogs();
+    const intervalId = setInterval(loadLogs, 2000);
+
+    // Останавливаем при закрытии окна
+    window.addEventListener('beforeunload', () => {
+      clearInterval(intervalId);
+    });
+  </script>
+</body>
+
 </html>

@@ -18,25 +18,30 @@ function ensureTerm() {
   xterm = new window.Terminal({
     convertEol: true,
     cursorBlink: true,
-    theme: { background: '#000000', foreground: '#00ff00' }
+    theme: window.themeManager ? window.themeManager.getTerminalTheme() : { background: '#000000', foreground: '#00ff00' }
+  });
+  window.addEventListener('theme-changed', () => {
+    if (xterm && window.themeManager) {
+      xterm.options.theme = window.themeManager.getTerminalTheme();
+    }
   });
   fitAddon = new window.FitAddon.FitAddon();
   xterm.loadAddon(fitAddon);
   xterm.open(terminalEl);
-  setTimeout(() => { try { fitAddon.fit(); } catch {} }, 0);
-  window.addEventListener('resize', () => { try { fitAddon.fit(); } catch {} });
+  setTimeout(() => { try { fitAddon.fit(); } catch { } }, 0);
+  window.addEventListener('resize', () => { try { fitAddon.fit(); } catch { } });
   return xterm;
 }
 
 function openOverlay(title) {
   overlayTitle.textContent = title;
   overlay.classList.remove('hidden');
-  try { termInput.focus(); } catch {}
+  try { termInput.focus(); } catch { }
 }
 function closeOverlay() {
   overlay.classList.add('hidden');
   if (currentWs) {
-    try { currentWs.close(); } catch {}
+    try { currentWs.close(); } catch { }
   }
   if (xterm) {
     xterm.dispose();
@@ -59,7 +64,7 @@ function render(servers) {
     tile.onmouseenter = (e) => showTooltip(e, s);
     tile.onmouseleave = hideTooltip;
     tile.onclick = () => openActions(s);
-    
+
     // Создаем HTML для плитки
     let servicesHTML = '';
     s.services.forEach(sv => {
@@ -77,7 +82,7 @@ function render(servers) {
         </div>
       `;
     });
-    
+
     tile.innerHTML = `
       <div class="status ${s.color}"></div>
       <div class="tile-header">
@@ -87,24 +92,24 @@ function render(servers) {
       <div class="env">${s.env}</div>
       ${servicesHTML}
     `;
-    
+
     // Обработчик кнопки действий
     const actionsBtn = tile.querySelector('.tile-actions-btn');
     actionsBtn.onclick = (e) => {
       e.stopPropagation();
       openActionsModal(s);
     };
-    
+
     // Добавляем обработчики событий для каждого сервиса
     tile.querySelectorAll('.svc').forEach(svcEl => {
       const serviceId = svcEl.dataset.serviceId;
       const service = s.services.find(sv => sv.id === serviceId);
-      
+
       svcEl.onmouseenter = (e) => {
         e.stopPropagation(); // Останавливаем всплытие, чтобы не сработал обработчик плитки
         showServiceTooltip(e, service);
       };
-      
+
       svcEl.onmouseleave = (e) => {
         // Проверяем, не наведена ли мышь на другой сервис или на плитку
         const relatedTarget = e.relatedTarget;
@@ -113,7 +118,7 @@ function render(servers) {
         }
       };
     });
-    
+
     grid.appendChild(tile);
   });
 }
@@ -135,11 +140,11 @@ function showTooltip(ev, server) {
 // Новая функция для показа подсказки для отдельного сервиса
 function showServiceTooltip(ev, service) {
   if (!service) return;
-  
+
   const icon = service.ok ? '✅' : '❌';
   const description = service.description || service.detail || '';
   const cleanDescription = description.replace(/\s+/g, ' ').slice(0, 160);
-  
+
   tooltip.innerHTML = `
     <div class="title service-title">${service.name}</div>
     <div class="service-tooltip">
@@ -149,7 +154,7 @@ function showServiceTooltip(ev, service) {
       ${service.url ? `<div class="service-url">URL: ${service.url}</div>` : ''}
     </div>
   `;
-  
+
   tooltip.classList.remove('hidden');
   positionTooltip(ev);
 }
@@ -169,19 +174,19 @@ function hideTooltip() {
 
 function openSshLogs(serverId, serviceId, serviceName) {
   openOverlay(`Лог для ${serviceName}`);
-  ensureTerm(); 
+  ensureTerm();
   xterm.clear();
 
   const server = lastServerData.find(s => s.id === serverId);
   const service = server ? Object.values(server.services).find(sv => sv.id === serviceId) : null;
-  
+
   if (service && service.detail) {
     xterm.writeln(service.detail.replace(/\n/g, '\r\n'));
   } else {
     xterm.writeln(`\x1b[31m[Ошибка] Лог для этого сервиса не найден.\x1b[0m`);
   }
-  
-  setTimeout(() => { try { fitAddon.fit(); } catch {} }, 0);
+
+  setTimeout(() => { try { fitAddon.fit(); } catch { } }, 0);
 }
 
 // ========== Utility Functions ==========
@@ -208,21 +213,19 @@ const actionsModalClose = document.getElementById('actionsModalClose');
 let currentActionServer = null;
 
 const serverActions = [
-  { id: 'terminal-panel', icon: '🖥️', label: 'SSH-терминал (в панели)', shortcut: '1' },
-  { id: 'terminal-popup', icon: '🌐', label: 'Терминал в браузере (REST API)', shortcut: '7' },
-  { id: 'terminal-window', icon: '📺', label: 'Терминал в отдельном окне', shortcut: '5' },
+  { id: 'workspace', icon: '⚡', label: 'Рабочая панель (супер-терминал)', shortcut: '1' },
+  { id: 'terminal-popup', icon: '🌐', label: 'Терминал в браузере (REST API)', shortcut: '2' },
   { id: 'divider1' },
-  { id: 'tail-panel', icon: '📜', label: 'Tail лога (/var/log/syslog)', shortcut: '2' },
-  { id: 'tail-window', icon: '📋', label: 'Tail в отдельном окне', shortcut: '6' },
+  { id: 'tail-panel', icon: '📜', label: 'Tail лога (/var/log/syslog)', shortcut: '3' },
   { id: 'divider2' },
-  { id: 'ssh-external', icon: '🔗', label: 'Открыть SSH (внешний клиент)', shortcut: '3' },
-  { id: 'ssh-copy', icon: '📎', label: 'Скопировать команду SSH', shortcut: '4' },
+  { id: 'ssh-external', icon: '🔗', label: 'Открыть SSH (внешний клиент)', shortcut: '4' },
+  { id: 'ssh-copy', icon: '📎', label: 'Скопировать команду SSH', shortcut: '5' },
 ];
 
 function openActionsModal(server) {
   currentActionServer = server;
   actionsModalTitle.textContent = server.name;
-  
+
   actionsModalBody.innerHTML = serverActions.map(action => {
     if (action.id.startsWith('divider')) {
       return '<div class="actions-modal-divider"></div>';
@@ -235,12 +238,12 @@ function openActionsModal(server) {
       </button>
     `;
   }).join('');
-  
+
   // Привязываем обработчики
   actionsModalBody.querySelectorAll('.actions-modal-item').forEach(btn => {
     btn.onclick = () => handleServerAction(btn.dataset.action);
   });
-  
+
   actionsModal.classList.add('visible');
 }
 
@@ -253,22 +256,16 @@ function handleServerAction(actionId) {
   if (!currentActionServer) return;
   const server = currentActionServer;
   closeActionsModal();
-  
+
   switch (actionId) {
-    case 'terminal-panel':
-      openTerminal(server);
+    case 'workspace':
+      window.open(`/workspace.html?serverId=${encodeURIComponent(server.id)}`, '_blank', 'width=1200,height=800');
       break;
     case 'terminal-popup':
       window.open(`/term.html?mode=terminal&serverId=${encodeURIComponent(server.id)}`, '_blank', 'width=900,height=600');
       break;
-    case 'terminal-window':
-      openTerminalWindow(server, 'terminal');
-      break;
     case 'tail-panel':
       openTail(server, '/var/log/syslog');
-      break;
-    case 'tail-window':
-      openTerminalWindow(server, 'tail', '/var/log/syslog');
       break;
     case 'ssh-external':
       window.location.href = `ssh://${server.ssh.user}@${server.ssh.host}:${server.ssh.port || 22}`;
@@ -287,23 +284,21 @@ actionsModal.onclick = (e) => {
 // Клавиатурные сокращения для модала
 document.addEventListener('keydown', (e) => {
   if (!actionsModal.classList.contains('visible')) return;
-  
+
   if (e.key === 'Escape') {
     closeActionsModal();
     return;
   }
-  
+
   // Цифровые сокращения
   const shortcutMap = {
-    '1': 'terminal-panel',
-    '2': 'tail-panel',
-    '3': 'ssh-external',
-    '4': 'ssh-copy',
-    '5': 'terminal-window',
-    '6': 'tail-window',
-    '7': 'terminal-popup',
+    '1': 'workspace',
+    '2': 'terminal-popup',
+    '3': 'tail-panel',
+    '4': 'ssh-external',
+    '5': 'ssh-copy',
   };
-  
+
   if (shortcutMap[e.key]) {
     handleServerAction(shortcutMap[e.key]);
   }
@@ -320,7 +315,7 @@ function openTerminal(server) {
   openOverlay(`${server.name} — терминал`);
   terminalEl.innerHTML = '';
   ensureTerm(); xterm.clear();
-  setTimeout(() => { try { fitAddon.fit(); } catch {} }, 0);
+  setTimeout(() => { try { fitAddon.fit(); } catch { } }, 0);
   const wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws';
   const wsUrl = `${wsProto}://${window.location.host}/ws/terminal?serverId=${encodeURIComponent(server.id)}&cols=120&rows=30`;
   const ws = new WebSocket(wsUrl);
@@ -328,7 +323,7 @@ function openTerminal(server) {
   xterm.writeln('[подключение к SSH...]');
   ws.onopen = () => xterm.writeln('[соединение установлено]');
   ws.onclose = (ev) => xterm.writeln(`\r\n[соединение закрыто${ev.code ? ' код ' + ev.code : ''}]`);
-  
+
   ws.onmessage = (ev) => {
     try {
       const msg = JSON.parse(ev.data);
@@ -345,12 +340,12 @@ function openTerminal(server) {
         }
       }
       if (msg.type === 'skill_error') { xterm.writeln(`\r\n\x1b[1;31m[Skill Error] ${msg.error}\x1b[0m`); }
-    } catch {}
+    } catch { }
   };
 
   // Простая передача данных на сервер
-  xterm.onData((d) => { 
-    try { ws.send(JSON.stringify({ type: 'data', data: d })); } catch {} 
+  xterm.onData((d) => {
+    try { ws.send(JSON.stringify({ type: 'data', data: d })); } catch { }
   });
 
   // Логирование команд
@@ -374,7 +369,7 @@ function openTail(server, path) {
   openOverlay(`${server.name} — tail ${path}`);
   terminalEl.innerHTML = '';
   ensureTerm(); xterm.clear();
-  setTimeout(() => { try { fitAddon.fit(); } catch {} }, 0);
+  setTimeout(() => { try { fitAddon.fit(); } catch { } }, 0);
   const wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws';
   const wsUrl = `${wsProto}://${window.location.host}/ws/tail?serverId=${encodeURIComponent(server.id)}&path=${encodeURIComponent(path)}&lines=200`;
   const ws = new WebSocket(wsUrl);
@@ -387,7 +382,7 @@ function openTail(server, path) {
       if (msg.type === 'data' || msg.type === 'err') {
         xterm.write(msg.data);
       }
-    } catch {}
+    } catch { }
   };
   ws.onclose = (ev) => { xterm.writeln(`\r\n[соединение закрыто${ev.code ? ' код ' + ev.code : ''}]`); };
 }
@@ -418,19 +413,19 @@ function openTail(server, path) {
 function parseSkillParamsSimple(str) {
   const params = {};
   if (!str) return params;
-  
+
   // Парсим --key value или --key "value with spaces"
   const regex = /--(\w+)\s+(?:"([^"]+)"|(\S+))/g;
   let match;
   while ((match = regex.exec(str)) !== null) {
     params[match[1]] = match[2] || match[3];
   }
-  
+
   // Если нет --key формата, весь текст как message
   if (Object.keys(params).length === 0 && str) {
     params.message = str;
   }
-  
+
   return params;
 }
 
@@ -452,15 +447,28 @@ function openTerminalWindow(server, mode, arg) {
   // drag
   (function dragWin() {
     const header = win.querySelector('.win-header');
-    let dragging = false, sx=0, sy=0, sl=0, st=0;
-    header.addEventListener('mousedown', (e) => { dragging = true; sx=e.clientX; sy=e.clientY; const r = win.getBoundingClientRect(); sl=r.left; st=r.top; document.body.style.userSelect='none'; });
-    window.addEventListener('mousemove', (e) => { if(!dragging) return; const dx=e.clientX-sx, dy=e.clientY-sy; win.style.left=Math.max(0,Math.min(window.innerWidth-win.offsetWidth, sl+dx))+'px'; win.style.top=Math.max(0,Math.min(window.innerHeight-win.offsetHeight, st+dy))+'px'; });
-    window.addEventListener('mouseup', ()=>{ dragging=false; document.body.style.userSelect=''; });
+    let dragging = false, sx = 0, sy = 0, sl = 0, st = 0;
+    header.addEventListener('mousedown', (e) => { dragging = true; sx = e.clientX; sy = e.clientY; const r = win.getBoundingClientRect(); sl = r.left; st = r.top; document.body.style.userSelect = 'none'; });
+    window.addEventListener('mousemove', (e) => { if (!dragging) return; const dx = e.clientX - sx, dy = e.clientY - sy; win.style.left = Math.max(0, Math.min(window.innerWidth - win.offsetWidth, sl + dx)) + 'px'; win.style.top = Math.max(0, Math.min(window.innerHeight - win.offsetHeight, st + dy)) + 'px'; });
+    window.addEventListener('mouseup', () => { dragging = false; document.body.style.userSelect = ''; });
   })();
 
   // xterm per window
-  const term = new window.Terminal({ convertEol:true, cursorBlink:true, theme:{ background:'#000000', foreground:'#00ff00' } });
-  const fit = new window.FitAddon.FitAddon(); term.loadAddon(fit); term.open(termDiv); setTimeout(() => { try { fit.fit(); } catch {} }, 0);
+  const term = new window.Terminal({ convertEol: true, cursorBlink: true, theme: { background: '#000000', foreground: '#00ff00' } });
+
+  if (window.themeManager) {
+    term.options.theme = window.themeManager.getTerminalTheme();
+  } else {
+    // Lazy load theme manager into main window if missing (unlikely given index.html changes)
+    const script = document.createElement('script');
+    script.src = './theme-manager.js';
+    script.onload = () => {
+      if (window.themeManager) term.options.theme = window.themeManager.getTerminalTheme();
+    };
+    document.head.appendChild(script);
+  }
+
+  const fit = new window.FitAddon.FitAddon(); term.loadAddon(fit); term.open(termDiv); setTimeout(() => { try { fit.fit(); } catch { } }, 0);
 
   const wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws';
   const wsUrl = mode === 'tail'
@@ -469,9 +477,9 @@ function openTerminalWindow(server, mode, arg) {
   const ws = new WebSocket(wsUrl);
   term.writeln(mode === 'tail' ? `[tail ${arg}]` : '[подключение к SSH...]');
   ws.onopen = () => term.writeln('[соединение установлено]');
-  ws.onmessage = (ev) => { try { const msg = JSON.parse(ev.data); if (msg.type==='data'||msg.type==='err') term.write(msg.data); if (msg.type==='fatal') term.writeln(`\r\n[FATAL] ${msg.error}`); } catch {} };
+  ws.onmessage = (ev) => { try { const msg = JSON.parse(ev.data); if (msg.type === 'data' || msg.type === 'err') term.write(msg.data); if (msg.type === 'fatal') term.writeln(`\r\n[FATAL] ${msg.error}`); } catch { } };
   ws.onclose = (ev) => term.writeln(`\r\n[соединение закрыто${ev.code ? ' код ' + ev.code : ''}]`);
-  closeBtn.onclick = () => { try { ws.close(); } catch {}; win.remove(); };
+  closeBtn.onclick = () => { try { ws.close(); } catch { }; win.remove(); };
 
   if (mode === 'terminal') {
     ws.onmessage = (ev) => {
@@ -489,12 +497,12 @@ function openTerminalWindow(server, mode, arg) {
           }
         }
         if (msg.type === 'skill_error') term.writeln(`\r\n\x1b[1;31m[Skill Error] ${msg.error}\x1b[0m`);
-      } catch {}
+      } catch { }
     };
-    
+
     // Простая передача данных
-    term.onData((d) => { 
-      try { ws.send(JSON.stringify({ type: 'data', data: d })); } catch {} 
+    term.onData((d) => {
+      try { ws.send(JSON.stringify({ type: 'data', data: d })); } catch { }
     });
   }
 
@@ -508,34 +516,34 @@ const aiSearchBtn = document.getElementById('ai-search-btn');
 function showAIResponse(query, response) {
   openOverlay(`AI Помощник: ${query.slice(0, 50)}...`);
   terminalEl.innerHTML = '';
-  ensureTerm(); 
+  ensureTerm();
   xterm.clear();
-  
+
   xterm.writeln(`\x1b[36m[Запрос]\x1b[0m ${query}\n`);
   xterm.writeln(`\x1b[32m[Ответ AI]\x1b[0m`);
-  
+
   // Разбиваем ответ на строки для корректного отображения
   const lines = response.split('\n');
   lines.forEach(line => {
     xterm.writeln(line);
   });
-  
-  setTimeout(() => { try { fitAddon.fit(); } catch {} }, 0);
+
+  setTimeout(() => { try { fitAddon.fit(); } catch { } }, 0);
 }
 
 async function sendAIQuery(query) {
   try {
     aiSearchBtn.textContent = '⏳';
     aiSearchBtn.disabled = true;
-    
+
     const response = await fetch('/api/ai-help', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query })
     });
-    
+
     const result = await response.json();
-    
+
     if (result.success) {
       showAIResponse(query, result.response);
     } else {

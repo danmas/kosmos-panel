@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ru">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Workspace — Kosmos Panel</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="https://unpkg.com/xterm/css/xterm.css" />
+    <script src="https://unpkg.com/xterm/lib/xterm.js"></script>
+    <script src="https://unpkg.com/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+    <link rel="stylesheet" href="./themes.css" />
+    <link rel="stylesheet" href="./workspace.css" />
+</head>
+
+<body>
+    <!-- Top Bar -->
+    <div class="ws-topbar">
+        <div class="ws-topbar-title">⚡ Workspace</div>
+        <div class="ws-topbar-server" id="wsServerName">—</div>
+        <div class="ws-topbar-session" id="wsSessionId" title="Session ID (click to copy)">—</div>
+        <div class="ws-topbar-spacer"></div>
+        <select class="theme-selector topbar-link"
+            style="background:transparent; border:none; color:var(--text-muted); padding:4px; max-width:80px; margin-right:10px;"
+            title="Тема оформления"></select>
+        <button id="wsReconnect" class="btn-reconnect">Переподключить</button>
+        <button id="wsFit">Подогнать</button>
+        <button id="wsClose" class="btn-close">Закрыть</button>
+    </div>
+
+    <!-- Main Layout: Left Sidebar + Drag Handle + Right Terminal -->
+    <div class="ws-layout">
+
+        <!-- Left Sidebar -->
+        <div class="ws-left" id="wsLeft">
+
+            <!-- Left Top: Logs/History -->
+            <div class="ws-left-top" id="wsLeftTop">
+                <div class="ws-tabs" id="logTabs">
+                    <button class="ws-tab active" data-tab="terminal">💻 Terminal</button>
+                    <button class="ws-tab" data-tab="skills">✨ Skills</button>
+                </div>
+                <!-- Filters for terminal logs -->
+                <div class="ws-filters" id="terminalFilters">
+                    <button class="ws-filter-btn active" data-type="all">Все</button>
+                    <button class="ws-filter-btn" data-type="ai_query">AI</button>
+                    <button class="ws-filter-btn" data-type="stdin">Команды</button>
+                    <button class="ws-filter-btn" data-type="stdout">Вывод</button>
+                    <button class="ws-filter-btn" data-type="stderr">Ошибки</button>
+                </div>
+                <!-- Filters for skills logs -->
+                <div class="ws-filters hidden" id="skillsFilters">
+                    <button class="ws-filter-btn active" data-type="all">Все</button>
+                    <button class="ws-filter-btn" data-type="skill_start">Запуск</button>
+                    <button class="ws-filter-btn" data-type="skill_command">Команды</button>
+                    <button class="ws-filter-btn" data-type="skill_command_output">Output</button>
+                    <button class="ws-filter-btn" data-type="skill_message">Инфо</button>
+                    <button class="ws-filter-btn" data-type="skill_ask">Вопросы</button>
+                    <button class="ws-filter-btn" data-type="skill_complete">Готово</button>
+                </div>
+                <div class="ws-panel-content" id="logsContent">
+                    <div class="ws-empty">Загрузка логов...</div>
+                </div>
+            </div>
+
+            <!-- Horizontal Drag Handle -->
+            <div class="ws-drag-h" id="wsDragH"></div>
+
+            <!-- Left Bottom: Skills -->
+            <div class="ws-left-bottom" id="wsLeftBottom">
+                <div class="ws-tabs">
+                    <button class="ws-tab active">🛠 Skills</button>
+                </div>
+                <!-- Skills list or active skill dialog -->
+                <div class="ws-panel-content" id="skillsPanel">
+                    <div class="ws-skills-loading">Загрузка skills...</div>
+                </div>
+                <!-- Skill params form (shown when skill selected) -->
+                <div class="ws-skill-params-form hidden" id="wsSkillParamsForm">
+                    <div class="ws-skill-params-title">Параметры для <span id="wsSkillParamsName"></span>:</div>
+                    <div class="ws-skill-param-input">
+                        <input type="text" id="wsSkillParamsInput" placeholder="Введите параметры...">
+                        <button class="ws-skill-execute-btn" id="wsSkillExecuteBtn">▶</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Vertical Drag Handle -->
+        <div class="ws-drag-v" id="wsDragV"></div>
+
+        <!-- Right: Terminal -->
+        <div class="ws-right" id="wsRight">
+            <div id="wsTerm" class="ws-term"></div>
+
+            <!-- Remote command confirmation -->
+            <div id="wsCommandConfirm" class="ws-command-confirm hidden">
+                <div class="ws-command-confirm-header">
+                    <span class="ws-command-confirm-badge">REST API</span>
+                    <span>Удалённая команда требует подтверждения</span>
+                </div>
+                <div class="ws-command-confirm-text" id="wsCommandConfirmText"></div>
+                <div class="ws-command-confirm-buttons">
+                    <button class="ws-btn-reject" id="wsConfirmNo">Отклонить</button>
+                    <button class="ws-btn-skip" id="wsConfirmSkip">Без подтверждения</button>
+                    <button class="ws-btn-confirm" id="wsConfirmYes">Выполнить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Skill create/edit dialog -->
+    <div id="wsSkillCreateOverlay" class="ws-skill-create-overlay hidden"></div>
+    <div id="wsSkillCreateDialog" class="ws-skill-create-dialog hidden">
+        <div class="ws-skill-create-header" id="wsSkillCreateHeader">
+            <span class="ws-skill-create-title" id="wsSkillCreateTitle">Редактировать Skill</span>
+            <button class="ws-skill-create-close" id="wsSkillCreateClose">×</button>
+        </div>
+        <div class="ws-skill-create-body">
+            <div class="ws-skill-create-path" id="wsSkillCreatePath">Путь: ...</div>
+            <div class="ws-skill-create-field">
+                <label class="ws-skill-create-label">Имя skill (латиница, без пробелов)</label>
+                <input type="text" class="ws-skill-create-input" id="wsSkillCreateName" placeholder="my-skill-name" autocomplete="off">
+            </div>
+            <div class="ws-skill-create-field" style="flex:1; display:flex; flex-direction:column;">
+                <label class="ws-skill-create-label">Содержимое SKILL.md</label>
+                <textarea class="ws-skill-create-textarea" id="wsSkillCreateContent" placeholder="---&#10;name: my-skill&#10;description: Описание&#10;---&#10;..."></textarea>
+            </div>
+            <div class="ws-skill-create-error hidden" id="wsSkillCreateError"></div>
+        </div>
+        <div class="ws-skill-create-footer">
+            <button class="ws-skill-create-btn ws-skill-create-btn-cancel" id="wsSkillCreateCancel">Отмена</button>
+            <button class="ws-skill-create-btn ws-skill-create-btn-save" id="wsSkillCreateSave">Сохранить</button>
+        </div>
+    </div>
+
+    <script src="./theme-manager.js"></script>
+    <script src="./workspace.js"></script>
+</body>
+
+</html>

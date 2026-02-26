@@ -1,0 +1,98 @@
+# KB — Оглавление базы знаний
+
+**Назначение:** Единая точка входа в документацию проекта «Kosmos Panel». Все документы БЗ перечислены ниже по секциям.
+
+---
+
+## Содержание
+
+1. [Архитектура и обзор](#1-архитектура-и-обзор)
+2. [Терминал и логи](#2-терминал-и-логи)
+3. [AI, Skills и промпты](#3-ai-skills-и-промпты)
+4. [Аутентификация и SSH](#4-аутентификация-и-ssh)
+5. [Внешние API и интеграции](#5-внешние-api-и-интеграции)
+6. [Утилиты и прочее](#6-утилиты-и-прочее)
+7. [Правила ведения KB](#правила-ведения-kb)
+
+---
+
+## 1. Архитектура и обзор
+
+| Файл | Описание | Ключевые темы | Актуализация |
+|------|----------|---------------|------------|
+| [README_AI.md](./README_AI.md) | Памятка для LLM/агентов и обзор системы | Backend (server/, monitor, ws, terminal), Frontend (web/), inventory.json, .env, config.json, контракты API/WS, инварианты, как расширять, AI конфигурация | 2026-02-16 |
+| [README_CONFIG.md](./README_CONFIG.md) | Система управления AI-конфигурацией | config.json, REST API (/api/config, /api/reload-config), горячая перезагрузка, UI редактор, миграция с .env | 2026-02-16 |
+| [DEVELOPER_THEMING_GUIDE.md](./DEVELOPER_THEMING_GUIDE.md) | **Архитектура тем**: Гайд для разработчиков | CSS Variables, ThemeManager, xterm.js integration, Cross-tab sync | 2026-02-18 |
+
+---
+
+## 2. Терминал и логи
+
+| Файл | Описание | Ключевые темы | Актуализация |
+|------|----------|---------------|--------------|
+| [README_WORKSPACE.md](./README_WORKSPACE.md) | **Новый интерфейс**: Рабочая панель (Super-Terminal) | 3-pane layout, Drag&Drop, Logs integration, Skills UI | 2026-02-17 |
+| [README_terminal.md](./README_terminal.md) | Техническое описание терминала (WS/REST) | WebSocket, REST API, logs, AI integration, Legacy term.html | 2026-02-15 |
+| [README_logs.md](./README_logs.md) | Техническое устройство логов бэкенда и терминала | server/logger.js, logs/*.log, terminal_log.json, skills_log.json, API /api/logs, /api/skills-logs | 2026-02-21 |
+
+---
+
+## 3. AI, Skills и промпты
+
+| Файл | Описание | Ключевые темы | Актуализация |
+|------|----------|---------------|--------------|
+| [README_AI.md](./README_AI.md) | Контекст для AI и сценарии | AI-команды ai:, подгрузка знаний (ai_system_promt.md), AI Skills (SKILL.md), RAG | 2026-02-15 |
+| [README_AI_SKILLS.md](./README_AI_SKILLS.md) | AI Skills (многошаговые сценарии) | Skills, SKILL.md, многошаговое выполнение, протоколы, формат | 2026-02-20 |
+| [README_AI_SKILLS_STRUCTURE.md](./README_AI_SKILLS_STRUCTURE.md) | Структура запросов/ответов LLM для Skills | messages, system prompt, user message, [CMD]/[ASK]/[MESSAGE]/[DONE], парсинг | 2026-02-20 |
+| [README_AI_promt.md](./README_AI_promt.md) | Тексты системных промптов | Terminal AI Assistant, Multi-step Skill, AI Helper | — |
+
+---
+
+## 4. Аутентификация и SSH
+
+| Файл | Описание | Ключевые темы | Актуализация |
+|------|----------|---------------|--------------|
+| [README_AUTH.md](./README_AUTH.md) | Настройка SSH и отладка подключений | credentials в inventory.json, privateKeyPath, passphrase, useAgent, тест SSH, горячая перезагрузка | — |
+
+---
+
+## 5. Внешние API и интеграции
+
+| Файл | Описание | Ключевые темы | Актуализация |
+|------|----------|---------------|--------------|
+| [README_AIAN_MODEL_REST.md](./README_AIAN_MODEL_REST.md) | REST API внешнего сервера AIAN-MODEL | Управление моделями (GROQ, OpenRouter), конфиги groq-models.json / openrouter-models.json, мультипровайдерная архитектура | — |
+
+---
+
+## 6. Утилиты и прочее
+
+| Файл | Описание | Ключевые темы | Актуализация |
+|------|----------|---------------|--------------|
+| [README_INDEX.md](./README_INDEX.md) | Этот файл — оглавление БЗ | Навигация по KB | 2026-02-18 |
+| [README_new_skin_instruct.md](./README_new_skin_instruct.md) | Инструкция по созданию новых тем (скинов) | CSS Variables, themes.css, theme-manager.js, примеры | 2026-02-17 |
+| [README_KB_RULES.md](./README_KB_RULES.md) | Правила ведения БЗ (кратко) | Чеклист, ссылки, актуализация, секции | 2026-02-15 |
+| [ИНСТРУКЦИЯ_ВЕДЕНИЕ_БЗ.md](./ИНСТРУКЦИЯ_ВЕДЕНИЕ_БЗ.md) | Инструкция по внедрению и ведению БЗ | Модель БЗ, шаблон индекса, правила, процесс | 2026-02-15 |
+
+---
+
+## Быстрый поиск по темам
+
+- **Начать изучение:** [README_AI.md](./README_AI.md) (архитектура и обзор).
+- **AI конфигурация (config.json, горячая перезагрузка):** [README_CONFIG.md](./README_CONFIG.md).
+- **Рабочая панель (Workspace):** [README_WORKSPACE.md](./README_WORKSPACE.md).
+- **Архитектура тем (для разработчиков):** [DEVELOPER_THEMING_GUIDE.md](./DEVELOPER_THEMING_GUIDE.md).
+- **API и SSH:** основной [README.md](../README.md) в корне + [README_AUTH.md](./README_AUTH.md).
+- **Правила ведения KB:** [README_KB_RULES.md](./README_KB_RULES.md), полная инструкция — [ИНСТРУКЦИЯ_ВЕДЕНИЕ_БЗ.md](./ИНСТРУКЦИЯ_ВЕДЕНИЕ_БЗ.md).
+
+---
+
+## Правила ведения KB
+
+1. **Единая точка входа** — `README_INDEX.md`; каждый README из `KB/` перечислен в одной из секций с заполнением колонок (Файл, Описание, Ключевые темы, Актуализация).
+2. **Именование** — документы в виде `README_<ТЕМА>.md`; исключения допускаются.
+3. **Актуализация** — в колонке указывать `YYYY-MM-DD` при содержательных изменениях (не при правке опечаток).
+4. **Ссылки** — внутри KB относительные (`./README_AI.md`); на код — от корня репозитория.
+5. **Новый документ/фича** — создать или обновить README и добавить/обновить строку в индексе.
+
+Подробно: [ИНСТРУКЦИЯ_ВЕДЕНИЕ_БЗ.md](./ИНСТРУКЦИЯ_ВЕДЕНИЕ_БЗ.md) и [README_KB_RULES.md](./README_KB_RULES.md).
+
+**Последнее обновление:** 2026-02-20

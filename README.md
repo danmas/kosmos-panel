@@ -1,6 +1,14 @@
-# Kosmos Panel — панель мониторинга и управления серверами (Node.js + ванильный JS)
+# Kosmos Panel — панель мониторинга сервисов на разных серверах
 
 Агент‑less панель в стиле «космической приборки»: опрашивает сервера по SSH/HTTP/TCP, показывает статусы, даёт быстрый доступ к терминалу (xterm.js) и хвостам логов. **Встроенный AI-помощник** преобразует команды на естественном языке в shell-команды прямо в терминале. Фронт — чистый JavaScript, бэк — Node.js.
+
+Agentless dashboard in a "space cockpit" style: polls servers via SSH/HTTP/TCP, displays their statuses, and provides quick access to the terminal (xterm.js) and log tails. Built-in AI assistant converts natural language commands into shell commands directly in the terminal. Frontend — pure JavaScript, backend — Node.js.
+
+![Kosmos Panel Screenshot](mlF1sU4F82.png)
+
+[![Watch the demo](https://img.youtube.com/vi/FboP_IKQ5RM/0.jpg)](https://youtu.be/FboP_IKQ5RM)
+
+[![Watch the demo](https://img.youtube.com/vi/UVaPy5kZiiE/0.jpg)](https://youtu.be/UVaPy5kZiiE)
 
 ## Возможности
 - Мониторинг без агентов:
@@ -10,16 +18,18 @@
 - Плитки серверов (цвет: green/yellow/red/gray), тултипы со сводкой
 - **Просмотр логов команд**: Для `sshCommand` сервисов доступен просмотр полного вывода команды прямо в интерфейсе.
 - **Стабильный порядок серверов**: плитки отображаются в том же порядке, что задан в `inventory.json`
-- Быстрые действия: терминал SSH (xterm.js), tail логов, ssh:// и копирование команды
-- Плавающие окна терминала/tail (несколько одновременно) и отдельная вкладка `/term.html`
+- **Рабочая Панель (Workspace)**: Единый интерфейс (три панели: терминал, логи, skills) с настраиваемым размером (`/workspace.html`).
+- Быстрые действия: терминал SSH (xterm.js), tail логов, ssh:// и копирование команды.
+- **Legacy**: Поддержка отдельной вкладки терминала (`/term.html`) сохранена как опция.
 - **AI-команды в терминале**: введите `ai: ваш запрос` и получите готовую shell-команду
+- **AI Skills**: многошаговые сценарии для автоматизации типовых задач (загрузка из локального проекта и удалённого сервера)
 - **Контекст для AI**: создайте `./.kosmos-panel/kosmos-panel.md` или `~/.config/kosmos-panel/kosmos-panel.md` на удалённом сервере для подгрузки специфичных знаний (читается при каждом AI-запросе через SSH)
 - **Логирование команд**: все взаимодействия с терминалом записываются со связями между AI запросами, командами и результатами, с указанием сервера
 - Горячая перезагрузка `inventory.json` (без рестартов)
 
-## Быстрый старт (Windows)
-Требования: Node.js 18+.
-```powershell
+## Быстрый старт
+Требования: Node.js 18+ или [Bun](https://bun.sh). По умолчанию `npm start` запускает через Bun; для Node: `npm run start:node`.
+```bash
 npm install
 npm start
 ```
@@ -83,7 +93,7 @@ USE_SSH_AGENT=false
 AI_SERVER_URL=http://localhost:3002/api/send-request
 AI_MODEL=moonshotai/kimi-dev-72b:free
 AI_PROVIDER=openroute
-AI_SYSTEM_PROMPT=You are a Linux terminal AI assistant. Your task is to convert the user's request into a valid shell command, and return ONLY the shell command itself without any explanation.
+AI_SYSTEM_PROMPT=You are a terminal AI assistant. Your task is to convert the user's request into a valid shell command, and return ONLY the shell command itself without any explanation.
 ```
 
 Значения из этого файла подставляются в `inventory.json`, если там используются плейсхолдеры. 
@@ -94,16 +104,15 @@ AI_SYSTEM_PROMPT=You are a Linux terminal AI assistant. Your task is to convert 
 
 ## Интерфейс
 - Плитки → hover: тултип; click: меню действий
-- Меню: терминал/tail во встроенном окне, в плавающих окнах и в отдельной вкладке (`/term.html`)
+- Меню: открыть Workspace, терминал в новой вкладке (`/term.html`), tail, SSH-ссылки.
 - Терминал — xterm.js: цвета, UTF‑8, прокрутка; ввод идёт прямо в терминал
 - **AI-команды**: `ai: покажи файлы` → автоматически выполнится `ls -la`
-- **Просмотр логов команд**: интерактивная панель при наведении + отдельные страницы `/logs.html` (с фильтрацией по серверам) и `/raw-logs.html`
+- **Просмотр логов команд**: интерактивная панель при наведении + страницы `/logs.html` (фильтр по сессии: текущая/все, и по типу) и `/raw-logs.html` (сырой JSON)
 - **Редактор конфигурации**: доступен по ссылке "⚙️ Настройки" или `/inventory-editor.html`
 - **Стабильный порядок серверов**: плитки серверов отображаются в том же порядке, что определен в `inventory.json`
 
-📖 **Подробная документация**:
-- **Терминал**: [README_terminal.md](README_terminal.md)  
-- **Логирование команд**: [KB/README_TERMINAL_LOGGING.md](KB/README_TERMINAL_LOGGING.md)
+📖 **Подробная документация (база знаний):** оглавление — [KB/README_INDEX.md](KB/README_INDEX.md).
+- **Терминал (WebSocket, REST API, логи, AI, Skills)**: [KB/README_terminal.md](KB/README_terminal.md). История команд: `logs/terminal/terminal_log.json`, `GET /api/logs`, UI — `/logs.html`, `/raw-logs.html`
 
 ### Редактор inventory.json
 
@@ -133,18 +142,21 @@ http://localhost:3000/inventory-editor.html
 
 Или через кнопку "⚙️ Настройки" в верхней панели главной страницы.
 
-📖 **Подробная документация**: [KB/README_INVENTORY_EDITOR.md](KB/README_INVENTORY_EDITOR.md)
+📖 **Подробная документация**: см. вкладки и справку в самом редакторе; общая конфигурация — [KB/README_AUTH.md](KB/README_AUTH.md)
 
 ## API/WS
 
 ### REST API
-- `GET /api/servers` — получить состояние всех серверов и сервисов
-- `GET /api/inventory` — получить краткий список серверов из конфигурации  
-- `GET /inventory.json` — загрузить полный файл конфигурации (для редактора)
-- `POST /api/inventory` — сохранить новую конфигурацию (с валидацией и backup)
-- `POST /api/reload` — перезагрузить конфигурацию из `inventory.json` и `env`.
-- `GET /api/test-ssh?serverId=...` — тестировать SSH-подключение к серверу
-- `GET /api/logs` — получить лог терминальных команд в JSON формате
+- `GET /api/servers` — состояние всех серверов и сервисов (порядок как в inventory)
+- `GET /api/inventory` — конфигурация (сервера, креды, poll)
+- `GET /inventory.json` — полный файл конфигурации (для редактора)
+- `POST /api/inventory` — сохранить конфигурацию (валидация, backup)
+- `POST /api/reload` — перезагрузить конфигурацию из `inventory.json` и `.env`
+- `GET /api/test-ssh?serverId=...` — тест SSH-подключения
+- `GET /api/logs` — лог терминальных команд (JSON)
+- `GET /api/service-log?serverId=...&serviceId=...` — вывод команды для сервиса типа `sshCommand`
+- **Терминал REST**: `POST /api/v1/terminal/sessions`, `.../sessions/:id/exec`, `DELETE .../sessions/:id`; то же для v2
+- **Skills**: `GET/POST` по `/api/skills` (см. AI Skills в интерфейсе)
 
 ### WebSocket
 - `/ws/terminal?serverId=...&cols=120&rows=30` — интерактивный SSH-терминал
@@ -161,7 +173,7 @@ http://localhost:3000/inventory-editor.html
 }
 ```
 
-**Примечание:** Все записи в `terminal_log.json` автоматически содержат информацию о сервере (`serverId`, `serverName`, `serverHost`) для различения команд от разных серверов.
+**Примечание:** Все записи в `logs/terminal/terminal_log.json` автоматически содержат информацию о сервере (`serverId`, `serverName`, `serverHost`) для различения команд от разных серверов.
 
 ## Известные проблемы и решения
 
@@ -169,7 +181,7 @@ http://localhost:3000/inventory-editor.html
 
 **Проблема:** Плитки серверов меняли местоположение при каждом обновлении страницы, не сохраняя порядок из конфигурации.
 
-**Решение:** В версии от 2024-12-19 исправлена логика формирования API-ответа в `server/index.js`. Теперь порядок серверов на главной странице строго соответствует порядку в файле `inventory.json`.
+**Решение:** В версии от 2024-12-19 исправлена логика формирования API-ответа в `server.js` (маршрут `GET /api/servers`). Теперь порядок серверов на главной странице строго соответствует порядку в файле `inventory.json`.
 
 **Технические детали:**
 - Ранее использовался `Object.values(snap.servers)`, который не гарантирует порядок элементов объекта
@@ -177,3 +189,8 @@ http://localhost:3000/inventory-editor.html
 - Изменения применяются автоматически после перезапуска сервера
 
 ## Структура проекта
+- **Корень**: `server.js` — точка входа, Express, статика `web/`, маршруты API и WS
+- **server/** — бэкенд: `monitor.js` (опрос серверов, inventory), `ws.js` (терминал, tail), `terminal.js` (REST API v1/v2), `ws-utils.js` (SSH), `logger.js`, `skills.js`, `skill-ai.js`
+- **web/** — фронт: `workspace.html` (основной интерфейс), `workspace.js`, `workspace.css`, `index.html`, `app.js`, `term.html` (legacy), `logs.html` (legacy), `inventory-editor.html`.
+- **KB/** — документация: `README_AUTH.md`, `README_AI.md` и др.
+- **tests/** — интеграционные тесты (например `test_usa_v2.js`)
