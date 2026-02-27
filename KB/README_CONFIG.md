@@ -23,7 +23,14 @@
 }
 ```
 
-Промпты для терминального AI и для skills хранятся в **prompts.json** (ключи `AI_SYSTEM_PROMPT`, `SKILL_SYSTEM_PROMPT_WITH_ASK`). См. `prompts.json.example`. Если в `prompts.json` нет `AI_SYSTEM_PROMPT`, используется значение из config/env.
+Промпты для терминального AI и для skills хранятся в **prompts.json**:
+- `AI_SYSTEM_PROMPT` — промпт для одиночных AI-команд в терминале
+- `SKILL_SYSTEM_PROMPT_WITH_ASK` — промпт для skills (legacy)
+- `SKILL_SYSTEM_PROMPT_WITH_MEMORY` — промпт для skills с долговременной памятью (основной)
+
+См. `prompts.json.example`. Если в `prompts.json` нет промпта, используется встроенный дефолт из `server/prompts.js`.
+
+**Важно:** При использовании промптов система автоматически добавляет информацию о целевой ОС (Linux/macOS/Windows) в начало промпта. Это происходит в `server/ws.js` и `server/skill-ai.js`.
 
 ### Описание полей
 

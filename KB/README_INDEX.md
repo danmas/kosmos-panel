@@ -40,7 +40,7 @@
 
 | Файл | Описание | Ключевые темы | Актуализация |
 |------|----------|---------------|--------------|
-| [README_AI.md](./README_AI.md) | Контекст для AI и сценарии | AI-команды ai:, подгрузка знаний (ai_system_promt.md), AI Skills (SKILL.md), RAG | 2026-02-15 |
+| [README_AI.md](./README_AI.md) | Контекст для AI и сценарии | AI-команды ai:, подгрузка знаний (kosmos-panel.md), AI Skills (SKILL.md), RAG | 2026-02-15 |
 | [README_AI_SKILLS.md](./README_AI_SKILLS.md) | AI Skills (многошаговые сценарии) | Skills, SKILL.md, многошаговое выполнение, протоколы, формат | 2026-02-20 |
 | [README_AI_SKILLS_STRUCTURE.md](./README_AI_SKILLS_STRUCTURE.md) | Структура запросов/ответов LLM для Skills | messages, system prompt, user message, [CMD]/[ASK]/[MESSAGE]/[DONE], парсинг | 2026-02-20 |
 | [README_AI_promt.md](./README_AI_promt.md) | Тексты системных промптов | Terminal AI Assistant, Multi-step Skill, AI Helper | — |

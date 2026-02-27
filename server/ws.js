@@ -679,7 +679,7 @@ function handleTerminal(ws, url) {
 
                 const activeSkillName = skill.name || skillName || skillPath || 'skill';
                 const remoteKnowledge = await getRemoteKnowledge(conn, remoteOS);
-                const fullSystemPrompt = await buildSkillSystemPrompt(skill.content, activeSkillName, remoteKnowledge);
+                const fullSystemPrompt = await buildSkillSystemPrompt(skill.content, activeSkillName, remoteKnowledge, remoteOS);
                 const firstUserPrompt = buildInitialUserPrompt(activeSkillName, skillParams, userPrompt, 1, 100);
 
                 // Инициализируем activeSkill
@@ -1174,16 +1174,16 @@ function handleTerminal(ws, url) {
                 const baseSystemPrompt = getPrompt('AI_SYSTEM_PROMPT');
 
                 // --- START: Получение знаний ---
-                // Приоритет: 1) ./.kosmos-panel/ai_system_promt.md  2) ~/.config/kosmos-panel/ai_system_promt.md
+                // Приоритет: 1) ./.kosmos-panel/kosmos-panel.md  2) ~/.config/kosmos-panel/kosmos-panel.md
                 const getRemoteKnowledge = (sshConn) => new Promise((resolve) => {
                   let commandTimeout;
                   let cmd;
 
                   if (remoteOS === 'windows') {
-                    cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p1 = Join-Path (Get-Location) '.kosmos-panel\\ai_system_promt.md'; $p2 = Join-Path $env:USERPROFILE '.config\\kosmos-panel\\ai_system_promt.md'; if (Test-Path $p1) { [System.IO.File]::ReadAllText($p1, [System.Text.Encoding]::UTF8) } elseif (Test-Path $p2) { [System.IO.File]::ReadAllText($p2, [System.Text.Encoding]::UTF8) }"`;
+                    cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p1 = Join-Path (Get-Location) '.kosmos-panel\\kosmos-panel.md'; $p2 = Join-Path $env:USERPROFILE '.config\\kosmos-panel\\kosmos-panel.md'; if (Test-Path $p1) { [System.IO.File]::ReadAllText($p1, [System.Text.Encoding]::UTF8) } elseif (Test-Path $p2) { [System.IO.File]::ReadAllText($p2, [System.Text.Encoding]::UTF8) }"`;
                   } else {
-                    const primaryPath = './.kosmos-panel/ai_system_promt.md';
-                    const fallbackPath = '~/.config/kosmos-panel/ai_system_promt.md';
+                    const primaryPath = './.kosmos-panel/kosmos-panel.md';
+                    const fallbackPath = '~/.config/kosmos-panel/kosmos-panel.md';
                     cmd = `cat ${primaryPath} 2>/dev/null || cat ${fallbackPath} 2>/dev/null`;
                   }
 
@@ -1217,14 +1217,22 @@ function handleTerminal(ws, url) {
 
                 const remoteKnowledge = await getRemoteKnowledge(conn);
 
-                let aiSystemPrompt = baseSystemPrompt;
+                // Формируем промпт с учётом ОС
+                const osInfo = remoteOS === 'windows' 
+                  ? 'Target OS: Windows (use CMD/PowerShell commands)'
+                  : remoteOS === 'darwin'
+                    ? 'Target OS: macOS (use POSIX/BSD commands)'
+                    : 'Target OS: Linux (use POSIX/GNU commands)';
+
+                let aiSystemPrompt = `${osInfo}\n\n${baseSystemPrompt}`;
+                
                 if (remoteKnowledge.trim()) {
                   aiSystemPrompt = `System context:\n${remoteKnowledge.trim()}\n\n---\n\n${aiSystemPrompt}`;
                 }
 
                 // --- END: Получение знаний ---
 
-                logger.info('ai', `Preparing to send request`, { url: aiServerUrl });
+                logger.info('ai', `Preparing to send request`, { url: aiServerUrl, remoteOS, hasKnowledge: !!remoteKnowledge.trim() });
 
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 секунд

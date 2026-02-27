@@ -63,7 +63,7 @@ async function handleMemoryAction(type, filename, content = '') {
  * Build full system prompt for a skill
  * @param {string} skillContent - Content of the skill (SKILL.md)
  * @param {string} skillName - Name of the skill
- * @param {string} remoteKnowledge - Optional knowledge from ai_system_promt.md
+ * @param {string} remoteKnowledge - Optional knowledge from kosmos-panel.md
  * @returns {string} Full system prompt
  */
 function stripAnsi(str) {
@@ -115,8 +115,34 @@ function cleanOutputForAI(rawOutput, lastCommand = null) {
 
   return clean || '(no output)';
 }
-async function buildSkillSystemPrompt(skillContent, skillName, remoteKnowledge = '') {
+async function buildSkillSystemPrompt(skillContent, skillName, remoteKnowledge = '', remoteOS = 'linux') {
+  // Формируем информацию об ОС
+  const osInfo = remoteOS === 'windows' 
+    ? `--- Target OS: Windows ---
+Use CMD/PowerShell commands. Examples:
+- List files: dir | Get-ChildItem
+- Read file: powershell -NoProfile -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content 'file' -Encoding UTF8"
+- Find text: findstr "pattern" file | Select-String -Pattern "pattern"
+- Process list: tasklist | Get-Process`
+    : remoteOS === 'darwin'
+      ? `--- Target OS: macOS ---
+Use POSIX/BSD commands. Examples:
+- List files: ls -la
+- Read file: cat file
+- Find text: grep "pattern" file
+- Process list: ps aux`
+      : `--- Target OS: Linux ---
+Use POSIX/GNU commands. Examples:
+- List files: ls -la
+- Read file: cat file
+- Find text: grep "pattern" file
+- Process list: ps aux`;
+
   let fullSystemPrompt = getPrompt('SKILL_SYSTEM_PROMPT_WITH_MEMORY');
+  
+  // Добавляем информацию об ОС в начало
+  fullSystemPrompt = `${osInfo}\n\n${fullSystemPrompt}`;
+  
   if (remoteKnowledge && remoteKnowledge.trim()) {
     fullSystemPrompt += `\n\n--- System Context ---\n${remoteKnowledge.trim()}`;
   }
@@ -354,7 +380,7 @@ function parseSkillResponse(aiContent) {
 }
 
 /**
- * Get remote knowledge from ai_system_promt.md via SSH
+ * Get remote knowledge from kosmos-panel.md via SSH
  * @param {Object} sshConn - SSH connection object
  * @param {string} remoteOS - 'linux' or 'windows'
  * @returns {Promise<string>} Knowledge content
@@ -365,9 +391,9 @@ async function getRemoteKnowledge(sshConn, remoteOS) {
     let cmd;
 
     if (remoteOS === 'windows') {
-      cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p1 = Join-Path (Get-Location) '.kosmos-panel\\ai_system_promt.md'; $p2 = Join-Path $env:USERPROFILE '.config\\kosmos-panel\\ai_system_promt.md'; if (Test-Path $p1) { [System.IO.File]::ReadAllText($p1, [System.Text.Encoding]::UTF8) } elseif (Test-Path $p2) { [System.IO.File]::ReadAllText($p2, [System.Text.Encoding]::UTF8) }"`;
+      cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p1 = Join-Path (Get-Location) '.kosmos-panel\\kosmos-panel.md'; $p2 = Join-Path $env:USERPROFILE '.config\\kosmos-panel\\kosmos-panel.md'; if (Test-Path $p1) { [System.IO.File]::ReadAllText($p1, [System.Text.Encoding]::UTF8) } elseif (Test-Path $p2) { [System.IO.File]::ReadAllText($p2, [System.Text.Encoding]::UTF8) }"`;
     } else {
-      cmd = `cat ./.kosmos-panel/ai_system_promt.md 2>/dev/null || cat ~/.config/kosmos-panel/ai_system_promt.md 2>/dev/null`;
+      cmd = `cat ./.kosmos-panel/kosmos-panel.md 2>/dev/null || cat ~/.config/kosmos-panel/kosmos-panel.md 2>/dev/null`;
     }
 
     let content = '';

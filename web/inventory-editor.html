@@ -374,6 +374,75 @@
       animation: none;
     }
 
+    .prompt-card {
+      background: var(--bg-dark);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1rem;
+    }
+
+    .prompt-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .prompt-key {
+      font-weight: bold;
+      color: var(--accent);
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 0.9rem;
+    }
+
+    .prompt-card .btn-sm {
+      padding: 0.25rem 0.6rem;
+      font-size: 0.8rem;
+    }
+
+    .prompt-textarea {
+      width: 100%;
+      min-height: 120px;
+      padding: 0.75rem;
+      background: var(--bg-hover, rgba(255,255,255,0.03));
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 4px;
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+
+    .prompt-textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .prompt-actions {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 1rem;
+      justify-content: flex-end;
+    }
+
+    .prompt-add-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .prompt-add-row input {
+      flex: 1;
+      padding: 0.5rem;
+      background: var(--bg-dark);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 4px;
+      font-family: 'Consolas', 'Monaco', monospace;
+    }
+
     @keyframes pulse {
 
       0%,
@@ -425,6 +494,7 @@
           <button class="editor-tab active" data-tab="json">JSON</button>
           <button class="editor-tab" data-tab="preview">Предварительный просмотр</button>
           <button class="editor-tab" data-tab="ai-config">AI Config</button>
+          <button class="editor-tab" data-tab="prompts">Prompts</button>
         </div>
 
         <div class="tab-content" id="json-tab">
@@ -438,7 +508,7 @@
         </div>
 
         <div class="tab-content" id="ai-config-tab" style="display: none; padding: 1rem; overflow-y: auto;">
-          <div style="max-width: 800px; margin: 0 auto;">
+          <div>
             <h3 style="color: var(--text); margin-bottom: 1rem;">AI Configuration</h3>
             <form id="ai-config-form">
               <div style="display: flex; flex-direction: column; gap: 1rem;">
@@ -505,6 +575,14 @@
             </form>
           </div>
         </div>
+        <div class="tab-content" id="prompts-tab" style="display: none; padding: 1rem; overflow-y: auto;">
+          <div>
+            <h3 style="color: var(--text); margin-bottom: 1rem;">Prompts (prompts.json)</h3>
+            <div id="prompts-container" style="display: flex; flex-direction: column; gap: 1.5rem;">
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
 
