@@ -207,6 +207,22 @@ app.get('/inventory.json', async (req, res) => {
   }
 });
 
+// Маппинг дерева для SuperJsonEditor (из корня проекта)
+app.get('/inventory-json-mapping.json', async (req, res) => {
+  try {
+    const mappingPath = path.join(process.cwd(), 'inventory-json-mapping.json');
+    const data = await fs.readFile(mappingPath, 'utf8');
+    res.setHeader('Content-Type', 'application/json');
+    res.send(data);
+  } catch (e) {
+    if (e.code === 'ENOENT') {
+      res.status(404).json({ error: 'Файл inventory-json-mapping.json не найден' });
+    } else {
+      res.status(500).json({ error: e.message });
+    }
+  }
+});
+
 app.post('/api/inventory', async (req, res) => {
   try {
     const inventoryPath = path.join(process.cwd(), 'inventory.json');
