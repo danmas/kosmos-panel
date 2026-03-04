@@ -43,6 +43,9 @@ class InventoryEditor {
     this.aiConfigTab = document.getElementById('ai-config-tab');
     this.aiConfigForm = document.getElementById('ai-config-form');
 
+    this.promptsTab = document.getElementById('prompts-tab');
+    this.promptsContainer = document.getElementById('prompts-container');
+    this.promptsData = {};
   }
 
   initCodeMirror() {
@@ -185,6 +188,10 @@ class InventoryEditor {
 
       if (activeTab === 'ai-config') {
         return await this.saveAiConfig();
+      }
+
+      if (activeTab === 'prompts') {
+        return await this.savePrompts();
       }
 
       this.setSaveStatus('saving', 'Сохранение...');
@@ -447,20 +454,20 @@ class InventoryEditor {
       tab.classList.toggle('active', tab.dataset.tab === tabName);
     });
 
+    const allTabs = [this.jsonTab, this.previewTab, this.aiConfigTab, this.promptsTab];
+    allTabs.forEach(t => { if (t) t.style.display = 'none'; });
+
     if (tabName === 'json') {
       this.jsonTab.style.display = 'flex';
-      this.previewTab.style.display = 'none';
-      this.aiConfigTab.style.display = 'none';
     } else if (tabName === 'preview') {
-      this.jsonTab.style.display = 'none';
       this.previewTab.style.display = 'flex';
-      this.aiConfigTab.style.display = 'none';
       this.updatePreview();
     } else if (tabName === 'ai-config') {
-      this.jsonTab.style.display = 'none';
-      this.previewTab.style.display = 'none';
       this.aiConfigTab.style.display = 'flex';
       this.loadAiConfig();
+    } else if (tabName === 'prompts') {
+      this.promptsTab.style.display = 'flex';
+      this.loadPrompts();
     }
   }
 
@@ -669,6 +676,104 @@ class InventoryEditor {
       console.error('Failed to save AI config:', error);
       this.setSaveStatus('error', 'Ошибка сохранения');
       alert('Failed to save AI config: ' + error.message);
+    }
+  }
+  // --- Prompts methods ---
+
+  async loadPrompts() {
+    try {
+      const response = await fetch('/api/prompts');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      this.promptsData = await response.json();
+      this.renderPrompts();
+    } catch (error) {
+      console.error('Failed to load prompts:', error);
+      this.promptsContainer.innerHTML = `<div style="color: var(--error);">Ошибка загрузки prompts.json: ${error.message}</div>`;
+    }
+  }
+
+  renderPrompts() {
+    const keys = Object.keys(this.promptsData);
+
+    const cardsHtml = keys.map(key => {
+      const value = this.promptsData[key] || '';
+      const rows = Math.max(6, Math.min(20, value.split('\n').length + 2));
+      const escaped = value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      return `
+        <div class="prompt-card" data-key="${key}">
+          <div class="prompt-card-header">
+            <span class="prompt-key">${key}</span>
+            <button class="btn btn-sm danger" onclick="editor.removePrompt('${key}')">Удалить</button>
+          </div>
+          <textarea class="prompt-textarea" data-prompt-key="${key}" rows="${rows}">${escaped}</textarea>
+        </div>`;
+    }).join('');
+
+    const addRowHtml = `
+      <div class="prompt-add-row">
+        <input type="text" id="new-prompt-key" placeholder="NEW_PROMPT_KEY" />
+        <button class="btn" onclick="editor.addPrompt()">Добавить промпт</button>
+      </div>`;
+
+    this.promptsContainer.innerHTML = cardsHtml + addRowHtml;
+  }
+
+  collectPromptsFromUI() {
+    const result = {};
+    this.promptsContainer.querySelectorAll('.prompt-textarea[data-prompt-key]').forEach(ta => {
+      result[ta.dataset.promptKey] = ta.value;
+    });
+    return result;
+  }
+
+  addPrompt() {
+    const input = document.getElementById('new-prompt-key');
+    const key = (input.value || '').trim().toUpperCase().replace(/\s+/g, '_');
+    if (!key) {
+      alert('Введите ключ для нового промпта');
+      return;
+    }
+    if (this.promptsData[key] !== undefined) {
+      alert(`Промпт "${key}" уже существует`);
+      return;
+    }
+    this.promptsData = this.collectPromptsFromUI();
+    this.promptsData[key] = '';
+    this.renderPrompts();
+    const newTa = this.promptsContainer.querySelector(`[data-prompt-key="${key}"]`);
+    if (newTa) newTa.focus();
+  }
+
+  removePrompt(key) {
+    if (!confirm(`Удалить промпт "${key}"?`)) return;
+    this.promptsData = this.collectPromptsFromUI();
+    delete this.promptsData[key];
+    this.renderPrompts();
+  }
+
+  async savePrompts() {
+    try {
+      this.setSaveStatus('saving', 'Сохранение промптов...');
+
+      const data = this.collectPromptsFromUI();
+
+      const response = await fetch('/api/prompts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      this.promptsData = data;
+      this.setSaveStatus('saved', 'Промпты сохранены');
+    } catch (error) {
+      console.error('Failed to save prompts:', error);
+      this.setSaveStatus('error', 'Ошибка сохранения промптов');
+      alert('Ошибка сохранения промптов: ' + error.message);
     }
   }
 }

@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kosmos Panel - SuperJson Editor</title>
+  <link rel="stylesheet" href="./themes.css" />
+  <link rel="stylesheet" href="./styles.css" />
+  <script src="./theme-manager.js"></script>
+  
+  <script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@18",
+      "react/jsx-runtime": "https://esm.sh/react@18/jsx-runtime",
+      "react/jsx-dev-runtime": "https://esm.sh/react@18/jsx-dev-runtime",
+      "react-dom": "https://esm.sh/react-dom@18",
+      "react-dom/client": "https://esm.sh/react-dom@18/client"
+    }
+  }
+  </script>
+
+  <link rel="stylesheet" href="https://unpkg.com/@roman.eremeev/kosmos-json-npm@1.0.5/dist/kosmos-json-npm.css" />
+  
+  <style>
+    html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+
+    .kp-loading {
+      height: 100vh; width: 100vw;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg-dark); color: var(--text); font-size: 1.2rem;
+    }
+
+    .kp-tabs {
+      display: flex; align-items: center;
+      background: var(--bg-tile);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1rem; flex-shrink: 0;
+    }
+    .kp-tabs a {
+      color: var(--accent); text-decoration: none;
+      margin-right: 1.5rem; font-size: 0.95rem; white-space: nowrap;
+    }
+    .kp-tab {
+      padding: 0.7rem 1.2rem; border: none;
+      background: transparent; color: var(--text-muted);
+      cursor: pointer; border-bottom: 2px solid transparent;
+      font-size: 0.9rem; transition: all 0.2s;
+    }
+    .kp-tab:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+    .kp-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    .kp-cfg-panel {
+      flex: 1; overflow-y: auto; padding: 1.5rem; background: var(--bg-dark);
+    }
+    .kp-cfg-form {
+      max-width: 800px; margin: 0 auto;
+      display: flex; flex-direction: column; gap: 1.2rem;
+    }
+    .kp-cfg-field label {
+      display: block; color: var(--text); margin-bottom: 0.4rem;
+      font-weight: bold; font-size: 0.9rem;
+      font-family: 'Consolas', 'Monaco', monospace;
+    }
+    .kp-cfg-field input,
+    .kp-cfg-field textarea {
+      width: 100%; padding: 0.6rem;
+      background: var(--bg-tile); border: 1px solid var(--border);
+      color: var(--text); border-radius: 4px; font-size: 0.9rem;
+      font-family: 'Consolas', 'Monaco', monospace; box-sizing: border-box;
+    }
+    .kp-cfg-field input:focus,
+    .kp-cfg-field textarea:focus { outline: none; border-color: var(--accent); }
+    .kp-cfg-field textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
+
+    .kp-actions {
+      display: flex; gap: 0.5rem; justify-content: flex-end;
+      padding: 0.75rem 1.5rem;
+      background: var(--bg-tile); border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .kp-pr-panel {
+      flex: 1; overflow-y: auto; padding: 1.5rem; background: var(--bg-dark);
+    }
+    .kp-pr-list {
+      max-width: 900px; margin: 0 auto;
+      display: flex; flex-direction: column; gap: 1.5rem;
+    }
+    .kp-pr-card {
+      background: var(--bg-tile); border: 1px solid var(--border);
+      border-radius: 6px; padding: 1rem;
+    }
+    .kp-pr-card-hdr {
+      display: flex; justify-content: space-between;
+      align-items: center; margin-bottom: 0.75rem;
+    }
+    .kp-pr-key {
+      font-weight: bold; color: var(--accent);
+      font-family: 'Consolas', 'Monaco', monospace; font-size: 0.9rem;
+    }
+    .kp-pr-ta {
+      width: 100%; min-height: 120px; padding: 0.75rem;
+      background: var(--bg-dark); border: 1px solid var(--border);
+      color: var(--text); border-radius: 4px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 13px; line-height: 1.5;
+      resize: vertical; box-sizing: border-box;
+    }
+    .kp-pr-ta:focus { outline: none; border-color: var(--accent); }
+    .kp-pr-add {
+      display: flex; gap: 0.5rem; align-items: center;
+    }
+    .kp-pr-add input {
+      flex: 1; padding: 0.5rem;
+      background: var(--bg-tile); border: 1px solid var(--border);
+      color: var(--text); border-radius: 4px;
+      font-family: 'Consolas', 'Monaco', monospace;
+    }
+    .kp-pr-add input:focus { outline: none; border-color: var(--accent); }
+
+    .kp-btn {
+      padding: 0.5rem 1rem; border: 1px solid var(--border);
+      background: var(--bg-dark); color: var(--text);
+      border-radius: 4px; cursor: pointer; font-size: 0.9rem; transition: all 0.2s;
+    }
+    .kp-btn:hover { background: var(--accent); color: var(--bg-dark); }
+    .kp-btn--pri { background: var(--accent); color: var(--bg-dark); border-color: var(--accent); }
+    .kp-btn--danger { background: var(--error); border-color: var(--error); color: white; }
+    .kp-btn--danger:hover { opacity: 0.85; }
+    .kp-btn--sm { padding: 0.25rem 0.6rem; font-size: 0.8rem; }
+
+    .kp-toast {
+      position: fixed; bottom: 1rem; right: 1rem;
+      padding: 0.6rem 1.2rem; border-radius: 6px;
+      font-size: 0.9rem; z-index: 999;
+      transition: opacity 0.3s; pointer-events: none;
+    }
+    .kp-toast--ok { background: var(--success); color: var(--bg-dark); }
+    .kp-toast--err { background: var(--error); color: white; }
+    .kp-toast--hidden { opacity: 0; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  
+  <script type="module">
+    import React, { useState, useEffect, useRef, useCallback } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import { SuperJsonEditor } from 'https://esm.sh/@roman.eremeev/kosmos-json-npm@1.0.5?external=react,react-dom';
+    
+    const h = React.createElement;
+
+    // Fallback, если файл маппинга недоступен
+    const defaultMapping = {
+      rootLabel: "Inventory",
+      rootIcon: "Database",
+      branches: [
+        { key: "credentials", label: "Учетные данные", displayKey: "id", icon: "Lock", itemIcon: "Key" },
+        { key: "servers", label: "Серверы", displayKey: "hostname", icon: "Server", itemIcon: "Terminal" }
+      ]
+    };
+
+    const AI_CONFIG_FIELDS = [
+      { key: 'AI_KOSMOS_MODEL_BASE_URL', type: 'input' },
+      { key: 'AI_MODEL', type: 'input' },
+      { key: 'AI_SYSTEM_PROMPT', type: 'textarea', rows: 4 },
+      { key: 'AI_SERVER_URL_HELP', type: 'input' },
+      { key: 'AI_MODEL_HELP', type: 'input' },
+      { key: 'AI_PROVIDER_HELP', type: 'input' },
+      { key: 'AI_SYSTEM_PROMPT_HELP', type: 'textarea', rows: 3 },
+      { key: 'AI_HELP_CONTEXT_FILES', type: 'input', placeholder: 'README_AI.md,KB/README_INVENTORY_EDITOR.md' },
+    ];
+
+    function Toast({ message, type, visible }) {
+      const cls = `kp-toast ${type === 'error' ? 'kp-toast--err' : 'kp-toast--ok'} ${visible ? '' : 'kp-toast--hidden'}`;
+      return h('div', { className: cls }, message);
+    }
+
+    // ─── AI Config Tab ───
+    function AiConfigTab({ showToast }) {
+      const [config, setConfig] = useState({});
+      const [loading, setLoading] = useState(true);
+
+      const loadConfig = useCallback(async () => {
+        try {
+          setLoading(true);
+          const res = await fetch('/api/config');
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          setConfig(await res.json());
+        } catch (e) {
+          showToast('Ошибка загрузки config: ' + e.message, 'error');
+        } finally {
+          setLoading(false);
+        }
+      }, [showToast]);
+
+      useEffect(() => { loadConfig(); }, [loadConfig]);
+
+      const saveConfig = async () => {
+        try {
+          const res = await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+          });
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || `HTTP ${res.status}`);
+          }
+          showToast('AI Config сохранен!', 'success');
+          try { await fetch('/api/reload-config', { method: 'POST' }); } catch (_) {}
+        } catch (e) {
+          showToast('Ошибка сохранения: ' + e.message, 'error');
+        }
+      };
+
+      useEffect(() => {
+        const onKey = (e) => {
+          if (e.ctrlKey && e.key === 's') { e.preventDefault(); saveConfig(); }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+      });
+
+      const onChange = (key, val) => setConfig(prev => ({ ...prev, [key]: val }));
+
+      if (loading) {
+        return h('div', { className: 'kp-cfg-panel', style: { display: 'flex', alignItems: 'center', justifyContent: 'center' } }, 'Загрузка...');
+      }
+
+      return h('div', { style: { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 } },
+        h('div', { className: 'kp-cfg-panel' },
+          h('div', { className: 'kp-cfg-form' },
+            AI_CONFIG_FIELDS.map(f =>
+              h('div', { className: 'kp-cfg-field', key: f.key },
+                h('label', null, f.key),
+                f.type === 'textarea'
+                  ? h('textarea', { rows: f.rows, value: config[f.key] || '', onChange: e => onChange(f.key, e.target.value) })
+                  : h('input', { type: 'text', value: config[f.key] || '', placeholder: f.placeholder || '', onChange: e => onChange(f.key, e.target.value) })
+              )
+            )
+          )
+        ),
+        h('div', { className: 'kp-actions' },
+          h('button', { className: 'kp-btn', onClick: loadConfig }, 'Перезагрузить'),
+          h('button', { className: 'kp-btn kp-btn--pri', onClick: saveConfig }, 'Сохранить')
+        )
+      );
+    }
+
+    // ─── Prompts Tab ───
+    function PromptsTab({ showToast }) {
+      const [prompts, setPrompts] = useState({});
+      const [loading, setLoading] = useState(true);
+      const [newKey, setNewKey] = useState('');
+
+      const loadPrompts = useCallback(async () => {
+        try {
+          setLoading(true);
+          const res = await fetch('/api/prompts');
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          setPrompts(await res.json());
+        } catch (e) {
+          showToast('Ошибка загрузки prompts: ' + e.message, 'error');
+        } finally {
+          setLoading(false);
+        }
+      }, [showToast]);
+
+      useEffect(() => { loadPrompts(); }, [loadPrompts]);
+
+      const savePrompts = async () => {
+        try {
+          const res = await fetch('/api/prompts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(prompts)
+          });
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || `HTTP ${res.status}`);
+          }
+          showToast('Промпты сохранены!', 'success');
+        } catch (e) {
+          showToast('Ошибка сохранения промптов: ' + e.message, 'error');
+        }
+      };
+
+      useEffect(() => {
+        const onKey = (e) => {
+          if (e.ctrlKey && e.key === 's') { e.preventDefault(); savePrompts(); }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+      });
+
+      const updatePrompt = (key, val) => setPrompts(prev => ({ ...prev, [key]: val }));
+
+      const addPrompt = () => {
+        const k = newKey.trim().toUpperCase().replace(/\s+/g, '_');
+        if (!k) return;
+        if (prompts[k] !== undefined) { showToast(`Промпт "${k}" уже существует`, 'error'); return; }
+        setPrompts(prev => ({ ...prev, [k]: '' }));
+        setNewKey('');
+      };
+
+      const removePrompt = (key) => {
+        if (!confirm(`Удалить промпт "${key}"?`)) return;
+        setPrompts(prev => { const c = { ...prev }; delete c[key]; return c; });
+      };
+
+      if (loading) {
+        return h('div', { className: 'kp-pr-panel', style: { display: 'flex', alignItems: 'center', justifyContent: 'center' } }, 'Загрузка...');
+      }
+
+      return h('div', { style: { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 } },
+        h('div', { className: 'kp-pr-panel' },
+          h('div', { className: 'kp-pr-list' },
+            ...Object.keys(prompts).map(key => {
+              const rows = Math.max(6, Math.min(20, (prompts[key] || '').split('\n').length + 2));
+              return h('div', { className: 'kp-pr-card', key },
+                h('div', { className: 'kp-pr-card-hdr' },
+                  h('span', { className: 'kp-pr-key' }, key),
+                  h('button', { className: 'kp-btn kp-btn--sm kp-btn--danger', onClick: () => removePrompt(key) }, 'Удалить')
+                ),
+                h('textarea', {
+                  className: 'kp-pr-ta', rows,
+                  value: prompts[key] || '',
+                  onChange: e => updatePrompt(key, e.target.value)
+                })
+              );
+            }),
+            h('div', { className: 'kp-pr-add' },
+              h('input', {
+                type: 'text', value: newKey, placeholder: 'NEW_PROMPT_KEY',
+                onChange: e => setNewKey(e.target.value),
+                onKeyDown: e => { if (e.key === 'Enter') addPrompt(); }
+              }),
+              h('button', { className: 'kp-btn', onClick: addPrompt }, 'Добавить промпт')
+            )
+          )
+        ),
+        h('div', { className: 'kp-actions' },
+          h('button', { className: 'kp-btn', onClick: loadPrompts }, 'Перезагрузить'),
+          h('button', { className: 'kp-btn kp-btn--pri', onClick: savePrompts }, 'Сохранить')
+        )
+      );
+    }
+
+    // ─── Main App ───
+    function App() {
+      const [tab, setTab] = useState('inventory');
+      const [initialData, setInitialData] = useState(null);
+      const [mapping, setMapping] = useState(defaultMapping);
+      const [loading, setLoading] = useState(true);
+      const [toast, setToast] = useState({ message: '', type: 'success', visible: false });
+      const toastTimer = useRef(null);
+
+      const showToast = useCallback((message, type = 'success') => {
+        clearTimeout(toastTimer.current);
+        setToast({ message, type, visible: true });
+        toastTimer.current = setTimeout(() => setToast(prev => ({ ...prev, visible: false })), 3000);
+      }, []);
+
+      useEffect(() => {
+        (async () => {
+          let invData = null;
+          try {
+            const [invRes, mapRes] = await Promise.all([
+              fetch('/inventory.json'),
+              fetch('/inventory-json-mapping.json')
+            ]);
+            if (!invRes.ok) throw new Error(`inventory: HTTP ${invRes.status}`);
+            invData = await invRes.json();
+            setInitialData(invData);
+            if (mapRes.ok) setMapping(await mapRes.json());
+            else console.warn('inventory-json-mapping.json not found, using default mapping');
+          } catch (e) {
+            console.error('Failed to load:', e);
+            setInitialData(invData || { credentials: [], servers: [], poll: { intervalSec: 15, concurrency: 6 } });
+          } finally {
+            setLoading(false);
+          }
+        })();
+      }, []);
+
+      const handleSave = async (json) => {
+        try {
+          const data = JSON.parse(json);
+          const res = await fetch('/api/inventory', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+          });
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || `HTTP ${res.status}`);
+          }
+          showToast('Inventory сохранен!', 'success');
+          try { await fetch('/api/reload', { method: 'POST' }); } catch (_) {}
+        } catch (e) {
+          showToast('Ошибка сохранения: ' + e.message, 'error');
+        }
+      };
+
+      const handleMappingSave = (mapping) => {
+        console.log('Mapping updated:', mapping);
+        showToast('Маппинг обновлен!', 'success');
+      };
+
+      if (loading) return h('div', { className: 'kp-loading' }, 'Загрузка...');
+
+      const TABS = [
+        { id: 'inventory', label: 'Inventory' },
+        { id: 'ai-config', label: 'AI Config' },
+        { id: 'prompts',   label: 'Prompts' },
+      ];
+
+      return h('div', { style: { height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column' } },
+        h('div', { className: 'kp-tabs' },
+          h('a', { href: '/' }, '← Назад'),
+          ...TABS.map(t => h('button', {
+            key: t.id,
+            className: `kp-tab ${tab === t.id ? 'active' : ''}`,
+            onClick: () => setTab(t.id)
+          }, t.label))
+        ),
+
+        tab === 'inventory' && h('div', { style: { flex: 1, minHeight: 0 } },
+          h(SuperJsonEditor, {
+            defaultValue: JSON.stringify(initialData, null, 2),
+            mappingFile: mapping,
+            onSave: handleSave,
+            onMappingSave: handleMappingSave
+          })
+        ),
+
+        tab === 'ai-config' && h(AiConfigTab, { showToast }),
+        tab === 'prompts'   && h(PromptsTab,   { showToast }),
+
+        h(Toast, toast)
+      );
+    }
+
+    createRoot(document.getElementById('root')).render(h(App));
+  </script>
+</body>
+</html>

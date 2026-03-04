@@ -9,6 +9,7 @@ backup/
 
 # Node modules
 node_modules/
+bun.lock
 package-lock.json
 
 # Configuration files with private data

@@ -1,0 +1,25 @@
+{
+    "version": 1,
+    "rootLabel": "СЕРВЕРЫ",
+    "branches": [
+        {
+            "key": "credentials",
+            "label": "Credentials",
+            "displayKey": null,
+            "children": []
+        },
+        {
+            "key": "servers",
+            "label": "Сервера",
+            "displayKey": "name",
+            "children": [
+                {
+                    "key": "services",
+                    "label": "Сервисы",
+                    "displayKey": "name",
+                    "children": []
+                }
+            ]
+        }
+    ]
+}

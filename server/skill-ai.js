@@ -5,12 +5,65 @@
 
 const logger = require('./logger');
 const { getPrompt } = require('./prompts');
+const fs = require('fs').promises;
+const path = require('path');
+
+const MEMORY_DIR = path.join(__dirname, '..', '.kosmos-panel', 'memory');
+
+/**
+ * Создаёт папку памяти, если её нет
+ */
+async function ensureMemoryDir() {
+  await fs.mkdir(MEMORY_DIR, { recursive: true });
+}
+
+/**
+ * Загружает индекс + краткие summaries всех MEMORY_*.md
+ */
+async function loadMemoryIndex() {
+  await ensureMemoryDir();
+  const files = await fs.readdir(MEMORY_DIR);
+  const memoryFiles = files.filter(f => f.startsWith('MEMORY_') && f.endsWith('.md'));
+  const index = [];
+  for (const file of memoryFiles) {
+    const fullPath = path.join(MEMORY_DIR, file);
+    const content = await fs.readFile(fullPath, 'utf8');
+    const summary = content.split('\n')[0].substring(0, 150) || '(no summary)';
+    index.push({
+      file,
+      summary: summary.trim()
+    });
+  }
+  return index;
+}
+
+/**
+ * Обработка новых тегов памяти
+ */
+async function handleMemoryAction(type, filename, content = '') {
+  await ensureMemoryDir();
+  const fullPath = path.join(MEMORY_DIR, filename);
+  if (type === 'STORE') {
+    await fs.writeFile(fullPath, content);
+  } else if (type === 'APPEND_MEMORY') {
+    const existing = await fs.readFile(fullPath, 'utf8').catch(() => '');
+    await fs.writeFile(fullPath, existing + '\n' + content);
+  } else if (type === 'RETRIEVE') {
+    const content = await fs.readFile(fullPath, 'utf8').catch(() => 'NOT_FOUND');
+    return content;
+  } else if (type === 'LIST_MEMORY') {
+    return await loadMemoryIndex();
+  } else if (type === 'DELETE_MEMORY') {
+    await fs.unlink(fullPath).catch(() => { });
+  }
+  return null;
+}
 
 /**
  * Build full system prompt for a skill
  * @param {string} skillContent - Content of the skill (SKILL.md)
  * @param {string} skillName - Name of the skill
- * @param {string} remoteKnowledge - Optional knowledge from ai_system_promt.md
+ * @param {string} remoteKnowledge - Optional knowledge from kosmos-panel.md
  * @returns {string} Full system prompt
  */
 function stripAnsi(str) {
@@ -62,14 +115,46 @@ function cleanOutputForAI(rawOutput, lastCommand = null) {
 
   return clean || '(no output)';
 }
-function buildSkillSystemPrompt(skillContent, skillName, remoteKnowledge = '') {
-  let fullSystemPrompt = getPrompt('SKILL_SYSTEM_PROMPT_WITH_ASK');
+async function buildSkillSystemPrompt(skillContent, skillName, remoteKnowledge = '', remoteOS = 'linux') {
+  // Формируем информацию об ОС
+  const osInfo = remoteOS === 'windows' 
+    ? `--- Target OS: Windows ---
+Use CMD/PowerShell commands. Examples:
+- List files: dir | Get-ChildItem
+- Read file: powershell -NoProfile -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content 'file' -Encoding UTF8"
+- Find text: findstr "pattern" file | Select-String -Pattern "pattern"
+- Process list: tasklist | Get-Process`
+    : remoteOS === 'darwin'
+      ? `--- Target OS: macOS ---
+Use POSIX/BSD commands. Examples:
+- List files: ls -la
+- Read file: cat file
+- Find text: grep "pattern" file
+- Process list: ps aux`
+      : `--- Target OS: Linux ---
+Use POSIX/GNU commands. Examples:
+- List files: ls -la
+- Read file: cat file
+- Find text: grep "pattern" file
+- Process list: ps aux`;
 
+  let fullSystemPrompt = getPrompt('SKILL_SYSTEM_PROMPT_WITH_MEMORY');
+  
+  // Добавляем информацию об ОС в начало
+  fullSystemPrompt = `${osInfo}\n\n${fullSystemPrompt}`;
+  
   if (remoteKnowledge && remoteKnowledge.trim()) {
     fullSystemPrompt += `\n\n--- System Context ---\n${remoteKnowledge.trim()}`;
   }
-
   fullSystemPrompt += `\n\n--- Active Skill: ${skillName} ---\n${skillContent}`;
+
+  // NEW MEMORY
+  const index = await loadMemoryIndex();
+  let indexText = '\n\n--- Current Memory Index ---\n';
+  for (const item of index) {
+    indexText += `${item.file}\n${item.summary}\n\n`;
+  }
+  fullSystemPrompt += indexText;
 
   return fullSystemPrompt;
 }
@@ -191,8 +276,7 @@ async function callSkillAI(messages, options = {}) {
  */
 function parseSkillResponse(aiContent) {
   const content = aiContent.trim();
-
-  // Парсим формат ответа
+  // Старые теги (оставляем без изменений)
   const cmdMatch = content.match(/^\[CMD\]\s*(.+)$/im);
   const askOptionalMatch = content.match(/^\[ASK:optional\]\s*(.+)$/ims);
   const askMatch = content.match(/^\[ASK\]\s*(.+)$/ims);
@@ -201,7 +285,6 @@ function parseSkillResponse(aiContent) {
 
   if (cmdMatch) {
     let command = cmdMatch[1].trim();
-    // Удаляем markdown code blocks если есть
     command = command.replace(/^```[a-z]*\s*|\s*```$/g, '').trim();
     return {
       type: 'CMD',
@@ -209,8 +292,6 @@ function parseSkillResponse(aiContent) {
       command: command
     };
   }
-
-  // Проверяем [ASK:optional] ПЕРЕД [ASK] (более специфичный паттерн)
   if (askOptionalMatch) {
     return {
       type: 'ASK',
@@ -219,7 +300,6 @@ function parseSkillResponse(aiContent) {
       required: false
     };
   }
-
   if (askMatch) {
     return {
       type: 'ASK',
@@ -228,7 +308,6 @@ function parseSkillResponse(aiContent) {
       required: true
     };
   }
-
   if (msgMatch) {
     return {
       type: 'MESSAGE',
@@ -236,7 +315,6 @@ function parseSkillResponse(aiContent) {
       message: msgMatch[1].trim()
     };
   }
-
   if (doneMatch) {
     return {
       type: 'DONE',
@@ -244,12 +322,49 @@ function parseSkillResponse(aiContent) {
       message: doneMatch[1].trim() || 'Skill completed'
     };
   }
+  // NEW MEMORY TAGS
+  const storeMatch = content.match(/^\[STORE\]\s*MEMORY_(.+?)\.md\s*([\s\S]*)$/ims);
+  const retrieveMatch = content.match(/^\[RETRIEVE\]\s*MEMORY_(.+?)\.md$/ims);
+  const listMatch = content.match(/^\[LIST_MEMORY\]$/im);
+  const appendMatch = content.match(/^\[APPEND_MEMORY\]\s*MEMORY_(.+?)\.md\s*([\s\S]*)$/ims);
+  const deleteMatch = content.match(/^\[DELETE_MEMORY\]\s*MEMORY_(.+?)\.md$/ims);
 
-  // Неизвестный формат - пробуем выполнить как команду
+  if (storeMatch) {
+    return {
+      type: 'STORE',
+      filename: `MEMORY_${storeMatch[1]}.md`,
+      content: storeMatch[2].trim()
+    };
+  }
+  if (retrieveMatch) {
+    return {
+      type: 'RETRIEVE',
+      filename: `MEMORY_${retrieveMatch[1]}.md`
+    };
+  }
+  if (listMatch) {
+    return {
+      type: 'LIST_MEMORY'
+    };
+  }
+  if (appendMatch) {
+    return {
+      type: 'APPEND_MEMORY',
+      filename: `MEMORY_${appendMatch[1]}.md`,
+      content: appendMatch[2].trim()
+    };
+  }
+  if (deleteMatch) {
+    return {
+      type: 'DELETE_MEMORY',
+      filename: `MEMORY_${deleteMatch[1]}.md`
+    };
+  }
+
+  // Старый fallback для неизвестного формата
   logger.warn('skill-ai', 'Unknown response format, treating as command', { content: content.substring(0, 100) });
   let command = content.split('\n')[0].trim();
   command = command.replace(/^```[a-z]*\s*|\s*```$/g, '').trim();
-
   if (command) {
     return {
       type: 'CMD',
@@ -257,7 +372,6 @@ function parseSkillResponse(aiContent) {
       command: command
     };
   }
-
   return {
     type: 'UNKNOWN',
     content: content,
@@ -266,7 +380,7 @@ function parseSkillResponse(aiContent) {
 }
 
 /**
- * Get remote knowledge from ai_system_promt.md via SSH
+ * Get remote knowledge from kosmos-panel.md via SSH
  * @param {Object} sshConn - SSH connection object
  * @param {string} remoteOS - 'linux' or 'windows'
  * @returns {Promise<string>} Knowledge content
@@ -277,9 +391,9 @@ async function getRemoteKnowledge(sshConn, remoteOS) {
     let cmd;
 
     if (remoteOS === 'windows') {
-      cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p1 = Join-Path (Get-Location) '.kosmos-panel\\ai_system_promt.md'; $p2 = Join-Path $env:USERPROFILE '.config\\kosmos-panel\\ai_system_promt.md'; if (Test-Path $p1) { [System.IO.File]::ReadAllText($p1, [System.Text.Encoding]::UTF8) } elseif (Test-Path $p2) { [System.IO.File]::ReadAllText($p2, [System.Text.Encoding]::UTF8) }"`;
+      cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $p1 = Join-Path (Get-Location) '.kosmos-panel\\kosmos-panel.md'; $p2 = Join-Path $env:USERPROFILE '.config\\kosmos-panel\\kosmos-panel.md'; if (Test-Path $p1) { [System.IO.File]::ReadAllText($p1, [System.Text.Encoding]::UTF8) } elseif (Test-Path $p2) { [System.IO.File]::ReadAllText($p2, [System.Text.Encoding]::UTF8) }"`;
     } else {
-      cmd = `cat ./.kosmos-panel/ai_system_promt.md 2>/dev/null || cat ~/.config/kosmos-panel/ai_system_promt.md 2>/dev/null`;
+      cmd = `cat ./.kosmos-panel/kosmos-panel.md 2>/dev/null || cat ~/.config/kosmos-panel/kosmos-panel.md 2>/dev/null`;
     }
 
     let content = '';
@@ -298,12 +412,16 @@ async function getRemoteKnowledge(sshConn, remoteOS) {
 }
 
 module.exports = {
-  get SKILL_SYSTEM_PROMPT() { return getPrompt('SKILL_SYSTEM_PROMPT_WITH_ASK'); },
+  get SKILL_SYSTEM_PROMPT() { return getPrompt('SKILL_SYSTEM_PROMPT_WITH_MEMORY'); },
   get SKILL_SYSTEM_PROMPT_WITH_ASK() { return getPrompt('SKILL_SYSTEM_PROMPT_WITH_ASK'); },
-  buildSkillSystemPrompt,
+  get SKILL_SYSTEM_PROMPT_WITH_MEMORY() { return getPrompt('SKILL_SYSTEM_PROMPT_WITH_MEMORY'); },
+  buildSkillSystemPrompt, // теперь async
   buildInitialUserPrompt,
   callSkillAI,
   parseSkillResponse,
   getRemoteKnowledge,
-  cleanOutputForAI
+  cleanOutputForAI,
+  // NEW
+  loadMemoryIndex,
+  handleMemoryAction
 };

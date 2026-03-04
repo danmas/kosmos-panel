@@ -153,6 +153,44 @@ app.post('/api/config', async (req, res) => {
   }
 });
 
+// Get prompts.json
+app.get('/api/prompts', async (req, res) => {
+  try {
+    const promptsPath = path.join(process.cwd(), 'prompts.json');
+    const data = await fs.readFile(promptsPath, 'utf8');
+    res.json(JSON.parse(data));
+  } catch (e) {
+    if (e.code === 'ENOENT') {
+      res.json({});
+    } else {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  }
+});
+
+// Update prompts.json
+app.post('/api/prompts', async (req, res) => {
+  try {
+    const promptsPath = path.join(process.cwd(), 'prompts.json');
+    const newPrompts = req.body;
+
+    if (!newPrompts || typeof newPrompts !== 'object') {
+      return res.status(400).json({ ok: false, error: 'Invalid prompts data' });
+    }
+
+    const jsonContent = JSON.stringify(newPrompts, null, 2);
+    await fs.writeFile(promptsPath, jsonContent + '\n', 'utf8');
+
+    const { reloadPrompts } = require('./server/prompts');
+    reloadPrompts();
+
+    res.json({ ok: true, message: 'Prompts saved and reloaded successfully' });
+  } catch (e) {
+    logger.error('api', 'Failed to save prompts', { error: e.message });
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // API для редактора inventory.json
 app.get('/inventory.json', async (req, res) => {
   try {
@@ -163,6 +201,22 @@ app.get('/inventory.json', async (req, res) => {
   } catch (e) {
     if (e.code === 'ENOENT') {
       res.status(404).json({ error: 'Файл inventory.json не найден' });
+    } else {
+      res.status(500).json({ error: e.message });
+    }
+  }
+});
+
+// Маппинг дерева для SuperJsonEditor (из корня проекта)
+app.get('/inventory-json-mapping.json', async (req, res) => {
+  try {
+    const mappingPath = path.join(process.cwd(), 'inventory-json-mapping.json');
+    const data = await fs.readFile(mappingPath, 'utf8');
+    res.setHeader('Content-Type', 'application/json');
+    res.send(data);
+  } catch (e) {
+    if (e.code === 'ENOENT') {
+      res.status(404).json({ error: 'Файл inventory-json-mapping.json не найден' });
     } else {
       res.status(500).json({ error: e.message });
     }
