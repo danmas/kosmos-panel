@@ -139,6 +139,16 @@
     .kp-toast--ok { background: var(--success); color: var(--bg-dark); }
     .kp-toast--err { background: var(--error); color: white; }
     .kp-toast--hidden { opacity: 0; }
+
+    /* Чёрный фон области редактирования JSON (SuperJsonEditor) */
+    .sje-container textarea,
+    .sje-container .cm-editor,
+    .sje-container .cm-scroller,
+    .sje-container [class*="code"],
+    .sje-container [class*="json"] {
+      background: #000 !important;
+    }
+    .sje-container .cm-gutters { background: #0a0a0a !important; }
   </style>
 </head>
 <body>

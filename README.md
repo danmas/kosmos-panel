@@ -109,7 +109,7 @@ AI_SYSTEM_PROMPT=You are a terminal AI assistant. Your task is to convert the us
 - Терминал — xterm.js: цвета, UTF‑8, прокрутка; ввод идёт прямо в терминал
 - **AI-команды**: `ai: покажи файлы` → автоматически выполнится `ls -la`
 - **Просмотр логов команд**: интерактивная панель при наведении + страницы `/logs.html` (фильтр по сессии: текущая/все, и по типу) и `/raw-logs.html` (сырой JSON)
-- **Редактор конфигурации**: доступен по ссылке "⚙️ Настройки" или `/inventory-editor.html`
+- **Редактор конфигурации**: доступен по ссылке "⚙️ Настройки" или `/inventory-editor-react.html`
 - **Стабильный порядок серверов**: плитки серверов отображаются в том же порядке, что определен в `inventory.json`
 
 📖 **Подробная документация (база знаний):** оглавление — [KB/README_INDEX.md](KB/README_INDEX.md).
@@ -138,7 +138,7 @@ AI_SYSTEM_PROMPT=You are a terminal AI assistant. Your task is to convert the us
 
 **Доступ:**
 ```
-http://localhost:3000/inventory-editor.html
+http://localhost:3000/inventory-editor-react.html
 ```
 
 Или через кнопку "⚙️ Настройки" в верхней панели главной страницы.
@@ -192,6 +192,6 @@ http://localhost:3000/inventory-editor.html
 ## Структура проекта
 - **Корень**: `server.js` — точка входа, Express, статика `web/`, маршруты API и WS
 - **server/** — бэкенд: `monitor.js` (опрос серверов, inventory), `ws.js` (терминал, tail), `terminal.js` (REST API v1/v2), `ws-utils.js` (SSH), `logger.js`, `skills.js`, `skill-ai.js`
-- **web/** — фронт: `workspace.html` (основной интерфейс), `workspace.js`, `workspace.css`, `index.html`, `app.js`, `term.html` (legacy), `logs.html` (legacy), `inventory-editor.html`.
+- **web/** — фронт: `workspace.html` (основной интерфейс), `workspace.js`, `workspace.css`, `index.html`, `app.js`, `term.html` (legacy), `logs.html` (legacy), `inventory-editor-react.html`.
 - **KB/** — документация: `README_AUTH.md`, `README_AI.md` и др.
 - **tests/** — интеграционные тесты (например `test_usa_v2.js`)

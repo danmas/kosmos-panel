@@ -130,7 +130,7 @@ const systemPrompt = getPrompt('AI_SYSTEM_PROMPT');
 
 ### Inventory Editor
 
-В редакторе инвентаря (`/inventory-editor.html`) добавлена вкладка **AI Config** с формой для редактирования всех AI-настроек.
+В редакторе инвентаря (`/inventory-editor-react.html`) есть вкладка **AI Config** с формой для редактирования всех AI-настроек.
 
 **Функции:**
 - **Load Current Config** — загрузить текущую конфигурацию в форму
@@ -140,7 +140,7 @@ const systemPrompt = getPrompt('AI_SYSTEM_PROMPT');
 **Реализация:**
 
 ```javascript
-// web/inventory-editor.js
+// web/inventory-editor-react.html (вкладка AI Config)
 
 async loadAiConfig() {
   const response = await fetch('/api/config');
@@ -264,7 +264,7 @@ curl http://localhost:3000/api/config | jq '.AI_MODEL'
 
 ### A/B тестирование промптов
 
-1. Открыть `/inventory-editor.html`
+1. Открыть `/inventory-editor-react.html`
 2. Перейти на вкладку **AI Config**
 3. Нажать **Load Current Config**
 4. Изменить `AI_SYSTEM_PROMPT`
