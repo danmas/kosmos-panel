@@ -80,7 +80,8 @@
                     <div class="ws-skill-params-title">Параметры для <span id="wsSkillParamsName"></span>:</div>
                     <div class="ws-skill-param-input">
                         <input type="text" id="wsSkillParamsInput" placeholder="Введите параметры...">
-                        <button class="ws-skill-execute-btn" id="wsSkillExecuteBtn">▶</button>
+                        <button class="ws-skill-execute-btn" id="wsSkillExecuteBtn" title="Запустить в панели">▶</button>
+                        <button class="ws-skill-execute-popup-btn" id="wsSkillExecutePopupBtn" title="Запустить в окне">↗</button>
                     </div>
                 </div>
             </div>
@@ -133,6 +134,37 @@
         <div class="ws-skill-create-footer">
             <button class="ws-skill-create-btn ws-skill-create-btn-cancel" id="wsSkillCreateCancel">Отмена</button>
             <button class="ws-skill-create-btn ws-skill-create-btn-save" id="wsSkillCreateSave">Сохранить</button>
+        </div>
+    </div>
+
+    <!-- Skill Dialog Modal (large, separate window) -->
+    <div id="wsSkillDialogOverlay" class="ws-skill-dialog-overlay hidden"></div>
+    <div id="wsSkillDialogModal" class="ws-skill-dialog-modal hidden">
+        <div class="ws-skill-dialog-modal-header" id="wsSkillDialogModalHeader">
+            <div class="ws-skill-dialog-modal-title">
+                <span class="ws-skill-dialog-modal-icon">✨</span>
+                <span>Skill: </span>
+                <span id="wsSkillDialogModalName">-</span>
+            </div>
+            <div class="ws-skill-dialog-modal-actions">
+                <button class="ws-skill-dialog-modal-minimize" id="wsSkillDialogMinimize" title="Свернуть в панель">⊟</button>
+                <button class="ws-skill-dialog-modal-close" id="wsSkillDialogModalClose" title="Закрыть">×</button>
+            </div>
+        </div>
+        <div class="ws-skill-dialog-modal-body" id="wsSkillDialogModalBody">
+            <!-- Сообщения диалога будут здесь -->
+        </div>
+        <div class="ws-skill-dialog-modal-footer">
+            <div class="ws-skill-dialog-modal-quick-actions" id="wsSkillDialogModalQuickActions">
+                <button onclick="sendSkillQuickReplyModal('Да')">Да</button>
+                <button onclick="sendSkillQuickReplyModal('Нет')">Нет</button>
+                <button onclick="skillSkipCommand()">Пропустить</button>
+                <button onclick="skillCancel()">Отменить</button>
+            </div>
+            <div class="ws-skill-dialog-modal-input-row" id="wsSkillDialogModalInputRow">
+                <textarea id="wsSkillDialogModalInput" placeholder="Введите ответ..." rows="2"></textarea>
+                <button onclick="sendSkillMessageModal()" title="Отправить">▶</button>
+            </div>
         </div>
     </div>
 
