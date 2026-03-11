@@ -258,9 +258,13 @@ function handleServerAction(actionId) {
   closeActionsModal();
 
   switch (actionId) {
-    case 'workspace':
-      window.open(`/workspace.html?serverId=${encodeURIComponent(server.id)}`, '_blank', 'width=1200,height=800');
+    case 'workspace': {
+      const workspaceUrl = `/workspace.html?serverId=${encodeURIComponent(server.id)}`;
+      const w = window.open(workspaceUrl, '_blank', 'width=1200,height=800');
+      // Если попап заблокирован — открыть в текущей вкладке
+      if (!w || w.closed) window.location.href = workspaceUrl;
       break;
+    }
     case 'terminal-popup':
       window.open(`/term.html?mode=terminal&serverId=${encodeURIComponent(server.id)}`, '_blank', 'width=900,height=600');
       break;
