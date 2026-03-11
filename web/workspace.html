@@ -10,6 +10,7 @@
     <script src="https://unpkg.com/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
     <link rel="stylesheet" href="./themes.css" />
     <link rel="stylesheet" href="./workspace.css" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
 </head>
 
 <body>
@@ -79,7 +80,8 @@
                     <div class="ws-skill-params-title">Параметры для <span id="wsSkillParamsName"></span>:</div>
                     <div class="ws-skill-param-input">
                         <input type="text" id="wsSkillParamsInput" placeholder="Введите параметры...">
-                        <button class="ws-skill-execute-btn" id="wsSkillExecuteBtn">▶</button>
+                        <button class="ws-skill-execute-btn" id="wsSkillExecuteBtn" title="Запустить в панели">▶</button>
+                        <button class="ws-skill-execute-popup-btn" id="wsSkillExecutePopupBtn" title="Запустить в окне">↗</button>
                     </div>
                 </div>
             </div>
@@ -119,17 +121,60 @@
             <div class="ws-skill-create-path" id="wsSkillCreatePath">Путь: ...</div>
             <div class="ws-skill-create-field">
                 <label class="ws-skill-create-label">Имя skill (латиница, без пробелов)</label>
-                <input type="text" class="ws-skill-create-input" id="wsSkillCreateName" placeholder="my-skill-name" autocomplete="off">
+                <input type="text" class="ws-skill-create-input" id="wsSkillCreateName" placeholder="my-skill-name"
+                    autocomplete="off">
             </div>
             <div class="ws-skill-create-field" style="flex:1; display:flex; flex-direction:column;">
                 <label class="ws-skill-create-label">Содержимое SKILL.md</label>
-                <textarea class="ws-skill-create-textarea" id="wsSkillCreateContent" placeholder="---&#10;name: my-skill&#10;description: Описание&#10;---&#10;..."></textarea>
+                <textarea class="ws-skill-create-textarea" id="wsSkillCreateContent"
+                    placeholder="---&#10;name: my-skill&#10;description: Описание&#10;---&#10;..."></textarea>
             </div>
             <div class="ws-skill-create-error hidden" id="wsSkillCreateError"></div>
         </div>
         <div class="ws-skill-create-footer">
             <button class="ws-skill-create-btn ws-skill-create-btn-cancel" id="wsSkillCreateCancel">Отмена</button>
             <button class="ws-skill-create-btn ws-skill-create-btn-save" id="wsSkillCreateSave">Сохранить</button>
+        </div>
+    </div>
+
+    <!-- Skill Dialog Modal (large, separate window) -->
+    <div id="wsSkillDialogOverlay" class="ws-skill-dialog-overlay hidden"></div>
+    <div id="wsSkillDialogModal" class="ws-skill-dialog-modal hidden">
+        <!-- Resize handles -->
+        <div class="ws-resize-handle ws-resize-n" data-resize="n"></div>
+        <div class="ws-resize-handle ws-resize-s" data-resize="s"></div>
+        <div class="ws-resize-handle ws-resize-e" data-resize="e"></div>
+        <div class="ws-resize-handle ws-resize-w" data-resize="w"></div>
+        <div class="ws-resize-handle ws-resize-ne" data-resize="ne"></div>
+        <div class="ws-resize-handle ws-resize-nw" data-resize="nw"></div>
+        <div class="ws-resize-handle ws-resize-se" data-resize="se"></div>
+        <div class="ws-resize-handle ws-resize-sw" data-resize="sw"></div>
+        
+        <div class="ws-skill-dialog-modal-header" id="wsSkillDialogModalHeader">
+            <div class="ws-skill-dialog-modal-title">
+                <span class="ws-skill-dialog-modal-icon">✨</span>
+                <span>Skill: </span>
+                <span id="wsSkillDialogModalName">-</span>
+            </div>
+            <div class="ws-skill-dialog-modal-actions">
+                <button class="ws-skill-dialog-modal-minimize" id="wsSkillDialogMinimize" title="Свернуть в панель">⊟</button>
+                <button class="ws-skill-dialog-modal-close" id="wsSkillDialogModalClose" title="Закрыть">×</button>
+            </div>
+        </div>
+        <div class="ws-skill-dialog-modal-body" id="wsSkillDialogModalBody">
+            <!-- Сообщения диалога будут здесь -->
+        </div>
+        <div class="ws-skill-dialog-modal-footer">
+            <div class="ws-skill-dialog-modal-quick-actions" id="wsSkillDialogModalQuickActions">
+                <button onclick="sendSkillQuickReplyModal('Да')">Да</button>
+                <button onclick="sendSkillQuickReplyModal('Нет')">Нет</button>
+                <button onclick="skillSkipCommand()">Пропустить</button>
+                <button onclick="skillCancel()">Отменить</button>
+            </div>
+            <div class="ws-skill-dialog-modal-input-row" id="wsSkillDialogModalInputRow">
+                <textarea id="wsSkillDialogModalInput" placeholder="Введите ответ..." rows="2"></textarea>
+                <button onclick="sendSkillMessageModal()" title="Отправить">▶</button>
+            </div>
         </div>
     </div>
 

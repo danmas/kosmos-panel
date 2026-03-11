@@ -968,6 +968,44 @@ body {
   background: var(--success-hover);
 }
 
+.ws-skill-execute-popup-btn {
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  color: #fff;
+  padding: 7px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.ws-skill-execute-popup-btn:hover {
+  background: #3b8dff;
+}
+
+/* Panel dialog popup button */
+.ws-skill-dialog-popup-btn {
+  background: transparent;
+  border: 1px solid var(--border-light);
+  color: var(--text-dim);
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  margin-right: 4px;
+}
+
+.ws-skill-dialog-popup-btn:hover {
+  background: var(--primary-dim);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
 /* ========== Command Confirm Panel ========== */
 .ws-command-confirm {
   position: absolute;
@@ -1094,4 +1132,353 @@ body {
 .ws-dragging-h {
   user-select: none !important;
   cursor: row-resize !important;
+}
+
+/* ========== Skill Dialog Modal (Large Popup) ========== */
+.ws-skill-dialog-overlay {
+  display: none; /* Disabled - non-modal window */
+}
+
+.ws-skill-dialog-overlay.hidden {
+  display: none;
+}
+
+.ws-skill-dialog-modal {
+  position: fixed;
+  top: 50%;
+  right: 20px;
+  left: auto;
+  transform: translateY(-50%);
+  width: 420px;
+  max-width: 95%;
+  height: 80%;
+  max-height: 700px;
+  min-width: 320px;
+  min-height: 250px;
+  background: var(--bg-card);
+  border: 2px solid var(--primary);
+  border-radius: 8px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  animation: wsModalSlideIn 0.2s ease-out;
+  overflow: hidden;
+}
+
+/* Resize handles */
+.ws-resize-handle {
+  position: absolute;
+  z-index: 10;
+}
+
+.ws-resize-n, .ws-resize-s {
+  left: 8px;
+  right: 8px;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.ws-resize-n { top: 0; }
+.ws-resize-s { bottom: 0; }
+
+.ws-resize-e, .ws-resize-w {
+  top: 8px;
+  bottom: 8px;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.ws-resize-e { right: 0; }
+.ws-resize-w { left: 0; }
+
+.ws-resize-ne, .ws-resize-nw, .ws-resize-se, .ws-resize-sw {
+  width: 12px;
+  height: 12px;
+}
+
+.ws-resize-ne { top: 0; right: 0; cursor: nesw-resize; }
+.ws-resize-nw { top: 0; left: 0; cursor: nwse-resize; }
+.ws-resize-se { bottom: 0; right: 0; cursor: nwse-resize; }
+.ws-resize-sw { bottom: 0; left: 0; cursor: nesw-resize; }
+
+.ws-resize-handle:hover {
+  background: rgba(74, 158, 255, 0.2);
+}
+
+.ws-skill-dialog-modal.hidden {
+  display: none;
+}
+
+@keyframes wsModalSlideIn {
+  from {
+    transform: translateY(-48%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(-50%);
+    opacity: 1;
+  }
+}
+
+.ws-skill-dialog-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border-light);
+  border-radius: 6px 6px 0 0;
+  cursor: move;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.ws-skill-dialog-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--success);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.ws-skill-dialog-modal-title span:last-child {
+  color: var(--text-main);
+}
+
+.ws-skill-dialog-modal-icon {
+  font-size: 16px;
+}
+
+.ws-skill-dialog-modal-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ws-skill-dialog-modal-minimize,
+.ws-skill-dialog-modal-close {
+  background: transparent;
+  border: 1px solid var(--border-light);
+  color: var(--text-dim);
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.ws-skill-dialog-modal-minimize:hover {
+  background: var(--primary-dim);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.ws-skill-dialog-modal-close:hover {
+  background: rgba(255, 68, 68, 0.2);
+  color: #ff4444;
+  border-color: #ff4444;
+}
+
+.ws-skill-dialog-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: var(--bg-main);
+}
+
+.ws-skill-dialog-modal-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.ws-skill-dialog-modal-body::-webkit-scrollbar-track {
+  background: var(--bg-panel);
+}
+
+.ws-skill-dialog-modal-body::-webkit-scrollbar-thumb {
+  background: var(--border-light);
+  border-radius: 4px;
+}
+
+.ws-skill-dialog-modal-body::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-dim);
+}
+
+.ws-skill-dialog-modal-footer {
+  padding: 6px 8px;
+  background: var(--bg-header);
+  border-top: 1px solid var(--border-light);
+  border-radius: 0 0 6px 6px;
+  flex-shrink: 0;
+}
+
+.ws-skill-dialog-modal-quick-actions {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.ws-skill-dialog-modal-quick-actions button {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  color: var(--text-muted);
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ws-skill-dialog-modal-quick-actions button:hover {
+  background: var(--primary-dim);
+  color: var(--text-main);
+  border-color: var(--primary);
+}
+
+.ws-skill-dialog-modal-input-row {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.ws-skill-dialog-modal-input-row textarea {
+  flex: 1;
+  background: var(--bg-input, var(--bg-active));
+  border: 1px solid var(--border-light);
+  color: var(--text-main);
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  resize: none;
+  min-height: 40px;
+  max-height: 120px;
+}
+
+.ws-skill-dialog-modal-input-row textarea:focus {
+  outline: none;
+  border-color: var(--success);
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.15);
+}
+
+.ws-skill-dialog-modal-input-row button {
+  background: var(--success);
+  border: 1px solid var(--success-hover);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.15s;
+}
+
+.ws-skill-dialog-modal-input-row button:hover {
+  background: var(--success-hover);
+  transform: translateY(-1px);
+}
+
+/* Modal message styles (larger than embedded) */
+.ws-skill-dialog-modal-body .ws-skill-msg {
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.4;
+  max-width: 95%;
+}
+
+.ws-skill-dialog-modal-body .ws-skill-msg-user {
+  align-self: flex-end;
+  background: #2d5a4e;
+}
+
+.ws-skill-dialog-modal-body .ws-skill-msg-ai,
+.ws-skill-dialog-modal-body .ws-skill-msg-ask {
+  align-self: flex-start;
+}
+
+.ws-skill-dialog-modal-body .ws-skill-msg-cmd {
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+.ws-skill-dialog-modal-body .ws-skill-msg-cmd code {
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.ws-skill-dialog-modal-body .ws-skill-msg-system {
+  align-self: center;
+  max-width: 100%;
+}
+
+.ws-skill-dialog-modal-body .ws-skill-msg-done,
+.ws-skill-dialog-modal-body .ws-skill-msg-error {
+  align-self: center;
+  max-width: 100%;
+}
+
+/* ========== Minimized Skill Indicator ========== */
+.ws-skill-minimized {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  background: var(--primary-dim);
+  border: 1px dashed var(--primary);
+  border-radius: 8px;
+  margin: 10px;
+}
+
+.ws-skill-minimized-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-main);
+  font-size: 14px;
+}
+
+.ws-skill-minimized-icon {
+  font-size: 18px;
+}
+
+.ws-skill-minimized-status {
+  color: var(--primary);
+  font-size: 12px;
+  margin-left: 8px;
+  animation: wsPulse 1.5s infinite;
+}
+
+@keyframes wsPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.ws-skill-maximized-btn {
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  transition: all 0.15s;
+}
+
+.ws-skill-maximized-btn:hover {
+  background: #3b8dff;
+  transform: translateY(-1px);
 }

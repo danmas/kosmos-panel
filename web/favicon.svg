@@ -1,0 +1,19 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="64" height="64" rx="12" fill="#0B0E14"/>
+  <rect x="4" y="4" width="56" height="56" rx="8" stroke="#1A202C" stroke-width="2"/>
+  <path d="M32 8V32L52 16" stroke="#00F2FF" stroke-width="2" stroke-linecap="round" opacity="0.6">
+    <animateTransform attributeName="transform" type="rotate" from="0 32 32" to="360 32 32" dur="4s" repeatCount="indefinite" />
+  </path>
+  <rect x="12" y="12" width="8" height="8" rx="2" fill="#00F2FF">
+    <animate attributeName="opacity" values="1;0.4;1" dur="2s" repeatCount="indefinite" />
+  </rect>
+  <rect x="44" y="12" width="8" height="8" rx="2" fill="#00FF88" />
+  <rect x="12" y="44" width="8" height="8" rx="2" fill="#FF00CC">
+    <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" repeatCount="indefinite" />
+  </rect>
+  <path d="M24 32H40M28 36H36" stroke="#00F2FF" stroke-width="2" stroke-linecap="round" opacity="0.8" />
+  <path d="M8 18V8H18" stroke="#3182CE" stroke-width="1.5" stroke-linecap="round" />
+  <path d="M46 8H56V18" stroke="#3182CE" stroke-width="1.5" stroke-linecap="round" />
+  <path d="M18 56H8V46" stroke="#3182CE" stroke-width="1.5" stroke-linecap="round" />
+  <path d="M56 46V56H46" stroke="#3182CE" stroke-width="1.5" stroke-linecap="round" />
+</svg>

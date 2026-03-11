@@ -629,6 +629,16 @@ function selectSkill(skillId) {
     input.focus();
 }
 
+// Two buttons for launching skill
+document.getElementById('wsSkillExecuteBtn').onclick = () => executeSelectedSkill(false); // panel mode
+document.getElementById('wsSkillExecutePopupBtn').onclick = () => executeSelectedSkill(true); // popup mode
+
+function executeSelectedSkill(usePopup = false) {
+    if (!selectedSkill) return;
+    skillDialogState.useModal = usePopup;
+    startSkillDialog(selectedSkill);
+}
+
 function parseSkillParams(str) {
     const params = {};
     if (!str) return params;
@@ -644,21 +654,15 @@ function parseSkillParams(str) {
 }
 
 // Execute skill button
-document.getElementById('wsSkillExecuteBtn').onclick = () => executeSelectedSkill();
 document.getElementById('wsSkillParamsInput').onkeydown = e => {
-    if (e.key === 'Enter') executeSelectedSkill();
+    if (e.key === 'Enter') executeSelectedSkill(false);
     else if (e.key === 'Escape') {
         document.getElementById('wsSkillParamsForm').classList.add('hidden');
         selectedSkill = null;
     }
 };
 
-function executeSelectedSkill() {
-    if (!selectedSkill) return;
-    startSkillDialog(selectedSkill);
-}
-
-// ========== Skill Dialog (embedded in bottom panel) ==========
+// ========== Skill Dialog (Modal Window) ==========
 const skillDialogState = {
     sessionId: null,
     terminalSessionId: null,
@@ -668,18 +672,45 @@ const skillDialogState = {
     state: 'idle', // 'idle' | 'waiting_cmd' | 'waiting_user' | 'done'
     messages: [],
     startedAt: null,
-    outputBuffer: []
+    outputBuffer: [],
+    useModal: false // false = panel, true = popup window
 };
 
+function showSkillDialogModal() {
+    const modal = document.getElementById('wsSkillDialogModal');
+    modal.classList.remove('hidden');
+    document.getElementById('wsSkillDialogModalBody').innerHTML = '';
+    // Position at right side
+    modal.style.transform = 'translateY(-50%)';
+    modal.style.top = '50%';
+    modal.style.right = '20px';
+    modal.style.left = 'auto';
+}
+
+function hideSkillDialogModal() {
+    document.getElementById('wsSkillDialogModal').classList.add('hidden');
+}
+
 function showSkillDialogView() {
-    const panel = document.getElementById('skillsPanel');
     const form = document.getElementById('wsSkillParamsForm');
     form.classList.add('hidden');
 
+    if (skillDialogState.useModal) {
+        // Popup window mode
+        showSkillDialogModal();
+    } else {
+        // Embedded panel mode
+        showSkillDialogPanel();
+    }
+}
+
+function showSkillDialogPanel() {
+    const panel = document.getElementById('skillsPanel');
     panel.innerHTML = `
     <div class="ws-skill-dialog">
       <div class="ws-skill-dialog-header">
         <div class="ws-skill-dialog-title">Skill: <span id="wsSkillDialogName">-</span></div>
+        <button class="ws-skill-dialog-popup-btn" id="wsSkillDialogPopupBtn" title="Открыть в окне">↗</button>
         <button class="ws-skill-dialog-close" id="wsSkillDialogClose" title="Закрыть">×</button>
       </div>
       <div class="ws-skill-dialog-body" id="wsSkillDialogBody"></div>
@@ -694,18 +725,204 @@ function showSkillDialogView() {
           <input type="text" id="wsSkillDialogInput" placeholder="Введите ответ...">
           <button onclick="sendSkillMessage()">▶</button>
         </div>
-        <button class="ws-skill-cmd-done-btn hidden" id="wsSkillCommandDoneBtn" onclick="skillCommandDone()">
-          Я выполнил команду
-        </button>
       </div>
     </div>`;
 
-    // Event handlers
+    // Event handlers for panel
     document.getElementById('wsSkillDialogClose').onclick = closeSkillDialog;
+    document.getElementById('wsSkillDialogPopupBtn').onclick = switchToPopupMode;
     document.getElementById('wsSkillDialogInput').onkeydown = e => {
         if (e.key === 'Enter') sendSkillMessage();
         else if (e.key === 'Escape') closeSkillDialog();
     };
+}
+
+function switchToPopupMode() {
+    skillDialogState.useModal = true;
+    showSkillDialogModal();
+    document.getElementById('wsSkillDialogModalName').textContent = skillDialogState.skillName;
+    // Restore messages to modal
+    const body = document.getElementById('wsSkillDialogModalBody');
+    body.innerHTML = '';
+    skillDialogState.messages.forEach(msg => {
+        addSkillMessageToElement(body, msg.type, msg.content);
+    });
+    body.scrollTop = body.scrollHeight;
+    updateSkillDialogFooter(skillDialogState.state);
+    // Clear panel
+    backToSkillsListSilent();
+}
+
+function backToSkillsListSilent() {
+    ws.send(JSON.stringify({ type: 'skills_list' }));
+}
+
+// Modal event handlers
+document.getElementById('wsSkillDialogModalClose').onclick = closeSkillDialog;
+// Note: overlay click does NOT close the dialog to prevent accidental closure
+document.getElementById('wsSkillDialogMinimize').onclick = () => {
+    // Hide modal but keep skill running (can re-open from panel)
+    hideSkillDialogModal();
+    // Show indicator in the panel
+    const panel = document.getElementById('skillsPanel');
+    panel.innerHTML = `
+    <div class="ws-skill-minimized">
+      <div class="ws-skill-minimized-info">
+        <span class="ws-skill-minimized-icon">✨</span>
+        <span>Skill: <strong>${escapeHtml(skillDialogState.skillName)}</strong></span>
+        <span class="ws-skill-minimized-status">Выполняется...</span>
+      </div>
+      <button class="ws-skill-maximized-btn" onclick="restoreSkillModal()">□ Развернуть</button>
+    </div>`;
+};
+
+window.restoreSkillModal = function () {
+    showSkillDialogModal();
+    // Restore messages to modal body
+    const body = document.getElementById('wsSkillDialogModalBody');
+    body.innerHTML = '';
+    skillDialogState.messages.forEach(msg => {
+        addSkillMessageToElement(body, msg.type, msg.content);
+    });
+    body.scrollTop = body.scrollHeight;
+};
+
+// Handle Enter key in modal textarea
+document.getElementById('wsSkillDialogModalInput').onkeydown = e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendSkillMessageModal();
+    } else if (e.key === 'Escape') {
+        closeSkillDialog();
+    }
+};
+
+// ========== Modal Drag functionality ==========
+(function setupModalDrag() {
+    const modal = document.getElementById('wsSkillDialogModal');
+    const header = document.getElementById('wsSkillDialogModalHeader');
+    let isDragging = false;
+    let offsetX = 0, offsetY = 0;
+
+    header.addEventListener('mousedown', e => {
+        if (e.target.tagName === 'BUTTON') return;
+        isDragging = true;
+        const rect = modal.getBoundingClientRect();
+        offsetX = e.clientX - rect.left;
+        offsetY = e.clientY - rect.top;
+        modal.style.transform = 'none';
+        modal.style.left = rect.left + 'px';
+        modal.style.top = rect.top + 'px';
+        document.body.style.userSelect = 'none';
+    });
+
+    document.addEventListener('mousemove', e => {
+        if (!isDragging) return;
+        let newX = e.clientX - offsetX;
+        let newY = e.clientY - offsetY;
+        // Keep within viewport
+        newX = Math.max(0, Math.min(window.innerWidth - 100, newX));
+        newY = Math.max(0, Math.min(window.innerHeight - 50, newY));
+        modal.style.left = newX + 'px';
+        modal.style.top = newY + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            document.body.style.userSelect = '';
+        }
+    });
+})();
+
+// ========== Modal Resize functionality ==========
+(function setupModalResize() {
+    const modal = document.getElementById('wsSkillDialogModal');
+    const handles = modal.querySelectorAll('.ws-resize-handle');
+    let isResizing = false;
+    let resizeDir = '';
+    let startX, startY, startW, startH, startLeft, startTop;
+    const minW = 320, minH = 250;
+
+    handles.forEach(handle => {
+        handle.addEventListener('mousedown', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            isResizing = true;
+            resizeDir = handle.dataset.resize;
+            const rect = modal.getBoundingClientRect();
+            startX = e.clientX;
+            startY = e.clientY;
+            startW = rect.width;
+            startH = rect.height;
+            startLeft = rect.left;
+            startTop = rect.top;
+            modal.style.transform = 'none';
+            modal.style.left = startLeft + 'px';
+            modal.style.top = startTop + 'px';
+            document.body.style.userSelect = 'none';
+        });
+    });
+
+    document.addEventListener('mousemove', e => {
+        if (!isResizing) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        let newW = startW, newH = startH, newLeft = startLeft, newTop = startTop;
+
+        // East
+        if (resizeDir.includes('e')) {
+            newW = Math.max(minW, startW + dx);
+        }
+        // West
+        if (resizeDir.includes('w')) {
+            const w = Math.max(minW, startW - dx);
+            if (w !== startW) {
+                newLeft = startLeft + (startW - w);
+                newW = w;
+            }
+        }
+        // South
+        if (resizeDir.includes('s')) {
+            newH = Math.max(minH, startH + dy);
+        }
+        // North
+        if (resizeDir === 'n' || resizeDir === 'ne' || resizeDir === 'nw') {
+            const h = Math.max(minH, startH - dy);
+            if (h !== startH) {
+                newTop = startTop + (startH - h);
+                newH = h;
+            }
+        }
+
+        modal.style.width = newW + 'px';
+        modal.style.height = newH + 'px';
+        modal.style.left = newLeft + 'px';
+        modal.style.top = newTop + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            document.body.style.userSelect = '';
+        }
+    });
+})();
+
+function addSkillMessageToElement(container, type, content) {
+    const msg = document.createElement('div');
+    msg.className = `ws-skill-msg ws-skill-msg-${type}`;
+
+    if (type === 'cmd') {
+        msg.innerHTML = `Предложена команда:<code>${escapeHtml(content)}</code>`;
+    } else if (type === 'output') {
+        msg.textContent = content;
+    } else {
+        msg.innerHTML = escapeHtml(content).replace(/\n/g, '<br>');
+    }
+
+    container.appendChild(msg);
+    return msg;
 }
 
 function resetSkillDialogState() {
@@ -718,21 +935,15 @@ function resetSkillDialogState() {
 }
 
 function addSkillMessage(type, content) {
-    const body = document.getElementById('wsSkillDialogBody');
-    if (!body) return;
-    const msg = document.createElement('div');
-    msg.className = `ws-skill-msg ws-skill-msg-${type}`;
-
-    if (type === 'cmd') {
-        msg.innerHTML = `Предложена команда:<code>${escapeHtml(content)}</code>`;
-    } else if (type === 'output') {
-        msg.textContent = content;
-    } else {
-        msg.innerHTML = escapeHtml(content).replace(/\n/g, '<br>');
+    // Add to the appropriate container based on mode
+    const modalBody = document.getElementById('wsSkillDialogModalBody');
+    const panelBody = document.getElementById('wsSkillDialogBody');
+    const body = skillDialogState.useModal ? modalBody : panelBody;
+    
+    if (body) {
+        addSkillMessageToElement(body, type, content);
+        body.scrollTop = body.scrollHeight;
     }
-
-    body.appendChild(msg);
-    body.scrollTop = body.scrollHeight;
     skillDialogState.messages.push({ type, content, timestamp: new Date().toISOString() });
 }
 
@@ -746,9 +957,18 @@ async function startSkillDialog(skill) {
     skillDialogState.terminalSessionId = currentSessionId;
     skillDialogState.skillName = skill.name;
     skillDialogState.startedAt = new Date().toISOString();
+    // useModal is already set by executeSelectedSkill
 
     showSkillDialogView();
-    document.getElementById('wsSkillDialogName').textContent = skill.name;
+    
+    // Set skill name in the appropriate element
+    if (skillDialogState.useModal) {
+        document.getElementById('wsSkillDialogModalName').textContent = skill.name;
+    } else {
+        const nameEl = document.getElementById('wsSkillDialogName');
+        if (nameEl) nameEl.textContent = skill.name;
+    }
+    
     addSkillMessage('system', 'Запуск skill...');
 
     const userInput = document.getElementById('wsSkillParamsInput')?.value?.trim() || '';
@@ -797,7 +1017,8 @@ function handleSkillAIResponse(aiResponse) {
         const questionText = aiResponse.question || content;
         addSkillMessage('ask', questionText + (isOptional ? ' (опционально)' : ''));
         updateSkillDialogFooter('waiting_user');
-        const input = document.getElementById('wsSkillDialogInput');
+        const inputId = skillDialogState.useModal ? 'wsSkillDialogModalInput' : 'wsSkillDialogInput';
+        const input = document.getElementById(inputId);
         if (input) { input.placeholder = isOptional ? 'Введите ответ или Enter для пропуска...' : 'Введите ответ...'; input.focus(); }
     } else if (type === 'MESSAGE') {
         skillDialogState.state = 'idle';
@@ -815,19 +1036,32 @@ function handleSkillAIResponse(aiResponse) {
 }
 
 function updateSkillDialogFooter(state) {
-    const qa = document.getElementById('wsSkillQuickActions');
-    const ir = document.getElementById('wsSkillInputRow');
-    const db = document.getElementById('wsSkillCommandDoneBtn');
-    if (!qa) return;
+    // Update modal footer
+    const qaModal = document.getElementById('wsSkillDialogModalQuickActions');
+    const irModal = document.getElementById('wsSkillDialogModalInputRow');
+    // Update panel footer
+    const qaPanel = document.getElementById('wsSkillQuickActions');
+    const irPanel = document.getElementById('wsSkillInputRow');
+    
+    const qa = skillDialogState.useModal ? qaModal : qaPanel;
+    const ir = skillDialogState.useModal ? irModal : irPanel;
+    if (!qa || !ir) return;
 
     if (state === 'waiting_cmd') {
-        qa.style.display = 'flex'; ir.style.display = 'none'; db?.classList.add('hidden');
+        qa.style.display = 'flex';
+        ir.style.display = 'none';
     } else if (state === 'waiting_user') {
-        qa.style.display = 'flex'; ir.style.display = 'flex'; db?.classList.add('hidden');
+        qa.style.display = 'flex';
+        ir.style.display = 'flex';
+        const inputId = skillDialogState.useModal ? 'wsSkillDialogModalInput' : 'wsSkillDialogInput';
+        const input = document.getElementById(inputId);
+        if (input) input.focus();
     } else if (state === 'idle') {
-        qa.style.display = 'none'; ir.style.display = 'none'; db?.classList.add('hidden');
+        qa.style.display = 'none';
+        ir.style.display = 'none';
     } else if (state === 'done') {
-        qa.style.display = 'none'; ir.style.display = 'none'; db?.classList.add('hidden');
+        qa.style.display = 'none';
+        ir.style.display = 'none';
     }
 }
 
@@ -837,7 +1071,8 @@ function insertCommandToTerminal(command) {
 }
 
 async function sendSkillMessage() {
-    const input = document.getElementById('wsSkillDialogInput');
+    const inputId = skillDialogState.useModal ? 'wsSkillDialogModalInput' : 'wsSkillDialogInput';
+    const input = document.getElementById(inputId);
     const text = input?.value?.trim();
     if (!text || skillDialogState.state !== 'waiting_user') return;
 
@@ -855,6 +1090,16 @@ async function sendSkillMessage() {
         handleSkillAIResponse(data.data.aiResponse);
     } catch (e) { addSkillMessage('error', `Ошибка: ${e.message}`); }
 }
+
+async function sendSkillMessageModal() {
+    await sendSkillMessage();
+}
+
+window.sendSkillQuickReplyModal = function (text) {
+    const input = document.getElementById('wsSkillDialogModalInput');
+    if (input) input.value = text;
+    sendSkillMessage();
+};
 
 window.sendSkillQuickReply = function (text) {
     const input = document.getElementById('wsSkillDialogInput');
@@ -974,6 +1219,9 @@ async function onSkillCommandExecuted() {
 function closeSkillDialog() {
     if (skillDialogState.sessionId && skillDialogState.state !== 'done') {
         skillCancel();
+    }
+    if (skillDialogState.useModal) {
+        hideSkillDialogModal();
     }
     backToSkillsList();
 }
