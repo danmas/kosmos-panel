@@ -835,6 +835,80 @@ document.getElementById('wsSkillDialogModalInput').onkeydown = e => {
     });
 })();
 
+// ========== Modal Resize functionality ==========
+(function setupModalResize() {
+    const modal = document.getElementById('wsSkillDialogModal');
+    const handles = modal.querySelectorAll('.ws-resize-handle');
+    let isResizing = false;
+    let resizeDir = '';
+    let startX, startY, startW, startH, startLeft, startTop;
+    const minW = 320, minH = 250;
+
+    handles.forEach(handle => {
+        handle.addEventListener('mousedown', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            isResizing = true;
+            resizeDir = handle.dataset.resize;
+            const rect = modal.getBoundingClientRect();
+            startX = e.clientX;
+            startY = e.clientY;
+            startW = rect.width;
+            startH = rect.height;
+            startLeft = rect.left;
+            startTop = rect.top;
+            modal.style.transform = 'none';
+            modal.style.left = startLeft + 'px';
+            modal.style.top = startTop + 'px';
+            document.body.style.userSelect = 'none';
+        });
+    });
+
+    document.addEventListener('mousemove', e => {
+        if (!isResizing) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        let newW = startW, newH = startH, newLeft = startLeft, newTop = startTop;
+
+        // East
+        if (resizeDir.includes('e')) {
+            newW = Math.max(minW, startW + dx);
+        }
+        // West
+        if (resizeDir.includes('w')) {
+            const w = Math.max(minW, startW - dx);
+            if (w !== startW) {
+                newLeft = startLeft + (startW - w);
+                newW = w;
+            }
+        }
+        // South
+        if (resizeDir.includes('s')) {
+            newH = Math.max(minH, startH + dy);
+        }
+        // North
+        if (resizeDir === 'n' || resizeDir === 'ne' || resizeDir === 'nw') {
+            const h = Math.max(minH, startH - dy);
+            if (h !== startH) {
+                newTop = startTop + (startH - h);
+                newH = h;
+            }
+        }
+
+        modal.style.width = newW + 'px';
+        modal.style.height = newH + 'px';
+        modal.style.left = newLeft + 'px';
+        modal.style.top = newTop + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            document.body.style.userSelect = '';
+        }
+    });
+})();
+
 function addSkillMessageToElement(container, type, content) {
     const msg = document.createElement('div');
     msg.className = `ws-skill-msg ws-skill-msg-${type}`;

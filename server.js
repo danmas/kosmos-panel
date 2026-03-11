@@ -682,6 +682,12 @@ app.delete('/api/ws-terminal/command/:commandId', (req, res) => {
 
 // ========== End WS Terminal REST Bridge API ==========
 
+// Главная страница — без кэша, чтобы всегда подхватывать актуальную ссылку на Настройки
+app.get('/', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  next();
+});
+
 app.use('/', express.static(path.join(process.cwd(), 'web')));
 
 const port = process.env.PORT ? Number(process.env.PORT) : 3000;

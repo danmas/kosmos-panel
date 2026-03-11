@@ -1163,21 +1163,47 @@ body {
   flex-direction: column;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   animation: wsModalSlideIn 0.2s ease-out;
-  resize: both;
   overflow: hidden;
 }
 
-.ws-skill-dialog-modal::after {
-  content: '';
+/* Resize handles */
+.ws-resize-handle {
   position: absolute;
-  right: 2px;
-  bottom: 2px;
-  width: 14px;
-  height: 14px;
-  background: linear-gradient(135deg, transparent 50%, var(--primary) 50%);
-  border-radius: 0 0 6px 0;
-  opacity: 0.5;
-  pointer-events: none;
+  z-index: 10;
+}
+
+.ws-resize-n, .ws-resize-s {
+  left: 8px;
+  right: 8px;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.ws-resize-n { top: 0; }
+.ws-resize-s { bottom: 0; }
+
+.ws-resize-e, .ws-resize-w {
+  top: 8px;
+  bottom: 8px;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.ws-resize-e { right: 0; }
+.ws-resize-w { left: 0; }
+
+.ws-resize-ne, .ws-resize-nw, .ws-resize-se, .ws-resize-sw {
+  width: 12px;
+  height: 12px;
+}
+
+.ws-resize-ne { top: 0; right: 0; cursor: nesw-resize; }
+.ws-resize-nw { top: 0; left: 0; cursor: nwse-resize; }
+.ws-resize-se { bottom: 0; right: 0; cursor: nwse-resize; }
+.ws-resize-sw { bottom: 0; left: 0; cursor: nesw-resize; }
+
+.ws-resize-handle:hover {
+  background: rgba(74, 158, 255, 0.2);
 }
 
 .ws-skill-dialog-modal.hidden {
