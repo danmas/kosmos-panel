@@ -20,12 +20,12 @@ function loadConfig() {
     const configPath = path.join(process.cwd(), 'config.json');
     const configData = require('fs').readFileSync(configPath, 'utf8');
     appConfig = JSON.parse(configData);
-    
+
     // Inject config values into process.env
     Object.keys(appConfig).forEach(key => {
       process.env[key] = appConfig[key];
     });
-    
+
     logger.info('config', 'Config loaded successfully', { keys: Object.keys(appConfig) });
   } catch (e) {
     logger.error('config', 'Failed to load config.json - server cannot start', { error: e.message });
@@ -71,10 +71,10 @@ app.get('/api/servers', (req, res) => {
         services: Object.entries(s.services).map(([id, sv]) => {
           // Находим оригинальный сервис из inventory для получения description
           const originalService = server.services.find(svc => svc.id === id);
-          return { 
-            id, 
-            ...sv, 
-            description: originalService?.description || undefined 
+          return {
+            id,
+            ...sv,
+            description: originalService?.description || undefined
           };
         }),
       };
@@ -85,18 +85,18 @@ app.get('/api/servers', (req, res) => {
 app.get('/api/service-log', (req, res) => {
   const { serverId, serviceId } = req.query;
   const snap = getSnapshot();
-  
+
   const server = snap.servers[serverId];
   if (!server) {
     return res.status(404).json({ success: false, error: 'Сервер не найден' });
   }
-  
+
   const service = server.services[serviceId];
-  
+
   if (!service) {
     return res.status(404).json({ success: false, error: 'Сервис не найден' });
   }
-  
+
   res.json({ success: true, log: service.detail || '(пустой лог)' });
 });
 
@@ -134,18 +134,18 @@ app.post('/api/config', async (req, res) => {
   try {
     const configPath = path.join(process.cwd(), 'config.json');
     const newConfig = req.body;
-    
+
     if (!newConfig || typeof newConfig !== 'object') {
       return res.status(400).json({ ok: false, error: 'Invalid config data' });
     }
-    
+
     // Save to file
     const jsonContent = JSON.stringify(newConfig, null, 2);
     await fs.writeFile(configPath, jsonContent, 'utf8');
-    
+
     // Reload config
     loadConfig();
-    
+
     res.json({ ok: true, message: 'Config saved and reloaded successfully' });
   } catch (e) {
     logger.error('api', 'Failed to save config', { error: e.message });
@@ -226,25 +226,25 @@ app.get('/inventory-json-mapping.json', async (req, res) => {
 app.post('/api/inventory', async (req, res) => {
   try {
     const inventoryPath = path.join(process.cwd(), 'inventory.json');
-    
+
     // Валидация входящих данных
     const data = req.body;
     if (!data || typeof data !== 'object') {
       return res.status(400).json({ error: 'Некорректные данные' });
     }
-    
+
     if (!Array.isArray(data.credentials)) {
       return res.status(400).json({ error: 'Поле "credentials" должно быть массивом' });
     }
-    
+
     if (!Array.isArray(data.servers)) {
       return res.status(400).json({ error: 'Поле "servers" должно быть массивом' });
     }
-    
+
     if (!data.poll || typeof data.poll !== 'object') {
       return res.status(400).json({ error: 'Поле "poll" должно быть объектом' });
     }
-    
+
     // Валидация серверов
     for (let i = 0; i < data.servers.length; i++) {
       const server = data.servers[i];
@@ -261,14 +261,14 @@ app.post('/api/inventory', async (req, res) => {
         return res.status(400).json({ error: `Сервер ${i + 1}: поле "services" должно быть массивом` });
       }
     }
-    
+
     // Проверка уникальности ID серверов
     const serverIds = data.servers.map(s => s.id);
     const duplicateIds = serverIds.filter((id, index) => serverIds.indexOf(id) !== index);
     if (duplicateIds.length > 0) {
       return res.status(400).json({ error: `Дублирующиеся ID серверов: ${duplicateIds.join(', ')}` });
     }
-    
+
     // Валидация учетных данных
     for (let i = 0; i < data.credentials.length; i++) {
       const cred = data.credentials[i];
@@ -279,14 +279,14 @@ app.post('/api/inventory', async (req, res) => {
         return res.status(400).json({ error: `Учетные данные ${i + 1}: отсутствует поле "type"` });
       }
     }
-    
+
     // Проверка уникальности ID учетных данных
     const credIds = data.credentials.map(c => c.id);
     const duplicateCredIds = credIds.filter((id, index) => credIds.indexOf(id) !== index);
     if (duplicateCredIds.length > 0) {
       return res.status(400).json({ error: `Дублирующиеся ID учетных данных: ${duplicateCredIds.join(', ')}` });
     }
-    
+
     // Создаем резервную копию в папке backup
     const backupDir = path.join(process.cwd(), 'backup');
     const backupPath = path.join(backupDir, `inventory.json.backup.${Date.now()}`);
@@ -299,13 +299,13 @@ app.post('/api/inventory', async (req, res) => {
         logger.warn('api', 'Не удалось создать резервную копию', { error: e.message });
       }
     }
-    
+
     // Сохраняем новый файл
     const jsonContent = JSON.stringify(data, null, 2);
     await fs.writeFile(inventoryPath, jsonContent, 'utf8');
-    
+
     res.json({ ok: true, message: 'Файл inventory.json успешно сохранен' });
-    
+
   } catch (e) {
     logger.error('api', 'Ошибка сохранения inventory.json', { error: e.message });
     res.status(500).json({ error: e.message });
@@ -317,7 +317,7 @@ app.get('/api/test-ssh', async (req, res) => {
     const serverId = String(req.query.serverId || '');
     const server = (inventory.servers || []).find((s) => s.id === serverId);
     if (!server) return res.status(404).json({ ok: false, error: 'server not found' });
-    
+
     // Добавляем отладочную информацию
     // getCredential не экспортируется, поэтому ловим только ошибки
     const credInfo = {
@@ -330,19 +330,21 @@ app.get('/api/test-ssh', async (req, res) => {
       }
     };
 
-    const r = await sshExec({ ssh: server.ssh, command: 'echo __OK__' , timeoutMs: 5000});
+    const r = await sshExec({ ssh: server.ssh, command: 'echo __OK__', timeoutMs: 5000 });
     res.json({ ok: true, result: r, debug: { server: server.ssh, credentials: credInfo } });
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message, debug: { 
-      server: server?.ssh,
-      envVars: {
-        SSH_KEY_PATH: process.env.SSH_KEY_PATH,
-        SSH_PASSPHRASE: process.env.SSH_PASSPHRASE,
-        SSH_PASSWORD: process.env.SSH_PASSWORD,
-        USE_SSH_AGENT: process.env.USE_SSH_AGENT,
-        SSH_AUTH_SOCK: process.env.SSH_AUTH_SOCK
+    res.status(500).json({
+      ok: false, error: e.message, debug: {
+        server: server?.ssh,
+        envVars: {
+          SSH_KEY_PATH: process.env.SSH_KEY_PATH,
+          SSH_PASSPHRASE: process.env.SSH_PASSPHRASE,
+          SSH_PASSWORD: process.env.SSH_PASSWORD,
+          USE_SSH_AGENT: process.env.USE_SSH_AGENT,
+          SSH_AUTH_SOCK: process.env.SSH_AUTH_SOCK
+        }
       }
-    }});
+    });
   }
 });
 
@@ -352,12 +354,12 @@ app.get('/api/logs', async (req, res) => {
   try {
     const data = await fs.readFile(logFilePath, 'utf8');
     let logs = JSON.parse(data);
-    
+
     // Фильтрация по sessionId если указан
     if (sessionId) {
       logs = logs.filter(log => log.sessionId === sessionId);
     }
-    
+
     res.json(logs);
   } catch (err) {
     if (err.code === 'ENOENT') {
@@ -373,21 +375,21 @@ app.get('/api/skills-logs', async (req, res) => {
   const skillsLogPath = path.join(__dirname, 'data', 'skills_log.json');
   const sessionId = req.query.sessionId;
   const skillLogId = req.query.skillLogId;
-  
+
   try {
     const data = await fs.readFile(skillsLogPath, 'utf8');
     let logs = JSON.parse(data);
-    
+
     // Фильтрация по sessionId
     if (sessionId) {
       logs = logs.filter(log => log.session_id === sessionId);
     }
-    
+
     // Фильтрация по skillLogId (группировка по одному запуску skill)
     if (skillLogId) {
       logs = logs.filter(log => log.skill_log_id === skillLogId);
     }
-    
+
     res.json(logs);
   } catch (err) {
     if (err.code === 'ENOENT') {
@@ -398,23 +400,119 @@ app.get('/api/skills-logs', async (req, res) => {
   }
 });
 
+app.get('/api/raw-logs', async (req, res) => {
+  try {
+    const logsDir = path.join(__dirname, 'logs');
+    const files = await fs.readdir(logsDir);
+    const logFiles = files.filter(f => f.endsWith('.log')).sort().reverse();
+
+    const categories = {};
+    for (const file of logFiles) {
+      const match = file.match(/^(.+)-\d{4}-\d{2}-\d{2}\.log$/);
+      if (match) {
+        const category = match[1];
+        if (!categories[category]) categories[category] = [];
+        categories[category].push(file);
+      }
+    }
+    res.json(categories);
+  } catch (err) {
+    if (err.code === 'ENOENT') return res.json({});
+    logger.error('api', 'Error reading raw logs directory', { error: err.message });
+    res.status(500).json({ error: 'Failed to read raw logs directory' });
+  }
+});
+
+app.get('/api/raw-logs/:file', async (req, res) => {
+  const file = req.params.file;
+  if (!file || !file.endsWith('.log') || file.includes('/') || file.includes('\\')) {
+    return res.status(400).json({ error: 'Invalid file parameter' });
+  }
+
+  try {
+    const filePath = path.join(__dirname, 'logs', file);
+    const stats = await fs.stat(filePath);
+    const maxSize = 1024 * 1024; // 1MB limit for performance
+
+    let start = 0;
+    if (stats.size > maxSize) {
+      start = stats.size - maxSize;
+    }
+
+    const fd = await fs.open(filePath, 'r');
+    const buffer = Buffer.alloc(Math.min(stats.size, maxSize));
+    await fd.read(buffer, 0, buffer.length, start);
+    await fd.close();
+
+    res.send(buffer.toString('utf8'));
+  } catch (err) {
+    if (err.code === 'ENOENT') return res.status(404).json({ error: 'Log file not found' });
+    logger.error('api', 'Error reading raw log file', { file, error: err.message });
+    res.status(500).json({ error: 'Failed to read log file' });
+  }
+});
+
+// Clear Logs Endpoints
+app.delete('/api/logs/terminal', async (req, res) => {
+  try {
+    await fs.writeFile(path.join(__dirname, 'logs', 'terminal', 'terminal_log.json'), '[]', 'utf8');
+    res.json({ success: true });
+  } catch(err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/logs/skills', async (req, res) => {
+  try {
+    await fs.writeFile(path.join(__dirname, 'data', 'skills_log.json'), '[]', 'utf8');
+    res.json({ success: true });
+  } catch(err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/raw-logs/:category', async (req, res) => {
+  const category = req.params.category;
+  if (!category || category.includes('/') || category.includes('\\')) {
+    return res.status(400).json({ error: 'Invalid category' });
+  }
+  try {
+    const logsDir = path.join(__dirname, 'logs');
+    const files = await fs.readdir(logsDir);
+    const categoryFiles = files.filter(f => f.match(new RegExp(`^${category}-\\d{4}-\\d{2}-\\d{2}\\.log$`)));
+    let deletedCount = 0;
+    for (const file of categoryFiles) {
+      try {
+        await fs.unlink(path.join(logsDir, file));
+        deletedCount++;
+      } catch (e) {
+        logger.error('api', 'Error deleting raw log file', { file, error: e.message });
+      }
+    }
+    res.json({ success: true, deleted: deletedCount });
+  } catch(err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 
 // AI Help endpoint
 app.post('/api/ai-help', async (req, res) => {
   try {
     const { query } = req.body;
-    
+
     if (!query || typeof query !== 'string') {
       return res.status(400).json({ success: false, error: 'Отсутствует запрос' });
     }
-    
+
     // Читаем документацию из KB
     const kbPath = path.join(process.cwd(), 'KB');
-    
+
     let contextDocs = '';
-    
+
     try {
-      const contextFiles = process.env.AI_HELP_CONTEXT_FILES 
+      const contextFiles = process.env.AI_HELP_CONTEXT_FILES
         ? process.env.AI_HELP_CONTEXT_FILES.split(',')
         : ['README_AI.md', 'README_AUTH.md'];
 
@@ -441,7 +539,7 @@ app.post('/api/ai-help', async (req, res) => {
     } catch (e) {
       logger.warn('ai', 'Ошибка чтения документации', { error: e.message });
     }
-    
+
     // Формируем системный промпт
     const baseSystemPrompt = process.env.AI_SYSTEM_PROMPT_HELP || `
 Ты - AI помощник для системы мониторинга Kosmos Panel. 
@@ -451,12 +549,12 @@ app.post('/api/ai-help', async (req, res) => {
 `;
 
     const systemPrompt = `${baseSystemPrompt}\n\nДокументация системы:\n${contextDocs}`;
-    
+
     // OpenAI-совместимый API
     const aiBaseUrl = process.env.AI_KOSMOS_MODEL_BASE_URL || 'http://localhost:3002/v1';
     const aiServerUrl = `${aiBaseUrl}/chat/completions`;
     const aiModel = process.env.AI_MODEL || 'CHEAP';
-    
+
     // OpenAI-совместимый формат запроса
     const messages = [
       { role: 'system', content: systemPrompt },
@@ -473,33 +571,33 @@ app.post('/api/ai-help', async (req, res) => {
         max_tokens: 2048
       })
     });
-    
+
     if (!aiResponse.ok) {
       const errorData = await aiResponse.json().catch(() => ({}));
       throw new Error(errorData.error?.message || `AI сервер вернул ошибку: ${aiResponse.status}`);
     }
-    
+
     const aiResult = await aiResponse.json();
-    
+
     // OpenAI-совместимый формат ответа
     const aiContent = aiResult.choices?.[0]?.message?.content;
     if (aiContent) {
-      res.json({ 
-        success: true, 
-        response: aiContent 
+      res.json({
+        success: true,
+        response: aiContent
       });
     } else {
-      res.json({ 
-        success: false, 
-        error: aiResult.error?.message || 'Пустой ответ от AI' 
+      res.json({
+        success: false,
+        error: aiResult.error?.message || 'Пустой ответ от AI'
       });
     }
-    
+
   } catch (error) {
     logger.error('ai', 'Ошибка AI Help', { error: error.message });
-    res.status(500).json({ 
-      success: false, 
-      error: `Ошибка обработки запроса: ${error.message}` 
+    res.status(500).json({
+      success: false,
+      error: `Ошибка обработки запроса: ${error.message}`
     });
   }
 });
@@ -569,12 +667,12 @@ app.post('/api/ws-terminal/:sessionId/command', (req, res) => {
 
   if (!wait) {
     // Async режим - сразу возвращаем commandId
-    return res.json({ 
-      success: true, 
-      data: { 
-        commandId, 
-        status: cmd.status 
-      } 
+    return res.json({
+      success: true,
+      data: {
+        commandId,
+        status: cmd.status
+      }
     });
   }
 
@@ -734,7 +832,7 @@ function checkPort(port) {
   // Graceful shutdown для логирования при pm2 restart
   function gracefulShutdown(signal) {
     logger.warn('server', `Received ${signal}, shutting down gracefully...`);
-    
+
     // Закрываем все WebSocket сессии
     const sessionCount = Object.keys(wsSessions).length;
     if (sessionCount > 0) {
@@ -747,12 +845,12 @@ function checkPort(port) {
         }
       }
     }
-    
+
     server.close(() => {
       logger.info('server', 'HTTP server closed');
       process.exit(0);
     });
-    
+
     // Force exit after 5 seconds
     setTimeout(() => {
       logger.warn('server', 'Forced shutdown after timeout');

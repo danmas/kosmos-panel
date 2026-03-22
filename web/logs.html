@@ -299,10 +299,15 @@
         <div class="header-title" id="headerTitle">📋 Лог команд терминала</div>
         <div class="session-filter">
           <div class="session-info" id="sessionInfo">Session: ...</div>
-          <label title="Показать логи всех сессий">
+          <label title="Показать логи всех сессий" id="showAllSessionsLabel">
             <input type="checkbox" id="showAllSessions" />
             All
           </label>
+          <div id="rawLogFileSelectContainer" style="display: none; align-items: center; gap: 8px;">
+            <span style="font-size: 12px; color: var(--text-muted)">Файл:</span>
+            <select id="rawLogFileSelect"
+              style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-light); border-radius: 4px; padding: 2px 6px; font-size: 12px;"></select>
+          </div>
         </div>
       </div>
       <div class="filters" id="terminalFilters">
@@ -322,7 +327,12 @@
         <button class="filter-btn" data-type="skill_user_input">Ответы</button>
         <button class="filter-btn" data-type="skill_complete">Завершение</button>
       </div>
-      <div class="status" id="status">Загрузка...</div>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <button id="clearLogsBtn" class="filter-btn" style="color: var(--log-stderr); border-color: var(--log-stderr); display: flex; align-items: center; gap: 4px;" title="Очистить логи текущего типа">
+          🗑️ Очистить
+        </button>
+        <div class="status" id="status">Загрузка...</div>
+      </div>
     </div>
     <div class="content" id="content">
       <div class="empty">Загрузка логов...</div>
@@ -332,11 +342,13 @@
     const params = new URLSearchParams(location.search);
     const sessionId = params.get('sessionId');
 
-    let currentTab = 'terminal'; // 'terminal' или 'skills'
+    let currentTab = 'terminal'; // 'terminal', 'skills' или название сырой категории
     let allLogs = [];
     let currentFilter = 'all';
     let lastUpdate = 0;
     let showAllSessions = false;
+    let rawLogCategories = {};
+    let currentRawLogFile = null;
 
     if (!sessionId) {
       document.getElementById('sessionInfo').textContent = 'Session: не указан';
@@ -349,6 +361,32 @@
     }
 
     async function loadLogs() {
+      if (currentTab !== 'terminal' && currentTab !== 'skills') {
+        // Мы в динамической вкладке сырых логов
+        if (!currentRawLogFile) return;
+        try {
+          const response = await fetch(`/api/raw-logs/${currentRawLogFile}?t=${Date.now()}`);
+          if (!response.ok) throw new Error('Ошибка загрузки');
+          const text = await response.text();
+          // Сохраняем как массив. Разбиваем по переносу строки + дата в скобках [YYYY-MM-DD
+          // чтобы сохранить многострочные стэктрейсы в одной записи.
+          const entries = text.split(/\n(?=\[\d{4}-\d{2}-\d{2}T)/).filter(Boolean);
+          // Делаем обратный порядок
+          const reversedEntries = entries.reverse();
+
+          if (allLogs.length !== reversedEntries.length || lastUpdate === 0 || allLogs[0] !== reversedEntries[0]) {
+            allLogs = reversedEntries;
+            lastUpdate = Date.now();
+            renderLogs();
+            updateStatus();
+          }
+        } catch (err) {
+          console.error(err);
+          document.getElementById('status').textContent = 'Ошибка загрузки сырых логов';
+        }
+        return;
+      }
+
       if (!showAllSessions && !sessionId) return;
 
       try {
@@ -390,10 +428,25 @@
 
     function renderLogs() {
       const contentEl = document.getElementById('content');
-      if (!showAllSessions && !sessionId) {
+      if ((currentTab === 'terminal' || currentTab === 'skills') && !showAllSessions && !sessionId) {
         contentEl.innerHTML = '<div class="empty">Укажите sessionId в URL или включите All для просмотра логов</div>';
         return;
       }
+
+      if (currentTab !== 'terminal' && currentTab !== 'skills') {
+        if (!allLogs || allLogs.length === 0) {
+          contentEl.innerHTML = '<div class="empty">Логи не найдены</div>';
+          return;
+        }
+        const html = allLogs.map(logStr => {
+          return `<div class="log-entry log-stdout"><pre class="log-entry-content">${escapeHtml(logStr)}</pre></div>`;
+        }).join('');
+        contentEl.innerHTML = html;
+        // Если хотим к последнему скроллить - тут последние вверху. Скроллим если было наверху.
+        contentEl.scrollTop = 0;
+        return;
+      }
+
       const logs = getFilteredLogs();
 
       if (logs.length === 0) {
@@ -591,44 +644,108 @@
     });
 
     // Переключение табов
-    document.querySelectorAll('.tab').forEach(tab => {
-      tab.onclick = () => {
-        const tabName = tab.dataset.tab;
-        if (tabName === currentTab) return;
+    function onTabClick(e) {
+      const tab = e.currentTarget;
+      const tabName = tab.dataset.tab;
+      if (tabName === currentTab) return;
 
-        // Переключаем активный таб
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        currentTab = tabName;
+      // Переключаем активный таб
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      currentTab = tabName;
 
-        // Обновляем заголовок
-        const headerTitle = document.getElementById('headerTitle');
-        if (tabName === 'skills') {
-          headerTitle.textContent = '✨ Логи Skills';
-        } else {
-          headerTitle.textContent = '📋 Лог команд терминала';
-        }
+      // Обновляем заголовок и UI шапки
+      const headerTitle = document.getElementById('headerTitle');
+      const showAllLabel = document.getElementById('showAllSessionsLabel');
+      const rawSelectContainer = document.getElementById('rawLogFileSelectContainer');
+      const rawSelect = document.getElementById('rawLogFileSelect');
 
-        // Показываем соответствующие фильтры
-        document.getElementById('terminalFilters').style.display = tabName === 'terminal' ? 'flex' : 'none';
-        document.getElementById('skillsFilters').style.display = tabName === 'skills' ? 'flex' : 'none';
+      showAllLabel.style.display = 'flex';
+      rawSelectContainer.style.display = 'none';
 
-        // Сбрасываем фильтр
-        currentFilter = 'all';
+      if (tabName === 'skills') {
+        headerTitle.textContent = '✨ Логи Skills';
+      } else if (tabName === 'terminal') {
+        headerTitle.textContent = '📋 Лог команд терминала';
+      } else {
+        // Raw Log
+        headerTitle.textContent = `📄 Лог: ${tabName}`;
+        showAllLabel.style.display = 'none';
+        rawSelectContainer.style.display = 'flex';
+
+        // Populate select box
+        const files = rawLogCategories[tabName] || [];
+        rawSelect.innerHTML = files.map(f => `<option value="${f}">${f}</option>`).join('');
+        currentRawLogFile = files.length > 0 ? files[0] : null;
+      }
+
+      // Показываем соответствующие фильтры
+      document.getElementById('terminalFilters').style.display = tabName === 'terminal' ? 'flex' : 'none';
+      document.getElementById('skillsFilters').style.display = tabName === 'skills' ? 'flex' : 'none';
+
+      // Сбрасываем фильтр
+      currentFilter = 'all';
+      if (tabName === 'terminal' || tabName === 'skills') {
         const activeFilters = tabName === 'terminal' ? '#terminalFilters .filter-btn' : '#skillsFilters .filter-btn';
         document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
         document.querySelector(activeFilters + '[data-type="all"]').classList.add('active');
+      }
 
-        // Перезагружаем логи
-        allLogs = [];
-        loadLogs();
-      };
+      // Перезагружаем логи
+      allLogs = [];
+      document.getElementById('content').innerHTML = '<div class="empty">Загрузка...</div>';
+      lastUpdate = 0;
+      loadLogs();
+    }
+
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', onTabClick);
     });
+
+    document.getElementById('rawLogFileSelect').addEventListener('change', function () {
+      currentRawLogFile = this.value;
+      allLogs = [];
+      lastUpdate = 0;
+      document.getElementById('content').innerHTML = '<div class="empty">Загрузка...</div>';
+      loadLogs();
+    });
+
+    async function fetchRawLogCategories() {
+      try {
+        const response = await fetch('/api/raw-logs');
+        rawLogCategories = await response.json();
+        const tabsContainer = document.querySelector('.tabs');
+
+        // Удаляем старые динамические табы перед перерисовкой
+        tabsContainer.querySelectorAll('.tab').forEach(t => {
+          if (t.dataset.tab !== 'terminal' && t.dataset.tab !== 'skills') {
+            t.remove();
+          }
+        });
+
+        const mainCats = ['ws', 'ssh', 'server', 'api'];
+        const additionalCats = Object.keys(rawLogCategories).filter(c => !mainCats.includes(c) && c !== 'terminal' && c !== 'skills');
+        const sortedCats = [...mainCats.filter(c => rawLogCategories[c]), ...additionalCats.sort()];
+
+        for (const cat of sortedCats) {
+          const btn = document.createElement('button');
+          btn.className = 'tab';
+          btn.dataset.tab = cat;
+          btn.textContent = `📄 ${cat}`;
+          btn.addEventListener('click', onTabClick);
+          tabsContainer.appendChild(btn);
+        }
+      } catch (e) {
+        console.error('Не удалось загрузить категории сырых логов:', e);
+      }
+    }
 
     // Фильтры по типу
     document.querySelectorAll('.filter-btn').forEach(btn => {
+      // Игнорируем кнопку очистки
+      if (btn.id === 'clearLogsBtn') return;
       btn.onclick = () => {
-        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.filter-btn:not(#clearLogsBtn)').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         currentFilter = btn.dataset.type;
         renderLogs();
@@ -636,10 +753,66 @@
       };
     });
 
+    // Обработка кнопки очистки логов
+    document.getElementById('clearLogsBtn').addEventListener('click', async () => {
+      let confirmMsg = '';
+      let endpoint = '';
+      
+      if (currentTab === 'terminal') {
+        confirmMsg = 'Вы уверены, что хотите очистить логи команд терминала?';
+        endpoint = '/api/logs/terminal';
+      } else if (currentTab === 'skills') {
+        confirmMsg = 'Вы уверены, что хотите очистить логи Skills?';
+        endpoint = '/api/logs/skills';
+      } else {
+        confirmMsg = `Вы уверены, что хотите очистить все текстовые логи категории "${currentTab}"?`;
+        endpoint = `/api/raw-logs/${currentTab}`;
+      }
+
+      if (!confirm(confirmMsg)) return;
+
+      try {
+        const res = await fetch(endpoint, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Ошибка очистки логов');
+        
+        // Сбросим текущие загруженные логи и обновим
+        allLogs = [];
+        lastUpdate = 0;
+        document.getElementById('content').innerHTML = '<div class="empty">Очищено</div>';
+        
+        // В случае сырых логов нужно перезагрузить категории чтобы обновить (или убрать) выпадающий список
+        if (currentTab !== 'terminal' && currentTab !== 'skills') {
+          // Если файл текущий удалился, сбрасываем его
+          currentRawLogFile = null;
+        }
+        
+        loadLogs();
+        if (currentTab !== 'terminal' && currentTab !== 'skills') {
+          fetchRawLogCategories().then(() => {
+             // восстанавливаем select файлов
+             const files = rawLogCategories[currentTab] || [];
+             const rawSelect = document.getElementById('rawLogFileSelect');
+             rawSelect.innerHTML = files.map(f => `<option value="${f}">${f}</option>`).join('');
+             currentRawLogFile = files.length > 0 ? files[0] : null;
+             loadLogs();
+          });
+        }
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+
     // Первый рендер (сообщение при отсутствии sessionId) и загрузка
-    renderLogs();
-    loadLogs();
-    const intervalId = setInterval(loadLogs, 2000);
+    fetchRawLogCategories().then(() => {
+      renderLogs();
+      loadLogs();
+      const intervalId = setInterval(loadLogs, 2000);
+
+      // Останавливаем при закрытии окна
+      window.addEventListener('beforeunload', () => {
+        clearInterval(intervalId);
+      });
+    });
 
     // Останавливаем при закрытии окна
     window.addEventListener('beforeunload', () => {
