@@ -1,0 +1,155 @@
+﻿{
+
+    "wpl2-db-carl": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://carl:1@192.168.1.22:5432/carlinkng"
+      ]
+    },    
+    "files-kosmos-panel": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "C:\\ERV\\projects-ex\\kosmos-panel\\"
+      ],
+      "env": {
+        "API_KEY": "value"
+      },
+      "cwd": "C:\\ERV\\projects-ex\\kosmos-panel\\"
+    },
+    "kosmos-db-vector": {
+      "command": "node",
+      "args": [
+        "C:\\ERV\\projects-ex\\pg-example-server\\build\\index.js",
+        "postgresql://carl:1@192.168.1.22:5432/kosmos_db"
+      ],
+      "env": {
+        "API_KEY": "value"
+      },
+      "cwd": "C:\\ERV\\projects-ex\\pg-example-server"
+    },
+    "g_obsidian-mcp": {
+      "command": "node",
+      "args": [
+        "C:\\ERV\\projects-ex\\obsidian-mcp\\build\\main.js",
+        "C:\\ERV\\sync_data\\erv-jbsidian-mcp"
+      ]
+    },
+    "g_erv-obsidian-mcp": {
+      "command": "node",
+      "args": [
+        "C:\\ERV\\projects-ex\\erv-obsidian-mcp\\build\\main.js",
+        "C:\\ERV\\projects-ex\\obsidian-project-vault"
+      ]
+    },
+
+    "wpl2-db": {
+      "command": "node",
+      "args": [
+        "C:\\ERV\\projects-ex\\pg-example-server\\build\\index.js",
+        "postgresql://carl:1@192.168.1.22:5432/carlinkng"
+      ],
+      "env": {
+        "API_KEY": "value"
+      }
+    },
+    "g_files-projects-ex": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "C:\\ERV\\projects-ex\\"
+      ],
+      "env": {
+        "API_KEY": "value"
+      },
+      "cwd": "C:\\ERV\\projects-ex\\"
+    },
+
+  "mcpServers": {
+    "g_files-projects-ex": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "C:\\ERV\\projects-ex\\"
+      ],
+      "env": {
+        "API_KEY": "value"
+      },
+      "cwd": "C:\\ERV\\projects-ex\\"
+    },
+    "g_files-projects-ex-kosmos-panel": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "C:\\ERV\\projects-ex\\kosmos-panel\\"
+      ],
+      "env": {
+        "API_KEY": "value"
+      },
+      "cwd": "C:\\ERV\\projects-ex\\kosmos-panel\\"
+    },
+    "wpl2-db": {
+      "command": "node",
+      "args": [
+        "C:\\ERV\\projects-ex\\pg-example-server\\build\\index.js",
+        "postgresql://carl:1@192.168.1.22:5432/carlinkng"
+      ],
+      "env": {
+        "API_KEY": "value"
+      }
+    },
+    "g_pg-kosmos-db-vector": {
+      "command": "node",
+      "args": [
+        "C:\\ERV\\projects-ex\\pg-example-server\\build\\index.js",
+        "postgresql://carl:1@192.168.1.22:5432/kosmos_db"
+      ],
+      "env": {
+        "API_KEY": "value"
+      },
+      "cwd": "C:\\ERV\\projects-ex\\pg-example-server"
+    },
+    "g_obsidian-mcp": {
+      "command": "node",
+      "args": [
+        "C:\\ERV\\projects-ex\\obsidian-mcp\\build\\main.js",
+        "C:\\ERV\\sync_data\\erv-jbsidian-mcp"
+      ]
+    },
+    "g_erv-obsidian-mcp": {
+      "command": "node",
+      "args": [
+        "C:\\ERV\\projects-ex\\erv-obsidian-mcp\\build\\main.js",
+        "C:\\ERV\\projects-ex\\obsidian-project-vault"
+      ]
+    },
+    "g_obsidian-mcp-server-2": {
+      "command": "node",
+      "args": [
+        "C:\\ERV\\projects-ex\\obsidian-mcp-server\\dist\\index-new.js"
+      ],
+      "cwd": "C:\\ERV\\projects-ex\\obsidian-mcp-server",
+      "env": {
+        "OBSIDIAN_API_KEY": "d37c126e2ba5e794a000d3e44a5e6b91dca181296391f9aa4c169a9aeb571950",
+        "OBSIDIAN_VERIFY_SSL": "false",
+        "VERIFY_SSL": "false",
+        "OBSIDIAN_PROTOCOL": "http",
+        "OBSIDIAN_HOST": "192.168.1.254",
+        "OBSIDIAN_PORT": "27123",
+        "NODE_ENV": "development",
+        "REQUEST_TIMEOUT": "5000",
+        "MAX_CONTENT_LENGTH": "52428800",
+        "MAX_BODY_LENGTH": "52428800",
+        "RATE_LIMIT_WINDOW_MS": "900000",
+        "RATE_LIMIT_MAX_REQUESTS": "200",
+        "TOOL_TIMEOUT_MS": "60000"
+      }
+    }
+  }
+}
