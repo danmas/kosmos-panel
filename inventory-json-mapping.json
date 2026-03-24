@@ -5,7 +5,7 @@
         {
             "key": "credentials",
             "label": "Credentials",
-            "displayKey": null,
+            "displayKey": "id",
             "children": []
         },
         {
