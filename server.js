@@ -780,6 +780,14 @@ app.delete('/api/ws-terminal/command/:commandId', (req, res) => {
 
 // ========== End WS Terminal REST Bridge API ==========
 
+// Dashboard static assets (built React Flow app)
+app.use('/dashboard', express.static(path.join(process.cwd(), 'web', 'dashboard', 'dist')));
+
+// Flow Dashboard page route
+app.get('/flow', (req, res) => {
+  res.sendFile(path.join(process.cwd(), 'web', 'dashboard', 'dist', 'index.html'));
+});
+
 // Главная страница — без кэша, чтобы всегда подхватывать актуальную ссылку на Настройки
 app.get('/', (req, res, next) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
