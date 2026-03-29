@@ -26,8 +26,9 @@ const nodeTypes = {
   serviceNode: ServiceNode,
 };
 
-const GRID_SPACING_X = 350;
+const GRID_SPACING_X = 650;
 const GROUP_PADDING = 20;
+const SERVICE_SPACING_X = 280;
 const SERVICE_SPACING_Y = 70;
 
 export function Dashboard() {
@@ -45,12 +46,12 @@ export function Dashboard() {
     const newNodes: Node[] = [];
     const newEdges: Edge[] = [];
 
-    const itemsPerRow = 4;
+    const itemsPerRow = 2;
     const paddingBetweenRows = 50;
 
     // Calculate individual group heights
     const groupHeights = data.servers.map(server => 
-      groupsCollapsed ? 80 : Math.max(120, server.services.length * SERVICE_SPACING_Y + GROUP_PADDING * 2 + 30)
+      groupsCollapsed ? 80 : Math.max(120, Math.ceil(server.services.length / 2) * SERVICE_SPACING_Y + GROUP_PADDING * 2 + 30)
     );
 
     // Find the maximum height for each row
@@ -73,7 +74,7 @@ export function Dashboard() {
         groupY += rowHeights[i] + paddingBetweenRows;
       }
 
-      const groupWidth = 300;
+      const groupWidth = 600;
       const groupHeight = groupHeights[serverIndex];
 
       // Add Server Group Node
@@ -93,13 +94,15 @@ export function Dashboard() {
         // Add Service Nodes inside the group
         server.services.forEach((service, serviceIndex) => {
           const serviceId = `${server.id}-${service.id}`;
+          const serviceCol = serviceIndex % 2;
+          const serviceRow = Math.floor(serviceIndex / 2);
           
           newNodes.push({
             id: serviceId,
             type: 'serviceNode',
             position: { 
-              x: GROUP_PADDING, 
-              y: GROUP_PADDING + 40 + serviceIndex * SERVICE_SPACING_Y 
+              x: GROUP_PADDING + serviceCol * SERVICE_SPACING_X, 
+              y: GROUP_PADDING + 40 + serviceRow * SERVICE_SPACING_Y 
             },
             data: { service },
             parentId: server.id,
