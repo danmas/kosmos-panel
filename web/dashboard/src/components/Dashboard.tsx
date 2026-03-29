@@ -26,10 +26,9 @@ const nodeTypes = {
   serviceNode: ServiceNode,
 };
 
-const GRID_SPACING_X = 500;
-const GRID_SPACING_Y = 400;
-const GROUP_PADDING = 40;
-const SERVICE_SPACING_Y = 120;
+const GRID_SPACING_X = 350;
+const GROUP_PADDING = 20;
+const SERVICE_SPACING_Y = 70;
 
 export function Dashboard() {
   const { data, loading, error, refetch, lastUpdated } = useServicesPolling(7);
@@ -46,20 +45,36 @@ export function Dashboard() {
     const newNodes: Node[] = [];
     const newEdges: Edge[] = [];
 
-    let currentX = 0;
-    let currentY = 0;
-    let maxRowHeight = 0;
-    const itemsPerRow = 3;
+    const itemsPerRow = 4;
+    const paddingBetweenRows = 50;
+
+    // Calculate individual group heights
+    const groupHeights = data.servers.map(server => 
+      groupsCollapsed ? 80 : Math.max(120, server.services.length * SERVICE_SPACING_Y + GROUP_PADDING * 2 + 30)
+    );
+
+    // Find the maximum height for each row
+    const rowHeights: number[] = [];
+    data.servers.forEach((_, index) => {
+      const row = Math.floor(index / itemsPerRow);
+      const h = groupHeights[index];
+      if (rowHeights[row] === undefined || h > rowHeights[row]) {
+        rowHeights[row] = h;
+      }
+    });
 
     data.servers.forEach((server, serverIndex) => {
       const col = serverIndex % itemsPerRow;
       const row = Math.floor(serverIndex / itemsPerRow);
 
       const groupX = col * GRID_SPACING_X;
-      const groupY = row * GRID_SPACING_Y;
+      let groupY = 0;
+      for (let i = 0; i < row; i++) {
+        groupY += rowHeights[i] + paddingBetweenRows;
+      }
 
-      const groupWidth = 350;
-      const groupHeight = Math.max(200, server.services.length * SERVICE_SPACING_Y + GROUP_PADDING * 2);
+      const groupWidth = 300;
+      const groupHeight = groupHeights[serverIndex];
 
       // Add Server Group Node
       newNodes.push({
@@ -69,7 +84,7 @@ export function Dashboard() {
         data: { server },
         style: {
           width: groupWidth,
-          height: groupsCollapsed ? 100 : groupHeight,
+          height: groupsCollapsed ? 80 : groupHeight,
         },
         className: 'light',
       });

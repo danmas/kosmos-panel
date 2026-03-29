@@ -23,7 +23,7 @@ export const ServiceNode = memo(({ data, selected }: NodeProps) => {
   return (
     <div
       className={cn(
-        "px-4 py-3 shadow-lg rounded-lg border-2 bg-slate-800 transition-all min-w-[200px] cursor-pointer",
+        "px-4 py-3 shadow-lg rounded-lg border-2 bg-slate-800 transition-all w-[260px] cursor-pointer",
         statusColors[status],
         selected && "ring-2 ring-white/50"
       )}
