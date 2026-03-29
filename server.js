@@ -69,17 +69,22 @@ app.get('/api/servers', (req, res) => {
         color: s.color,
         ssh: s.ssh,
         services: Object.entries(s.services).map(([id, sv]) => {
-          // Находим оригинальный сервис из inventory для получения description
+          // Находим оригинальный сервис из inventory для получения доп. полей
           const originalService = server.services.find(svc => svc.id === id);
           return {
             id,
             ...sv,
-            description: originalService?.description || undefined
+            description: originalService?.description || undefined,
+            dependencies: originalService?.dependencies || []
           };
         }),
       };
     });
-  res.json({ ts: snap.ts, servers: list });
+  res.json({ 
+    ts: snap.ts, 
+    servers: list,
+    poll: inventory.poll
+  });
 });
 
 app.get('/api/service-log', (req, res) => {
