@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect, MouseEvent } from 'react';
 import {
   ReactFlow,
   MiniMap,
-  Controls,
   Background,
   useNodesState,
   useEdgesState,
@@ -19,7 +18,7 @@ import { ServerGroupNode } from './nodes/ServerGroupNode';
 import { ServiceNode } from './nodes/ServiceNode';
 import { Sidebar } from './Sidebar';
 import { Service, Server } from '../types';
-import { RefreshCw, Search, Maximize2, Minimize2, Activity } from 'lucide-react';
+import { RefreshCw, Search, Maximize2, Minimize2, Activity, LayoutGrid, Columns } from 'lucide-react';
 
 const nodeTypes = {
   serverGroup: ServerGroupNode,
@@ -38,6 +37,8 @@ export function Dashboard() {
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [groupsCollapsed, setGroupsCollapsed] = useState(false);
+  const [serverCols, setServerCols] = useState(3);
+  const [serviceCols, setServiceCols] = useState(2);
 
   // Transform backend data into React Flow nodes and edges
   useEffect(() => {
@@ -46,12 +47,12 @@ export function Dashboard() {
     const newNodes: Node[] = [];
     const newEdges: Edge[] = [];
 
-    const itemsPerRow = 2;
+    const itemsPerRow = serverCols;
     const paddingBetweenRows = 50;
 
     // Calculate individual group heights
     const groupHeights = data.servers.map(server => 
-      groupsCollapsed ? 80 : Math.max(120, Math.ceil(server.services.length / 2) * SERVICE_SPACING_Y + GROUP_PADDING * 2 + 30)
+      groupsCollapsed ? 80 : Math.max(120, Math.ceil(server.services.length / serviceCols) * SERVICE_SPACING_Y + GROUP_PADDING * 2 + 30)
     );
 
     // Find the maximum height for each row
@@ -68,13 +69,15 @@ export function Dashboard() {
       const col = serverIndex % itemsPerRow;
       const row = Math.floor(serverIndex / itemsPerRow);
 
-      const groupX = col * GRID_SPACING_X;
-      let groupY = 0;
+      const groupWidth = serviceCols === 1 ? 300 : serviceCols * 280 + 40;
+      const groupSpacingX = groupWidth + 60; // 60px horizontal gap between servers
+      const groupX = col * groupSpacingX;
+      
+      let groupY = 120;
       for (let i = 0; i < row; i++) {
         groupY += rowHeights[i] + paddingBetweenRows;
       }
 
-      const groupWidth = 600;
       const groupHeight = groupHeights[serverIndex];
 
       // Add Server Group Node
@@ -94,8 +97,8 @@ export function Dashboard() {
         // Add Service Nodes inside the group
         server.services.forEach((service, serviceIndex) => {
           const serviceId = `${server.id}-${service.id}`;
-          const serviceCol = serviceIndex % 2;
-          const serviceRow = Math.floor(serviceIndex / 2);
+          const serviceCol = serviceIndex % serviceCols;
+          const serviceRow = Math.floor(serviceIndex / serviceCols);
           
           newNodes.push({
             id: serviceId,
@@ -160,26 +163,51 @@ export function Dashboard() {
       return node;
     });
 
+    // We need to determine if we should reset positions (if cols changed)
+    // but the easiest way is to let flow handle dragging in state, and only
+    // re-apply grid positions when recalculating Layout. Actually, since we
+    // poll every 7s, we MUST preserve positions unless the layout specifically changed.
+    // Instead of complex logic, if the calculated grid layout x/y differs from what we
+    // calculated previously for this node, we should probably update it. 
+    // For now, let's just always update the positions to enforce the grid strictly.
+    // To allow dragging but snap back on grid change, we could store custom layout keys.
+    // BUT we can simply enforce the calculated positions and disable manual dragging
+    // if we want a strict grid layout, or use a ref to track if cols changed.
+    
     setNodes((currentNodes) => {
       return filteredNodes.map(newNode => {
         const existingNode = currentNodes.find(n => n.id === newNode.id);
+        
         if (existingNode) {
+          // If the position matches what we calculate? No, if user dragged, they differ.
+          // Let's check if the layout properties changed by attaching them to data
+          const layoutKey = `${serverCols}-${serviceCols}-${groupsCollapsed}`;
+          const existingLayoutKey = existingNode.data?.layoutKey;
+
+          const isLayoutChanged = layoutKey !== existingLayoutKey;
+
           return {
             ...newNode,
-            position: existingNode.position,
+            data: { ...newNode.data, layoutKey },
+            position: isLayoutChanged ? newNode.position : existingNode.position,
             selected: existingNode.selected,
             dragging: existingNode.dragging,
             measured: existingNode.measured,
-            width: existingNode.width,
-            height: existingNode.height,
-            style: {
-              ...newNode.style,
-              ...(existingNode.style?.width ? { width: existingNode.style.width } : {}),
-              ...(existingNode.style?.height && !groupsCollapsed ? { height: existingNode.style.height } : {}),
-            }
+            width: isLayoutChanged ? newNode.width : existingNode.width,
+            height: isLayoutChanged ? newNode.height : existingNode.height,
+            style: isLayoutChanged 
+              ? newNode.style 
+              : {
+                  ...newNode.style,
+                  ...(existingNode.style?.width ? { width: existingNode.style.width } : {}),
+                  ...(existingNode.style?.height && !groupsCollapsed ? { height: existingNode.style.height } : {}),
+                }
           };
         }
-        return newNode;
+        return {
+          ...newNode,
+          data: { ...newNode.data, layoutKey: `${serverCols}-${serviceCols}-${groupsCollapsed}` }
+        };
       });
     });
 
@@ -195,7 +223,7 @@ export function Dashboard() {
         return newEdge;
       });
     });
-  }, [data, groupsCollapsed, searchQuery, setNodes, setEdges]);
+  }, [data, groupsCollapsed, searchQuery, serverCols, serviceCols, setNodes, setEdges]);
 
   const onNodeClick = useCallback((event: MouseEvent, node: Node) => {
     if (node.type === 'serviceNode') {
@@ -235,7 +263,6 @@ export function Dashboard() {
           maxZoom={1.5}
         >
           <Background color="#334155" gap={16} size={1} />
-          <Controls className="bg-slate-900 border-slate-800 fill-slate-400" />
           <MiniMap 
             nodeColor={(n) => {
               if (n.type === 'serverGroup') return '#1e293b';
@@ -248,14 +275,20 @@ export function Dashboard() {
             className="bg-slate-900 border-slate-800"
           />
           
-          <Panel position="top-left" className="bg-slate-900/80 backdrop-blur-md p-4 rounded-xl border border-slate-800 shadow-2xl flex items-center gap-4">
+          <Panel 
+            position="top-left" 
+            className="bg-slate-900/80 backdrop-blur-md p-4 rounded-xl border border-slate-800 shadow-2xl flex items-center gap-4 z-[100] cursor-default pointer-events-auto"
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerMove={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center gap-2 mr-4">
-              <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center text-blue-400">
-                <Activity size={20} />
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500/20 to-emerald-500/20 rounded-xl flex items-center justify-center border border-blue-500/30 overflow-hidden shadow-inner group transition-all hover:scale-105">
+                <div className="absolute inset-0 bg-[url('/kosmos_flow_icon.png')] bg-cover bg-center opacity-80 group-hover:opacity-100 transition-opacity" />
+                <Activity size={22} className="relative z-10 text-emerald-400 group-hover:animate-pulse" />
               </div>
               <div>
                 <h1 className="text-lg font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
-                  KOSMOS-PANEL v2
+                  KOSMOS-FLOW
                 </h1>
                 <p className="text-xs text-slate-500">
                   Last updated: {lastUpdated?.toLocaleTimeString()}
@@ -272,6 +305,40 @@ export function Dashboard() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all w-64 text-slate-200 placeholder:text-slate-600"
               />
+            </div>
+
+            <div className="h-8 w-px bg-slate-800 mx-2" />
+
+            <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] text-slate-500 uppercase font-bold px-1">Servers</span>
+                <div className="flex bg-slate-950 rounded-lg p-0.5 border border-slate-800">
+                  {[1, 2, 3, 4, 5].map(n => (
+                    <button 
+                      key={n}
+                      onClick={() => setServerCols(n)}
+                      className={`w-7 h-7 flex items-center justify-center rounded-md text-xs transition-all ${serverCols === n ? 'bg-blue-500 text-white' : 'text-slate-500 hover:text-slate-200'}`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] text-slate-500 uppercase font-bold px-1">Services</span>
+                <div className="flex bg-slate-950 rounded-lg p-0.5 border border-slate-800">
+                  {[1, 2, 3].map(n => (
+                    <button 
+                      key={n}
+                      onClick={() => setServiceCols(n)}
+                      className={`w-7 h-7 flex items-center justify-center rounded-md text-xs transition-all ${serviceCols === n ? 'bg-blue-500 text-white' : 'text-slate-500 hover:text-slate-200'}`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="h-8 w-px bg-slate-800 mx-2" />
