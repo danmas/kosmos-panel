@@ -248,109 +248,20 @@ export function Dashboard() {
   }
 
   return (
-    <div className="flex flex-col h-screen w-full bg-slate-950 text-slate-200 overflow-hidden relative">
-      
-      {/* Top Header Bar - Completely separate from React Flow */}
-      <div className="flex-none bg-slate-900 border-b border-slate-800 p-3 shrink-0 shadow-md relative z-20">
-        <div className="flex items-center justify-start gap-4 max-w-[1600px] mx-auto">
-          
-          <div className="flex items-center gap-2 mr-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500/20 to-emerald-500/20 rounded-xl flex items-center justify-center border border-blue-500/30 overflow-hidden shadow-inner group transition-all hover:scale-105">
-              <div className="absolute inset-0 bg-[url('/kosmos_flow_icon.png')] bg-cover bg-center opacity-80 group-hover:opacity-100 transition-opacity" />
-              <Activity size={22} className="relative z-10 text-emerald-400 group-hover:animate-pulse" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent leading-tight mt-0.5">
-                KOSMOS-FLOW
-              </h1>
-              <p className="text-[10px] text-slate-500 leading-none">
-                Updated: {lastUpdated?.toLocaleTimeString()}
-              </p>
-            </div>
-          </div>
-
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-            <input 
-              type="text" 
-              placeholder="Search services..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all w-64 text-slate-200 placeholder:text-slate-600"
-            />
-          </div>
-
-          <div className="h-8 w-px bg-slate-800 mx-2" />
-
-          <div className="flex items-center gap-3">
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[9px] text-slate-500 uppercase font-bold px-1">Servers</span>
-              <div className="flex bg-slate-950 rounded-lg p-0.5 border border-slate-800">
-                {[1, 2, 3, 4, 5].map(n => (
-                  <button 
-                    key={n}
-                    onClick={() => setServerCols(n)}
-                    className={`w-7 h-6 flex items-center justify-center rounded-md text-xs transition-all !cursor-pointer select-none ${serverCols === n ? 'bg-blue-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-200 hover:bg-slate-800'}`}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[9px] text-slate-500 uppercase font-bold px-1">Services</span>
-              <div className="flex bg-slate-950 rounded-lg p-0.5 border border-slate-800">
-                {[1, 2, 3].map(n => (
-                  <button 
-                    key={n}
-                    onClick={() => setServiceCols(n)}
-                    className={`w-7 h-6 flex items-center justify-center rounded-md text-xs transition-all !cursor-pointer select-none ${serviceCols === n ? 'bg-blue-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-200 hover:bg-slate-800'}`}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="h-8 w-px bg-slate-800 mx-2" />
-
-          <button 
-            onClick={() => setGroupsCollapsed(!groupsCollapsed)}
-            className="p-2 px-3 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium !cursor-pointer select-none h-10 mt-3"
-            title={groupsCollapsed ? "Expand Groups" : "Collapse Groups"}
-          >
-            {groupsCollapsed ? <Maximize2 size={16} /> : <Minimize2 size={16} />}
-            {groupsCollapsed ? "Expand" : "Collapse"}
-          </button>
-
-          <button 
-            onClick={() => refetch()}
-            className="p-2 px-3 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium !cursor-pointer select-none h-10 mt-3"
-          >
-            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-            Refresh
-          </button>
-          
-        </div>
-      </div>
-
-      {/* Main Flow Canvas */}
-      <div className="flex-1 w-full relative">
-        <ReactFlowProvider>
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onNodeClick={onNodeClick}
-            nodeTypes={nodeTypes}
-            fitView
-            className="bg-slate-950"
-            minZoom={0.1}
-            maxZoom={1.5}
-          >
+    <div className="h-screen w-full bg-slate-950 text-slate-200 overflow-hidden relative">
+      <ReactFlowProvider>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onNodeClick={onNodeClick}
+          nodeTypes={nodeTypes}
+          fitView
+          className="bg-slate-950"
+          minZoom={0.1}
+          maxZoom={1.5}
+        >
           <Background color="#334155" gap={16} size={1} />
           <MiniMap 
             nodeColor={(n) => {
@@ -363,9 +274,89 @@ export function Dashboard() {
             maskColor="rgba(15, 23, 42, 0.8)"
             className="bg-slate-900 border-slate-800"
           />
-          </ReactFlow>
-        </ReactFlowProvider>
-      </div>
+
+          <Panel position="top-left" className="bg-slate-900/80 backdrop-blur-md p-4 rounded-xl border border-slate-800 shadow-2xl flex items-center gap-4 select-none">
+            <div className="flex items-center gap-2 mr-2">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500/20 to-emerald-500/20 rounded-xl flex items-center justify-center border border-blue-500/30 overflow-hidden shadow-inner group transition-all hover:scale-105">
+                <div className="absolute inset-0 bg-[url('/kosmos_flow_icon.png')] bg-cover bg-center opacity-80 group-hover:opacity-100 transition-opacity" />
+                <Activity size={22} className="relative z-10 text-emerald-400 group-hover:animate-pulse" />
+              </div>
+              <div>
+                <h1 className="text-lg font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent leading-tight mt-0.5">
+                  KOSMOS-FLOW
+                </h1>
+                <p className="text-[10px] text-slate-500 leading-none">
+                  Updated: {lastUpdated?.toLocaleTimeString()}
+                </p>
+              </div>
+            </div>
+
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+              <input 
+                type="text" 
+                placeholder="Search services..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all w-64 text-slate-200 placeholder:text-slate-600"
+              />
+            </div>
+
+            <div className="h-8 w-px bg-slate-800 mx-2" />
+
+            <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[9px] text-slate-500 uppercase font-bold px-1">Servers</span>
+                <div className="flex bg-slate-950 rounded-lg p-0.5 border border-slate-800">
+                  {[1, 2, 3, 4, 5].map(n => (
+                    <button 
+                      key={n}
+                      onClick={() => setServerCols(n)}
+                      className={`w-7 h-6 flex items-center justify-center rounded-md text-xs transition-all cursor-pointer ${serverCols === n ? 'bg-blue-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-200 hover:bg-slate-800'}`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[9px] text-slate-500 uppercase font-bold px-1">Services</span>
+                <div className="flex bg-slate-950 rounded-lg p-0.5 border border-slate-800">
+                  {[1, 2, 3].map(n => (
+                    <button 
+                      key={n}
+                      onClick={() => setServiceCols(n)}
+                      className={`w-7 h-6 flex items-center justify-center rounded-md text-xs transition-all cursor-pointer ${serviceCols === n ? 'bg-blue-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-200 hover:bg-slate-800'}`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="h-8 w-px bg-slate-800 mx-2" />
+
+            <button 
+              onClick={() => setGroupsCollapsed(!groupsCollapsed)}
+              className="p-2 px-3 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium cursor-pointer"
+              title={groupsCollapsed ? "Expand Groups" : "Collapse Groups"}
+            >
+              {groupsCollapsed ? <Maximize2 size={16} /> : <Minimize2 size={16} />}
+              {groupsCollapsed ? "Expand" : "Collapse"}
+            </button>
+
+            <button 
+              onClick={() => refetch()}
+              className="p-2 px-3 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium cursor-pointer"
+            >
+              <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+              Refresh
+            </button>
+          </Panel>
+        </ReactFlow>
+      </ReactFlowProvider>
 
       {selectedService && (
         <Sidebar 
