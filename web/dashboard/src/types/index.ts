@@ -26,6 +26,8 @@ export interface Service {
   name: string;
   description: string;
   url?: string;
+  ok?: boolean;
+  detail?: string;
   healthEndpoint?: string;
   statusEndpoint?: string;
   dependencies: Dependency[];
@@ -37,6 +39,7 @@ export interface Server {
   id: string;
   name: string;
   env: 'prod' | 'test' | string;
+  color?: string;
   ssh?: { host: string; port: number };
   services: Service[];
 }

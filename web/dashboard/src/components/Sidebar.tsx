@@ -9,7 +9,8 @@ interface SidebarProps {
 export function Sidebar({ service, onClose }: SidebarProps) {
   if (!service) return null;
 
-  const status = service.status?.status || 'degraded';
+  const status = service.status?.status || (service.ok !== undefined ? (service.ok ? 'healthy' : 'error') : 'degraded');
+  const detail = service.status?.detail || service.detail;
   const statusColors = {
     healthy: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
     degraded: 'text-amber-400 bg-amber-400/10 border-amber-400/20',
@@ -52,8 +53,8 @@ export function Sidebar({ service, onClose }: SidebarProps) {
                 {status.toUpperCase()}
               </span>
             </div>
-            {service.status?.detail && (
-              <p className="text-sm text-slate-400 mt-2">{service.status.detail}</p>
+            {detail && (
+              <p className="text-sm text-slate-400 mt-2">{detail}</p>
             )}
           </div>
         </section>

@@ -265,8 +265,15 @@ export function Dashboard() {
           <Background color="#334155" gap={16} size={1} />
           <MiniMap 
             nodeColor={(n) => {
-              if (n.type === 'serverGroup') return '#1e293b';
-              const status = (n.data?.service as Service)?.status?.status;
+              if (n.type === 'serverGroup') {
+                const color = (n.data?.server as Server)?.color;
+                if (color === 'green') return '#10b981';
+                if (color === 'yellow') return '#f59e0b';
+                if (color === 'red') return '#f43f5e';
+                return '#1e293b';
+              }
+              const service = n.data?.service as Service;
+              const status = service?.status?.status || (service?.ok ? 'healthy' : 'error');
               if (status === 'error') return '#f43f5e';
               if (status === 'degraded') return '#f59e0b';
               return '#10b981';

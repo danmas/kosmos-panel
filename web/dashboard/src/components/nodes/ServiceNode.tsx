@@ -1,12 +1,19 @@
 import { memo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
-import { Service } from '../../types';
+import { Service, ServiceStatus } from '../../types';
 import { CheckCircle2, AlertTriangle, XCircle, Activity } from 'lucide-react';
 import { cn } from './ServerGroupNode';
 
 export const ServiceNode = memo(({ data, selected }: NodeProps) => {
   const service = data.service as Service;
-  const status = service.status?.status || 'degraded';
+  
+  // Use status.status if provided, otherwise map ok (boolean) to healthy/error
+  let status: ServiceStatus = 'degraded';
+  if (service.status?.status) {
+    status = service.status.status;
+  } else if (service.ok !== undefined) {
+    status = service.ok ? 'healthy' : 'error';
+  }
 
   const statusColors = {
     healthy: 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400',
