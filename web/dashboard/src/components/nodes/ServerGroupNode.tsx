@@ -1,7 +1,7 @@
 import { memo } from 'react';
-import { NodeProps, NodeResizer } from '@xyflow/react';
+import { NodeProps, NodeResizer, Node } from '@xyflow/react';
 import { Server } from '../../types';
-import { Zap } from 'lucide-react';
+import { Zap, Maximize2, Minimize2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -9,10 +9,17 @@ export function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
 }
 
-export const ServerGroupNode = memo(({ data, selected }: NodeProps) => {
-  const server = data.server as Server;
+interface ServerGroupData extends Record<string, unknown> {
+  server: Server;
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
+}
+
+export const ServerGroupNode = memo(({ data, selected }: NodeProps<Node<ServerGroupData>>) => {
+  const server = data.server;
   const isProd = server.env === 'prod';
   const statusColor = server.color || 'gray';
+  const isCollapsed = data.isCollapsed;
 
   const borderColorMap = {
     green: 'border-emerald-500/50',
@@ -56,7 +63,16 @@ export const ServerGroupNode = memo(({ data, selected }: NodeProps) => {
               <span className="text-xs text-slate-400 uppercase tracking-wider font-mono">{server.env}</span>
             </div>
           </div>
-          <div className={cn("w-2.5 h-2.5 rounded-full", dotColorMap[statusColor as keyof typeof dotColorMap] || dotColorMap.gray)} />
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={(e) => { e.stopPropagation(); data.onToggleCollapse(); }}
+              className="p-1 hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-slate-200 cursor-pointer"
+              title={isCollapsed ? "Развернуть" : "Свернуть"}
+            >
+              {isCollapsed ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
+            </button>
+            <div className={cn("w-2.5 h-2.5 rounded-full", dotColorMap[statusColor as keyof typeof dotColorMap] || dotColorMap.gray)} />
+          </div>
         </div>
         <div className="flex-1" />
       </div>

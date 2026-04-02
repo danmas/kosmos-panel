@@ -37,8 +37,21 @@ export function Dashboard() {
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [groupsCollapsed, setGroupsCollapsed] = useState(false);
+  const [collapsedServerIds, setCollapsedServerIds] = useState<Set<string>>(new Set());
   const [serverCols, setServerCols] = useState(3);
   const [serviceCols, setServiceCols] = useState(2);
+
+  const toggleServerCollapse = useCallback((serverId: string) => {
+    setCollapsedServerIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(serverId)) {
+        next.delete(serverId);
+      } else {
+        next.add(serverId);
+      }
+      return next;
+    });
+  }, []);
 
   // Transform backend data into React Flow nodes and edges
   useEffect(() => {
@@ -51,9 +64,10 @@ export function Dashboard() {
     const paddingBetweenRows = 50;
 
     // Calculate individual group heights
-    const groupHeights = data.servers.map(server => 
-      groupsCollapsed ? 80 : Math.max(120, Math.ceil(server.services.length / serviceCols) * SERVICE_SPACING_Y + GROUP_PADDING * 2 + 30)
-    );
+    const groupHeights = data.servers.map(server => {
+      const isCollapsed = groupsCollapsed || collapsedServerIds.has(server.id);
+      return isCollapsed ? 80 : Math.max(120, Math.ceil(server.services.length / serviceCols) * SERVICE_SPACING_Y + GROUP_PADDING * 2 + 30);
+    });
 
     // Find the maximum height for each row
     const rowHeights: number[] = [];
@@ -79,21 +93,26 @@ export function Dashboard() {
       }
 
       const groupHeight = groupHeights[serverIndex];
+      const isCollapsed = groupsCollapsed || collapsedServerIds.has(server.id);
 
       // Add Server Group Node
       newNodes.push({
         id: server.id,
         type: 'serverGroup',
         position: { x: groupX, y: groupY },
-        data: { server },
+        data: { 
+          server, 
+          isCollapsed,
+          onToggleCollapse: () => toggleServerCollapse(server.id)
+        },
         style: {
           width: groupWidth,
-          height: groupsCollapsed ? 80 : groupHeight,
+          height: isCollapsed ? 80 : groupHeight,
         },
         className: 'light',
       });
 
-      if (!groupsCollapsed) {
+      if (!isCollapsed) {
         // Add Service Nodes inside the group
         server.services.forEach((service, serviceIndex) => {
           const serviceId = `${server.id}-${service.id}`;
@@ -181,10 +200,12 @@ export function Dashboard() {
         if (existingNode) {
           // If the position matches what we calculate? No, if user dragged, they differ.
           // Let's check if the layout properties changed by attaching them to data
-          const layoutKey = `${serverCols}-${serviceCols}-${groupsCollapsed}`;
+          const layoutKey = `${serverCols}-${serviceCols}-${groupsCollapsed}-${Array.from(collapsedServerIds).join(',')}`;
           const existingLayoutKey = existingNode.data?.layoutKey;
 
           const isLayoutChanged = layoutKey !== existingLayoutKey;
+
+          const isNodeCollapsed = groupsCollapsed || (newNode.type === 'serverGroup' && collapsedServerIds.has(newNode.id)) || (newNode.parentId && collapsedServerIds.has(newNode.parentId));
 
           return {
             ...newNode,
@@ -200,13 +221,13 @@ export function Dashboard() {
               : {
                   ...newNode.style,
                   ...(existingNode.style?.width ? { width: existingNode.style.width } : {}),
-                  ...(existingNode.style?.height && !groupsCollapsed ? { height: existingNode.style.height } : {}),
+                  ...(existingNode.style?.height && !isNodeCollapsed ? { height: existingNode.style.height } : {}),
                 }
           };
         }
         return {
           ...newNode,
-          data: { ...newNode.data, layoutKey: `${serverCols}-${serviceCols}-${groupsCollapsed}` }
+          data: { ...newNode.data, layoutKey: `${serverCols}-${serviceCols}-${groupsCollapsed}-${Array.from(collapsedServerIds).join(',')}` }
         };
       });
     });
@@ -223,7 +244,7 @@ export function Dashboard() {
         return newEdge;
       });
     });
-  }, [data, groupsCollapsed, searchQuery, serverCols, serviceCols, setNodes, setEdges]);
+  }, [data, groupsCollapsed, collapsedServerIds, searchQuery, serverCols, serviceCols, setNodes, setEdges, toggleServerCollapse]);
 
   const onNodeClick = useCallback((event: MouseEvent, node: Node) => {
     if (node.type === 'serviceNode') {
