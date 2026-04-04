@@ -201,6 +201,16 @@ term.attachCustomKeyEventHandler((arg) => {
                     }
                 }
 
+                // Skill command check: skill: <name> <prompt>
+                const skillMatch = commandPart.match(/^skill\s*:\s*(\S+)(.*)$/i);
+                if (skillMatch) {
+                    const skillName = skillMatch[1].trim();
+                    const skillPrompt = (skillMatch[2] || '').trim();
+                    clearTerminalLine();
+                    launchSkillFromTerminal(skillName, skillPrompt);
+                    return false;
+                }
+
                 // AI command check
                 const prefixText = aiCommandPrefix.slice(0, -1);
                 const prefixSep = aiCommandPrefix.slice(-1);
@@ -945,6 +955,37 @@ function addSkillMessage(type, content) {
         body.scrollTop = body.scrollHeight;
     }
     skillDialogState.messages.push({ type, content, timestamp: new Date().toISOString() });
+}
+
+/**
+ * Launch skill from terminal command: skill: <name> <prompt>
+ * Finds skill by name (case-insensitive, matches last segment of path)
+ */
+function launchSkillFromTerminal(skillName, prompt) {
+    // Find skill by name (case-insensitive match on last path segment or skill name)
+    const normalizedName = skillName.toLowerCase();
+    const foundSkill = availableSkills.find(s => {
+        const sName = (s.name || '').toLowerCase();
+        const sPath = (s.path || '').toLowerCase();
+        const lastSegment = sPath.split('/').filter(Boolean).pop() || '';
+        return sName === normalizedName || lastSegment === normalizedName || sPath === normalizedName;
+    });
+
+    if (!foundSkill) {
+        term.writeln(`\r\n\x1b[1;31m[Skill] Ошибка: скилл "${skillName}" не найден\x1b[0m`);
+        term.writeln(`\x1b[90mДоступные скиллы: ${availableSkills.map(s => s.name || s.path).join(', ') || '(нет)'}\x1b[0m`);
+        return;
+    }
+
+    term.writeln(`\r\n\x1b[1;36m[Skill] Запуск: ${foundSkill.name || skillName}\x1b[0m`);
+
+    // Set prompt into the params input (used by startSkillDialog)
+    const input = document.getElementById('wsSkillParamsInput');
+    if (input) input.value = prompt || '';
+
+    // Use panel mode by default
+    skillDialogState.useModal = false;
+    startSkillDialog(foundSkill);
 }
 
 async function startSkillDialog(skill) {
