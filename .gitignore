@@ -6,6 +6,7 @@ data/
 docs/
 logs/
 backup/
+tmp/
 
 # Node modules
 node_modules/
