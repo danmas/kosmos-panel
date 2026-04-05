@@ -949,7 +949,7 @@ function addSkillMessage(type, content) {
     const modalBody = document.getElementById('wsSkillDialogModalBody');
     const panelBody = document.getElementById('wsSkillDialogBody');
     const body = skillDialogState.useModal ? modalBody : panelBody;
-    
+
     if (body) {
         addSkillMessageToElement(body, type, content);
         body.scrollTop = body.scrollHeight;
@@ -1001,7 +1001,7 @@ async function startSkillDialog(skill) {
     // useModal is already set by executeSelectedSkill
 
     showSkillDialogView();
-    
+
     // Set skill name in the appropriate element
     if (skillDialogState.useModal) {
         document.getElementById('wsSkillDialogModalName').textContent = skill.name;
@@ -1009,7 +1009,7 @@ async function startSkillDialog(skill) {
         const nameEl = document.getElementById('wsSkillDialogName');
         if (nameEl) nameEl.textContent = skill.name;
     }
-    
+
     addSkillMessage('system', 'Запуск skill...');
 
     const userInput = document.getElementById('wsSkillParamsInput')?.value?.trim() || '';
@@ -1083,7 +1083,7 @@ function updateSkillDialogFooter(state) {
     // Update panel footer
     const qaPanel = document.getElementById('wsSkillQuickActions');
     const irPanel = document.getElementById('wsSkillInputRow');
-    
+
     const qa = skillDialogState.useModal ? qaModal : qaPanel;
     const ir = skillDialogState.useModal ? irModal : irPanel;
     if (!qa || !ir) return;
