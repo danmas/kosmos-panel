@@ -1482,3 +1482,130 @@ body {
   background: #3b8dff;
   transform: translateY(-1px);
 }
+
+/* ========== Split Panes ========== */
+.ws-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 100px;
+  min-height: 80px;
+  position: relative;
+  overflow: hidden;
+}
+
+.ws-pane.active .ws-pane-toolbar {
+  background: var(--primary-dim);
+  border-bottom-color: var(--primary);
+}
+
+.ws-pane-toolbar {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border-main);
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-dim);
+  user-select: none;
+}
+
+.ws-pane-toolbar .ws-pane-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: monospace;
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 0 4px;
+}
+
+.ws-pane-toolbar button {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  width: 20px;
+  height: 18px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: all 0.15s;
+}
+
+.ws-pane-toolbar button:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-light);
+  color: var(--text-main);
+}
+
+.ws-pane-toolbar button.ws-pane-close:hover {
+  background: rgba(255, 68, 68, 0.2);
+  color: #ff4444;
+  border-color: rgba(255, 68, 68, 0.4);
+}
+
+.ws-pane-term {
+  flex: 1;
+  overflow: hidden;
+  background: var(--bg-term, #000);
+}
+
+/* Split containers */
+.ws-split {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.ws-split-vertical {
+  flex-direction: row;
+}
+
+.ws-split-horizontal {
+  flex-direction: column;
+}
+
+/* Split drag handles */
+.ws-split-handle-v {
+  width: 5px;
+  cursor: col-resize;
+  background: var(--border-main);
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.ws-split-handle-v:hover,
+.ws-split-handle-v.active {
+  background: var(--primary);
+}
+
+.ws-split-handle-h {
+  height: 5px;
+  cursor: row-resize;
+  background: var(--border-main);
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.ws-split-handle-h:hover,
+.ws-split-handle-h.active {
+  background: var(--primary);
+}
+
+/* Prevent selection during split drag */
+.ws-split-dragging {
+  user-select: none !important;
+}
+
+.ws-split-dragging .ws-pane-term,
+.ws-split-dragging .xterm {
+  pointer-events: none;
+}
