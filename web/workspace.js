@@ -336,13 +336,13 @@ function splitPane(paneId, direction) {
     parent.replaceChild(splitContainer, pane.container);
 
     // Put old pane and handle and new pane into split
-    pane.container.style.flex = '1 1 50%';
+    pane.container.style.flex = '0 0 50%';
     splitContainer.appendChild(pane.container);
     splitContainer.appendChild(handle);
 
     // Create new pane
     const newPane = createPane(splitContainer);
-    newPane.container.style.flex = '1 1 50%';
+    newPane.container.style.flex = '0 0 50%';
 
     // Setup drag handle
     setupSplitDrag(handle, direction, pane.container, newPane.container, splitContainer);
@@ -381,7 +381,7 @@ function closePane(paneId) {
         }
 
         if (sibling) {
-            sibling.style.flex = '';
+            sibling.style.flex = '1';
             // Replace split container with sibling
             splitContainer.parentNode.replaceChild(sibling, splitContainer);
         }
@@ -404,8 +404,9 @@ function closePane(paneId) {
 function setupSplitDrag(handle, direction, firstEl, secondEl, splitContainer) {
     let dragging = false;
     let startPos = 0;
-    let startFirstSize = 0;
-    let startSecondSize = 0;
+    let containerSize = 0;
+    let startFirstPx = 0;
+    const handleSize = direction === 'vertical' ? 5 : 5; // handle width/height in px
 
     handle.addEventListener('mousedown', (e) => {
         e.preventDefault();
@@ -413,36 +414,32 @@ function setupSplitDrag(handle, direction, firstEl, secondEl, splitContainer) {
         handle.classList.add('active');
         document.body.classList.add('ws-split-dragging');
 
+        const containerRect = splitContainer.getBoundingClientRect();
         const firstRect = firstEl.getBoundingClientRect();
-        const secondRect = secondEl.getBoundingClientRect();
 
         if (direction === 'vertical') {
             startPos = e.clientX;
-            startFirstSize = firstRect.width;
-            startSecondSize = secondRect.width;
+            containerSize = containerRect.width - handleSize;
+            startFirstPx = firstRect.width;
         } else {
             startPos = e.clientY;
-            startFirstSize = firstRect.height;
-            startSecondSize = secondRect.height;
+            containerSize = containerRect.height - handleSize;
+            startFirstPx = firstRect.height;
         }
     });
 
     document.addEventListener('mousemove', (e) => {
         if (!dragging) return;
-        const totalSize = startFirstSize + startSecondSize;
         const delta = direction === 'vertical' ? e.clientX - startPos : e.clientY - startPos;
-        let newFirst = startFirstSize + delta;
-        let newSecond = startSecondSize - delta;
+        let newFirstPx = startFirstPx + delta;
 
-        // Clamp: min 15% of total
-        const minSize = totalSize * 0.15;
-        if (newFirst < minSize) { newFirst = minSize; newSecond = totalSize - minSize; }
-        if (newSecond < minSize) { newSecond = minSize; newFirst = totalSize - minSize; }
+        // Clamp: min 15% of available space
+        const minPx = containerSize * 0.15;
+        newFirstPx = Math.max(minPx, Math.min(containerSize - minPx, newFirstPx));
+        const newSecondPx = containerSize - newFirstPx;
 
-        const firstPct = (newFirst / totalSize) * 100;
-        const secondPct = (newSecond / totalSize) * 100;
-        firstEl.style.flex = `1 1 ${firstPct}%`;
-        secondEl.style.flex = `1 1 ${secondPct}%`;
+        firstEl.style.flex = `0 0 ${newFirstPx}px`;
+        secondEl.style.flex = `0 0 ${newSecondPx}px`;
     });
 
     document.addEventListener('mouseup', () => {
