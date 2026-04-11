@@ -68,6 +68,30 @@ function createPane(parentContainer) {
     btnSplitH.textContent = '\u2500';
     btnSplitH.onclick = (e) => { e.stopPropagation(); splitPane(id, 'horizontal'); };
 
+    const btnZoomOut = document.createElement('button');
+    btnZoomOut.title = 'Уменьшить шрифт';
+    btnZoomOut.textContent = '-';
+    btnZoomOut.onclick = (e) => { 
+        e.stopPropagation(); 
+        const currentSize = term.options.fontSize || 14;
+        if (currentSize > 6) {
+            term.options.fontSize = currentSize - 1;
+            try { fit.fit(); sendResizeForPane(pane); } catch {}
+        }
+    };
+
+    const btnZoomIn = document.createElement('button');
+    btnZoomIn.title = 'Увеличить шрифт';
+    btnZoomIn.textContent = '+';
+    btnZoomIn.onclick = (e) => { 
+        e.stopPropagation(); 
+        const currentSize = term.options.fontSize || 14;
+        if (currentSize < 40) {
+            term.options.fontSize = currentSize + 1;
+            try { fit.fit(); sendResizeForPane(pane); } catch {}
+        }
+    };
+
     const label = document.createElement('span');
     label.className = 'ws-pane-label';
     label.textContent = 'connecting...';
@@ -80,6 +104,8 @@ function createPane(parentContainer) {
 
     toolbar.appendChild(btnSplitV);
     toolbar.appendChild(btnSplitH);
+    toolbar.appendChild(btnZoomOut);
+    toolbar.appendChild(btnZoomIn);
     toolbar.appendChild(label);
     toolbar.appendChild(btnClose);
 
