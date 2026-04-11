@@ -1,5 +1,5 @@
 // ========== Workspace Super-Terminal ==========
-// Layout: [Left Top: Logs] [Left Bottom: Skills] | [Right: Terminal]
+// Layout: [Left Top: Logs] [Left Bottom: Skills] | [Right: Terminal Panes]
 
 const params = new URLSearchParams(location.search);
 const serverId = params.get('serverId');
@@ -25,59 +25,489 @@ const wsLeftTop = document.getElementById('wsLeftTop');
 wsLeft.style.width = layout.leftWidth + '%';
 wsLeftTop.style.height = layout.topHeight + '%';
 
-// ========== Terminal Setup ==========
-const termDiv = document.getElementById('wsTerm');
-const initialTheme = window.themeManager ? window.themeManager.getTerminalTheme() : { background: '#000000', foreground: '#00ff00' };
-const term = new Terminal({
-    convertEol: true,
-    cursorBlink: true,
-    theme: initialTheme
-});
-
-// Update terminal theme on change
-window.addEventListener('theme-changed', () => {
-    if (term && window.themeManager) {
-        term.options.theme = window.themeManager.getTerminalTheme();
-    }
-});
-const fitAddon = new window.FitAddon.FitAddon();
-term.loadAddon(fitAddon);
-term.open(termDiv);
-setTimeout(() => { try { fitAddon.fit(); } catch { } }, 0);
-
-// ========== Resize handling ==========
-function sendResize() {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-    }
-}
-
-let resizeTimeout;
-function handleResize() {
-    clearTimeout(resizeTimeout);
-    resizeTimeout = setTimeout(() => {
-        try { fitAddon.fit(); sendResize(); } catch { }
-    }, 100);
-}
-
-window.addEventListener('resize', handleResize);
-if (typeof ResizeObserver !== 'undefined') {
-    new ResizeObserver(handleResize).observe(termDiv);
-}
-
-// ========== WebSocket Connection ==========
+// ========== Pane Management ==========
+let paneIdCounter = 0;
+let activePane = null;
+const panes = new Map();
 const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
-const wsUrl = `${wsProto}://${location.host}/ws/terminal?serverId=${encodeURIComponent(serverId)}&cols=120&rows=30`;
-const ws = new WebSocket(wsUrl);
-
-term.writeln('[подключение к SSH...]');
-
-// ========== REST Bridge Variables ==========
-let currentSessionId = null;
-let pendingRemoteCommand = null;
-let remoteCommandBuffer = '';
-let remoteCommandCollecting = false;
 const promptRegex = /\w+@[\w\-\.]+[^$#>]*[\$#>]\s*$/;
+
+function getTerminalTheme() {
+    return window.themeManager ? window.themeManager.getTerminalTheme() : { background: '#000000', foreground: '#00ff00' };
+}
+
+// Update all terminal themes on change
+window.addEventListener('theme-changed', () => {
+    if (!window.themeManager) return;
+    const theme = window.themeManager.getTerminalTheme();
+    panes.forEach(p => { p.term.options.theme = theme; });
+});
+
+/**
+ * Create a new terminal pane inside parentContainer.
+ * Each pane gets its own xterm, FitAddon, WebSocket, sessionId.
+ */
+function createPane(parentContainer) {
+    const id = 'pane-' + (++paneIdCounter);
+
+    // DOM structure
+    const container = document.createElement('div');
+    container.className = 'ws-pane';
+    container.dataset.paneId = id;
+
+    const toolbar = document.createElement('div');
+    toolbar.className = 'ws-pane-toolbar';
+
+    const btnSplitV = document.createElement('button');
+    btnSplitV.title = 'Split Vertical';
+    btnSplitV.textContent = '\u2502';
+    btnSplitV.onclick = (e) => { e.stopPropagation(); splitPane(id, 'vertical'); };
+
+    const btnSplitH = document.createElement('button');
+    btnSplitH.title = 'Split Horizontal';
+    btnSplitH.textContent = '\u2500';
+    btnSplitH.onclick = (e) => { e.stopPropagation(); splitPane(id, 'horizontal'); };
+
+    const label = document.createElement('span');
+    label.className = 'ws-pane-label';
+    label.textContent = 'connecting...';
+
+    const btnClose = document.createElement('button');
+    btnClose.className = 'ws-pane-close';
+    btnClose.title = 'Close Pane';
+    btnClose.textContent = '\u00d7';
+    btnClose.onclick = (e) => { e.stopPropagation(); closePane(id); };
+
+    toolbar.appendChild(btnSplitV);
+    toolbar.appendChild(btnSplitH);
+    toolbar.appendChild(label);
+    toolbar.appendChild(btnClose);
+
+    const termDiv = document.createElement('div');
+    termDiv.className = 'ws-pane-term';
+
+    container.appendChild(toolbar);
+    container.appendChild(termDiv);
+    parentContainer.appendChild(container);
+
+    // xterm + fit
+    const term = new Terminal({ convertEol: true, cursorBlink: true, theme: getTerminalTheme() });
+    const fit = new window.FitAddon.FitAddon();
+    term.loadAddon(fit);
+    term.open(termDiv);
+    setTimeout(() => { try { fit.fit(); } catch { } }, 0);
+
+    // Pane state object
+    const pane = {
+        id,
+        term,
+        fit,
+        ws: null,
+        sessionId: null,
+        container,
+        termDiv,
+        label,
+        // Per-pane REST bridge state
+        pendingRemoteCommand: null,
+        remoteCommandBuffer: '',
+        remoteCommandCollecting: false
+    };
+
+    // Activate on click
+    container.addEventListener('mousedown', () => setActivePane(id));
+
+    // WebSocket connection
+    const wsUrl = `${wsProto}://${location.host}/ws/terminal?serverId=${encodeURIComponent(serverId)}&cols=120&rows=30`;
+    const ws = new WebSocket(wsUrl);
+    pane.ws = ws;
+
+    term.writeln('[\u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u043a SSH...]');
+
+    ws.onopen = () => {
+        term.writeln('[\u0441\u043e\u0435\u0434\u0438\u043d\u0435\u043d\u0438\u0435 \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u043e]');
+        setTimeout(() => { try { fit.fit(); sendResizeForPane(pane); } catch { } }, 100);
+    };
+
+    ws.onclose = ev => {
+        term.writeln(`\r\n[\u0441\u043e\u0435\u0434\u0438\u043d\u0435\u043d\u0438\u0435 \u0437\u0430\u043a\u0440\u044b\u0442\u043e \u043a\u043e\u0434 ${ev.code}${ev.reason ? ' ' + ev.reason : ''}]`);
+        label.textContent = 'disconnected';
+        document.getElementById('wsReconnect').style.display = 'inline-block';
+    };
+
+    ws.onerror = () => term.writeln(`\r\n[\u043e\u0448\u0438\u0431\u043a\u0430 \u0441\u043e\u0435\u0434\u0438\u043d\u0435\u043d\u0438\u044f]`);
+
+    ws.onmessage = ev => {
+        try {
+            const m = JSON.parse(ev.data);
+            handlePaneWsMessage(pane, m);
+        } catch (e) {
+            console.error('[ws.onmessage] Error:', e);
+        }
+    };
+
+    // Terminal input
+    term.onData(d => {
+        try { ws.send(JSON.stringify({ type: 'data', data: d })); } catch { }
+    });
+
+    attachKeyHandler(pane);
+
+    // ResizeObserver
+    if (typeof ResizeObserver !== 'undefined') {
+        new ResizeObserver(() => {
+            try { fit.fit(); sendResizeForPane(pane); } catch { }
+        }).observe(termDiv);
+    }
+
+    panes.set(id, pane);
+    return pane;
+}
+
+/** Handle WebSocket messages for a specific pane */
+function handlePaneWsMessage(pane, m) {
+    if (m.type === 'data' || m.type === 'err') {
+        pane.term.write(m.data);
+
+        // Collect output for skill (only for the pane that started the skill)
+        if (skillDialogState.state === 'waiting_cmd' && skillDialogState.paneId === pane.id) {
+            skillDialogState.outputBuffer.push(m.data);
+            if (skillDialogState.outputBuffer.length > 100) {
+                skillDialogState.outputBuffer.shift();
+            }
+        }
+
+        if (pane.remoteCommandCollecting && pane.pendingRemoteCommand) {
+            pane.remoteCommandBuffer += m.data;
+            checkRemoteCommandCompletionForPane(pane);
+        }
+    }
+
+    if (m.type === 'fatal') pane.term.writeln(`\r\n[FATAL] ${m.error}`);
+
+    if (m.type === 'session' && m.sessionId) {
+        pane.sessionId = m.sessionId;
+        pane.label.textContent = `Session: ${m.sessionId.substring(0, 8)}`;
+        // Update topbar indicator if this is active pane
+        if (activePane && activePane.id === pane.id) {
+            updateSessionIndicator();
+        }
+        // Load logs from the first pane that connects
+        if (!logsSessionId) {
+            logsSessionId = m.sessionId;
+            loadLogs();
+        }
+    }
+
+    if (m.type === 'remote_command') handleRemoteCommand(pane, m);
+
+    if (m.type === 'cancel_command' && m.commandId) {
+        if (pane.pendingRemoteCommand && pane.pendingRemoteCommand.commandId === m.commandId) {
+            hideCommandConfirm();
+            pane.pendingRemoteCommand = null;
+            pane.remoteCommandCollecting = false;
+            pane.remoteCommandBuffer = '';
+        }
+    }
+
+    // Skills via WS (for list, create, content) — handled globally via any pane
+    if (m.type === 'skills_list') handleSkillsList(m.skills || [], m.error);
+    if (m.type === 'skill_error') {
+        pane.term.writeln(`\r\n\x1b[1;31m[Skill Error] ${m.error}\x1b[0m`);
+    }
+    if (m.type === 'skill_create_result') handleSkillCreateResult(m.success, m.error);
+    if (m.type === 'skill_content') handleSkillContent(m.content, m.error);
+}
+
+/** Attach keyboard handler to a pane's terminal */
+function attachKeyHandler(pane) {
+    pane.term.attachCustomKeyEventHandler((arg) => {
+        if (arg.code === 'Enter' && arg.type === 'keydown') {
+            const buffer = pane.term.buffer.active;
+            for (let i = buffer.length - 1; i >= 0; i--) {
+                const line = buffer.getLine(i).translateToString(true);
+                const promptEndIndex = Math.max(line.lastIndexOf('$'), line.lastIndexOf('#'), line.lastIndexOf('>'));
+                if (promptEndIndex !== -1) {
+                    const commandPart = line.substring(promptEndIndex + 1).trim();
+                    const cleanCommand = commandPart.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '').replace(/[\b\u0007]/g, '').trim();
+
+                    // skill:skip
+                    if (cleanCommand === 'skill:skip') {
+                        clearTerminalLine();
+                        pane.term.writeln('\r\n\x1b[1;33m[Skill] \u041a\u043e\u043c\u0430\u043d\u0434\u0430 \u043f\u0440\u043e\u043f\u0443\u0449\u0435\u043d\u0430\x1b[0m');
+                        skillSkipCommand();
+                        return false;
+                    }
+
+                    // skill:cancel
+                    if (cleanCommand === 'skill:cancel') {
+                        clearTerminalLine();
+                        pane.term.writeln('\r\n\x1b[1;31m[Skill] \u041e\u0442\u043c\u0435\u043d\u0451\u043d\x1b[0m');
+                        skillCancel();
+                        return false;
+                    }
+
+                    // Skill: command execution tracking
+                    if (skillDialogState.state === 'waiting_cmd' && skillDialogState.paneId === pane.id) {
+                        if (cleanCommand.length > 0) {
+                            skillDialogState.commandMatched = true;
+                            setTimeout(() => onSkillCommandExecuted(), 2000);
+                        }
+                    }
+
+                    // Skill command check: skill: <name> <prompt>
+                    const skillMatch = commandPart.match(/^skill\s*:\s*(\S+)(.*)$/i);
+                    if (skillMatch) {
+                        const skillName = skillMatch[1].trim();
+                        const skillPrompt = (skillMatch[2] || '').trim();
+                        clearTerminalLine();
+                        launchSkillFromTerminal(skillName, skillPrompt);
+                        return false;
+                    }
+
+                    // AI command check
+                    const prefixText = aiCommandPrefix.slice(0, -1);
+                    const prefixSep = aiCommandPrefix.slice(-1);
+                    const commandRegex = new RegExp(`(${prefixText}\\s*${prefixSep})`);
+                    const match = commandPart.match(commandRegex);
+
+                    if (match) {
+                        const aiPrompt = commandPart.substring(match.index + match[0].length).trim();
+                        setTimeout(() => {
+                            pane.term.writeln(`\r\n\x1b[1;33m[AI] \u0417\u0430\u043f\u0440\u043e\u0441: ${aiPrompt}\x1b[0m`);
+                        }, 50);
+                        pane.ws.send(JSON.stringify({ type: 'ai_query', prompt: line }));
+                        return true;
+                    } else if (cleanCommand) {
+                        pane.ws.send(JSON.stringify({ type: 'command_log', command: cleanCommand }));
+                    }
+                    break;
+                }
+            }
+        }
+        return true;
+    });
+}
+
+function sendResizeForPane(pane) {
+    if (pane.ws && pane.ws.readyState === WebSocket.OPEN) {
+        pane.ws.send(JSON.stringify({ type: 'resize', cols: pane.term.cols, rows: pane.term.rows }));
+    }
+}
+
+function setActivePane(paneId) {
+    const pane = panes.get(paneId);
+    if (!pane) return;
+    if (activePane) activePane.container.classList.remove('active');
+    activePane = pane;
+    pane.container.classList.add('active');
+    updateSessionIndicator();
+}
+
+/** Fit all panes (e.g. after window resize) */
+function fitAllPanes() {
+    panes.forEach(p => {
+        try { p.fit.fit(); sendResizeForPane(p); } catch { }
+    });
+}
+
+let globalResizeTimeout;
+window.addEventListener('resize', () => {
+    clearTimeout(globalResizeTimeout);
+    globalResizeTimeout = setTimeout(fitAllPanes, 100);
+});
+
+// ========== Split / Close Logic ==========
+
+function splitPane(paneId, direction) {
+    const pane = panes.get(paneId);
+    if (!pane) return;
+
+    const parent = pane.container.parentNode;
+
+    // Create split container
+    const splitContainer = document.createElement('div');
+    splitContainer.className = `ws-split ws-split-${direction}`;
+
+    // Create drag handle
+    const handle = document.createElement('div');
+    handle.className = direction === 'vertical' ? 'ws-split-handle-v' : 'ws-split-handle-h';
+
+    // Copy previous inline styles to the new split container so it maintains its size in the parent
+    splitContainer.style.cssText = pane.container.style.cssText;
+
+    // Replace old pane with split container
+    parent.replaceChild(splitContainer, pane.container);
+
+    // Put old pane and handle and new pane into split
+    pane.container.style.flexGrow = '50';
+    pane.container.style.flexShrink = '50';
+    pane.container.style.flexBasis = '0%';
+    pane.container.style.width = '';
+    pane.container.style.height = '';
+    splitContainer.appendChild(pane.container);
+    splitContainer.appendChild(handle);
+
+    // Create new pane
+    const newPane = createPane(splitContainer);
+    newPane.container.style.flexGrow = '50';
+    newPane.container.style.flexShrink = '50';
+    newPane.container.style.flexBasis = '0%';
+    newPane.container.style.width = '';
+    newPane.container.style.height = '';
+
+    // Setup drag handle
+    setupSplitDrag(handle, direction, splitContainer);
+
+    // Fit both after DOM settles
+    setTimeout(() => {
+        try { pane.fit.fit(); sendResizeForPane(pane); } catch { }
+        try { newPane.fit.fit(); sendResizeForPane(newPane); } catch { }
+    }, 50);
+
+    setActivePane(newPane.id);
+}
+
+function closePane(paneId) {
+    if (panes.size <= 1) return; // Can't close the last pane
+
+    const pane = panes.get(paneId);
+    if (!pane) return;
+
+    // Cleanup
+    try { pane.ws.close(); } catch { }
+    try { pane.term.dispose(); } catch { }
+    panes.delete(paneId);
+
+    const paneEl = pane.container;
+    const splitContainer = paneEl.parentNode;
+
+    if (splitContainer && splitContainer.classList.contains('ws-split')) {
+        // Find the sibling (the other child that is not the handle and not this pane)
+        let sibling = null;
+        for (const child of splitContainer.children) {
+            if (child !== paneEl && !child.classList.contains('ws-split-handle-v') && !child.classList.contains('ws-split-handle-h')) {
+                sibling = child;
+                break;
+            }
+        }
+
+        if (sibling) {
+            // Keep the sizing footprint of the splitContainer we are removing!
+            // This prevents outer global borders from shifting when a nested pane is closed.
+            sibling.style.cssText = splitContainer.style.cssText;
+            
+            // Replace split container with sibling
+            splitContainer.parentNode.replaceChild(sibling, splitContainer);
+        }
+    } else {
+        paneEl.remove();
+    }
+
+    // Set active to first remaining pane
+    if (activePane && activePane.id === paneId) {
+        const first = panes.values().next().value;
+        if (first) setActivePane(first.id);
+    }
+
+    // Fit remaining panes
+    setTimeout(fitAllPanes, 50);
+}
+
+// ========== Split Drag Handle ==========
+
+function setupSplitDrag(handle, direction, splitContainer) {
+    let dragging = false;
+    let startPos = 0;
+    let containerSize = 0;
+    let startFirstPx = 0;
+    const handleSize = 5; // handle width/height in px
+    let firstEl = null;
+    let secondEl = null;
+
+    handle.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        
+        // Dynamically find siblings every time because panes can be replaced by nested splits
+        const children = Array.from(splitContainer.children);
+        const handleIndex = children.indexOf(handle);
+        if (handleIndex > 0 && handleIndex < children.length - 1) {
+            firstEl = children[handleIndex - 1];
+            secondEl = children[handleIndex + 1];
+        } else {
+            return;
+        }
+
+        dragging = true;
+        handle.classList.add('active');
+        document.body.classList.add('ws-split-dragging');
+
+        const containerRect = splitContainer.getBoundingClientRect();
+        const firstRect = firstEl.getBoundingClientRect();
+
+        if (direction === 'vertical') {
+            startPos = e.clientX;
+            containerSize = containerRect.width - handleSize;
+            startFirstPx = firstRect.width;
+        } else {
+            startPos = e.clientY;
+            containerSize = containerRect.height - handleSize;
+            startFirstPx = firstRect.height;
+        }
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!dragging) return;
+        const delta = direction === 'vertical' ? e.clientX - startPos : e.clientY - startPos;
+        let newFirstPx = startFirstPx + delta;
+
+        // Clamp: min 15% of available space
+        const minPx = containerSize * 0.15;
+        newFirstPx = Math.max(minPx, Math.min(containerSize - minPx, newFirstPx));
+        const newSecondPx = containerSize - newFirstPx;
+
+        const firstPct = (newFirstPx / containerSize) * 100;
+        const secondPct = (newSecondPx / containerSize) * 100;
+
+        // Use flex-grow proportional sizing
+        firstEl.style.flexGrow = firstPct;
+        firstEl.style.flexShrink = firstPct;
+        firstEl.style.flexBasis = '0%';
+        
+        secondEl.style.flexGrow = secondPct;
+        secondEl.style.flexShrink = secondPct;
+        secondEl.style.flexBasis = '0%';
+        
+        // Ensure flex-direction dimensions don't fight with legacy inline styles
+        firstEl.style.width = '';
+        firstEl.style.height = '';
+        secondEl.style.width = '';
+        secondEl.style.height = '';
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (!dragging) return;
+        dragging = false;
+        handle.classList.remove('active');
+        document.body.classList.remove('ws-split-dragging');
+        // Fit all panes after drag
+        setTimeout(fitAllPanes, 50);
+    });
+}
+
+// ========== Backward-compatible accessors ==========
+// Many functions below use `term`, `ws`, `currentSessionId` globally.
+// These now proxy to activePane.
+Object.defineProperty(window, '_activeTermCompat', {
+    get() { return activePane; }
+});
+
+// Convenience getters used by skill/remote-command code
+function getActiveTerm() { return activePane ? activePane.term : null; }
+function getActiveWs() { return activePane ? activePane.ws : null; }
+function getActiveSessionId() { return activePane ? activePane.sessionId : null; }
+
+// For log loading — track first connected session
+let logsSessionId = null;
 
 // ========== AI Config ==========
 let aiCommandPrefix = 'ai:';
@@ -95,164 +525,58 @@ fetch('/api/servers')
     })
     .catch(() => { });
 
-// ========== WebSocket handlers ==========
-ws.onopen = () => {
-    term.writeln('[соединение установлено]');
-    setTimeout(() => { try { fitAddon.fit(); } catch { } sendResize(); }, 100);
-};
-
-ws.onclose = ev => {
-    term.writeln(`\r\n[соединение закрыто код ${ev.code}${ev.reason ? ' ' + ev.reason : ''}]`);
-    document.getElementById('wsReconnect').style.display = 'inline-block';
-};
-
-ws.onerror = () => term.writeln(`\r\n[ошибка соединения]`);
-
-ws.onmessage = ev => {
-    try {
-        const m = JSON.parse(ev.data);
-
-        if (m.type === 'data' || m.type === 'err') {
-            term.write(m.data);
-
-            // Collect output for skill
-            if (skillDialogState.state === 'waiting_cmd') {
-                skillDialogState.outputBuffer.push(m.data);
-                if (skillDialogState.outputBuffer.length > 100) {
-                    skillDialogState.outputBuffer.shift();
-                }
-            }
-
-            if (remoteCommandCollecting && pendingRemoteCommand) {
-                remoteCommandBuffer += m.data;
-                checkRemoteCommandCompletion();
-            }
-        }
-
-        if (m.type === 'fatal') term.writeln(`\r\n[FATAL] ${m.error}`);
-
-        if (m.type === 'session' && m.sessionId) {
-            currentSessionId = m.sessionId;
-            updateSessionIndicator();
-        }
-
-        if (m.type === 'remote_command') handleRemoteCommand(m);
-
-        if (m.type === 'cancel_command' && m.commandId) {
-            if (pendingRemoteCommand && pendingRemoteCommand.commandId === m.commandId) {
-                hideCommandConfirm();
-                pendingRemoteCommand = null;
-                remoteCommandCollecting = false;
-                remoteCommandBuffer = '';
-            }
-        }
-
-        // Skills via WS (for list, create, content)
-        if (m.type === 'skills_list') handleSkillsList(m.skills || [], m.error);
-        if (m.type === 'skill_error') {
-            term.writeln(`\r\n\x1b[1;31m[Skill Error] ${m.error}\x1b[0m`);
-        }
-        if (m.type === 'skill_create_result') handleSkillCreateResult(m.success, m.error);
-        if (m.type === 'skill_content') handleSkillContent(m.content, m.error);
-
-    } catch (e) {
-        console.error('[ws.onmessage] Error:', e);
-    }
-};
-
-// ========== Terminal Input ==========
-term.onData(d => {
-    try { ws.send(JSON.stringify({ type: 'data', data: d })); } catch { }
-});
-
-term.attachCustomKeyEventHandler((arg) => {
-    if (arg.code === 'Enter' && arg.type === 'keydown') {
-        const buffer = term.buffer.active;
-        for (let i = buffer.length - 1; i >= 0; i--) {
-            const line = buffer.getLine(i).translateToString(true);
-            const promptEndIndex = Math.max(line.lastIndexOf('$'), line.lastIndexOf('#'), line.lastIndexOf('>'));
-            if (promptEndIndex !== -1) {
-                const commandPart = line.substring(promptEndIndex + 1).trim();
-                const cleanCommand = commandPart.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '').replace(/[\b\u0007]/g, '').trim();
-
-                // skill:skip
-                if (cleanCommand === 'skill:skip') {
-                    clearTerminalLine();
-                    term.writeln('\r\n\x1b[1;33m[Skill] Команда пропущена\x1b[0m');
-                    skillSkipCommand();
-                    return false;
-                }
-
-                // skill:cancel
-                if (cleanCommand === 'skill:cancel') {
-                    clearTerminalLine();
-                    term.writeln('\r\n\x1b[1;31m[Skill] Отменён\x1b[0m');
-                    skillCancel();
-                    return false;
-                }
-
-                // Skill: если скилл ждёт выполнения команды, любой непустой Enter
-                // считает текущую команду результатом шага (даже если пользователь её изменил)
-                if (skillDialogState.state === 'waiting_cmd') {
-                    if (cleanCommand.length > 0) {
-                        skillDialogState.commandMatched = true;
-                        // даём чуть больше времени на сбор вывода
-                        setTimeout(() => onSkillCommandExecuted(), 2000);
-                    }
-                }
-
-                // AI command check
-                const prefixText = aiCommandPrefix.slice(0, -1);
-                const prefixSep = aiCommandPrefix.slice(-1);
-                const commandRegex = new RegExp(`(${prefixText}\\s*${prefixSep})`);
-                const match = commandPart.match(commandRegex);
-
-                if (match) {
-                    const aiPrompt = commandPart.substring(match.index + match[0].length).trim();
-                    setTimeout(() => {
-                        term.writeln(`\r\n\x1b[1;33m[AI] Запрос: ${aiPrompt}\x1b[0m`);
-                    }, 50);
-                    ws.send(JSON.stringify({ type: 'ai_query', prompt: line }));
-                    return true;
-                } else if (cleanCommand) {
-                    ws.send(JSON.stringify({ type: 'command_log', command: cleanCommand }));
-                }
-                break;
-            }
-        }
-    }
-    return true;
-});
+// (Old WS handlers and terminal input removed — now inside createPane/attachKeyHandler)
 
 // ========== UI Handlers ==========
-document.getElementById('wsClose').onclick = () => { try { ws.close(); } catch { } window.close(); };
-document.getElementById('wsFit').onclick = () => { try { fitAddon.fit(); sendResize(); } catch { } };
+document.getElementById('wsClose').onclick = () => {
+    panes.forEach(p => { try { p.ws.close(); } catch { } });
+    window.close();
+};
+document.getElementById('wsFit').onclick = () => fitAllPanes();
 document.getElementById('wsReconnect').onclick = () => location.reload();
+
+let sidebarVisible = true;
+document.getElementById('wsToggleSidebar').onclick = () => {
+    sidebarVisible = !sidebarVisible;
+    const dragV = document.getElementById('wsDragV');
+    if (sidebarVisible) {
+        document.getElementById('wsLeft').style.display = '';
+        dragV.style.display = '';
+        document.getElementById('wsToggleSidebar').textContent = '◀';
+    } else {
+        document.getElementById('wsLeft').style.display = 'none';
+        dragV.style.display = 'none';
+        document.getElementById('wsToggleSidebar').textContent = '▶';
+    }
+    setTimeout(fitAllPanes, 50);
+};
+
+document.getElementById('wsSplitV').onclick = () => { if (activePane) splitPane(activePane.id, 'vertical'); };
+document.getElementById('wsSplitH').onclick = () => { if (activePane) splitPane(activePane.id, 'horizontal'); };
 
 // ========== Session Indicator ==========
 function updateSessionIndicator() {
     const el = document.getElementById('wsSessionId');
-    if (el && currentSessionId) {
-        el.textContent = `Session: ${currentSessionId.substring(0, 8)}...`;
-        el.title = `Session ID: ${currentSessionId}\nКликните для копирования`;
+    const sid = getActiveSessionId();
+    if (el && sid) {
+        el.textContent = `Session: ${sid.substring(0, 8)}...`;
+        el.title = `Session ID: ${sid}\nКликните для копирования`;
         el.onclick = () => {
-            navigator.clipboard.writeText(currentSessionId).then(() => {
+            navigator.clipboard.writeText(sid).then(() => {
                 const orig = el.textContent;
                 el.textContent = '✓ Скопировано!';
                 setTimeout(() => { el.textContent = orig; }, 1500);
             });
         };
-        term.writeln(`\x1b[90m[Session ID: ${currentSessionId}]\x1b[0m`);
-        // Start loading logs
-        loadLogs();
     }
 }
 
 // ========== Remote Command Handling ==========
-function handleRemoteCommand(msg) {
-    term.writeln(`\r\n\x1b[1;45;97m ⚡ REST API COMMAND ⚡ \x1b[0m`);
-    term.writeln(`\x1b[1;35mCommand:\x1b[0m \x1b[1;33m${msg.command}\x1b[0m`);
-    pendingRemoteCommand = { commandId: msg.commandId, command: msg.command, requireConfirmation: msg.requireConfirmation };
+function handleRemoteCommand(pane, msg) {
+    pane.term.writeln(`\r\n\x1b[1;45;97m ⚡ REST API COMMAND ⚡ \x1b[0m`);
+    pane.term.writeln(`\x1b[1;35mCommand:\x1b[0m \x1b[1;33m${msg.command}\x1b[0m`);
+    pane.pendingRemoteCommand = { commandId: msg.commandId, command: msg.command, requireConfirmation: msg.requireConfirmation };
+    setActivePane(pane.id); // bring this pane to focus
     if (msg.requireConfirmation) showCommandConfirm(msg.command);
     else executeRemoteCommand(msg.command);
 }
@@ -260,7 +584,7 @@ function handleRemoteCommand(msg) {
 function showCommandConfirm(command) {
     document.getElementById('wsCommandConfirmText').textContent = command;
     document.getElementById('wsCommandConfirm').classList.remove('hidden');
-    term.writeln('\r\n\x1b[1;33m[REST API] Ожидается подтверждение...\x1b[0m');
+    if (activePane) activePane.term.writeln('\r\n\x1b[1;33m[REST API] Ожидается подтверждение...\x1b[0m');
 }
 
 function hideCommandConfirm() {
@@ -268,15 +592,21 @@ function hideCommandConfirm() {
 }
 
 function executeRemoteCommand(command) {
-    remoteCommandBuffer = '';
-    remoteCommandCollecting = true;
-    term.writeln(`\r\n\x1b[1;36m[REST API] Выполняется: ${command}\x1b[0m`);
-    try { ws.send(JSON.stringify({ type: 'data', data: command + '\r' })); }
+    if (!activePane) return;
+    activePane.remoteCommandBuffer = '';
+    activePane.remoteCommandCollecting = true;
+    activePane.term.writeln(`\r\n\x1b[1;36m[REST API] Выполняется: ${command}\x1b[0m`);
+    try { activePane.ws.send(JSON.stringify({ type: 'data', data: command + '\r' })); }
     catch (e) { sendCommandResult('error', '', 'Failed: ' + e.message, null); }
 }
 
 function checkRemoteCommandCompletion() {
-    const cleanBuffer = remoteCommandBuffer.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
+    if (!activePane) return;
+    checkRemoteCommandCompletionForPane(activePane);
+}
+
+function checkRemoteCommandCompletionForPane(pane) {
+    const cleanBuffer = pane.remoteCommandBuffer.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
     if (promptRegex.test(cleanBuffer)) {
         const lines = cleanBuffer.split('\n');
         let outputLines = [];
@@ -284,28 +614,33 @@ function checkRemoteCommandCompletion() {
             if (promptRegex.test(lines[i])) { outputLines = lines.slice(0, i); break; }
         }
         if (outputLines.length > 0) outputLines = outputLines.slice(1);
-        sendCommandResult('completed', outputLines.join('\n').trim(), '', 0);
-        remoteCommandCollecting = false;
-        remoteCommandBuffer = '';
-        pendingRemoteCommand = null;
+        sendCommandResultForPane(pane, 'completed', outputLines.join('\n').trim(), '', 0);
+        pane.remoteCommandCollecting = false;
+        pane.remoteCommandBuffer = '';
+        pane.pendingRemoteCommand = null;
     }
 }
 
 function sendCommandResult(status, stdout, stderr, exitCode) {
-    if (!pendingRemoteCommand) return;
-    try { ws.send(JSON.stringify({ type: 'command_result', commandId: pendingRemoteCommand.commandId, status, stdout, stderr, exitCode })); } catch { }
+    if (!activePane || !activePane.pendingRemoteCommand) return;
+    sendCommandResultForPane(activePane, status, stdout, stderr, exitCode);
 }
 
-document.getElementById('wsConfirmYes').onclick = () => { if (pendingRemoteCommand) { hideCommandConfirm(); executeRemoteCommand(pendingRemoteCommand.command); } };
+function sendCommandResultForPane(pane, status, stdout, stderr, exitCode) {
+    if (!pane.pendingRemoteCommand) return;
+    try { pane.ws.send(JSON.stringify({ type: 'command_result', commandId: pane.pendingRemoteCommand.commandId, status, stdout, stderr, exitCode })); } catch { }
+}
+
+document.getElementById('wsConfirmYes').onclick = () => { if (activePane && activePane.pendingRemoteCommand) { hideCommandConfirm(); executeRemoteCommand(activePane.pendingRemoteCommand.command); } };
 document.getElementById('wsConfirmNo').onclick = () => {
-    if (pendingRemoteCommand) {
-        term.writeln('\r\n\x1b[1;31m[REST API] Команда отклонена\x1b[0m');
+    if (activePane && activePane.pendingRemoteCommand) {
+        activePane.term.writeln('\r\n\x1b[1;31m[REST API] Команда отклонена\x1b[0m');
         sendCommandResult('rejected', '', 'Rejected by user', null);
         hideCommandConfirm();
-        pendingRemoteCommand = null;
+        activePane.pendingRemoteCommand = null;
     }
 };
-document.getElementById('wsConfirmSkip').onclick = () => { if (pendingRemoteCommand) { hideCommandConfirm(); executeRemoteCommand(pendingRemoteCommand.command); } };
+document.getElementById('wsConfirmSkip').onclick = () => { if (activePane && activePane.pendingRemoteCommand) { hideCommandConfirm(); executeRemoteCommand(activePane.pendingRemoteCommand.command); } };
 
 // ========== Drag Handles ==========
 (function setupDrag() {
@@ -338,7 +673,7 @@ document.getElementById('wsConfirmSkip').onclick = () => { if (pendingRemoteComm
             const clamped = Math.max(15, Math.min(60, pct));
             wsLeft.style.width = clamped + '%';
             layout.leftWidth = clamped;
-            handleResize();
+            fitAllPanes();
         }
         if (hDragging) {
             const rect = wsLeft.getBoundingClientRect();
@@ -358,7 +693,7 @@ document.getElementById('wsConfirmSkip').onclick = () => { if (pendingRemoteComm
             document.body.classList.remove('ws-dragging');
             document.body.classList.remove('ws-dragging-h');
             saveLayout(layout);
-            handleResize();
+            fitAllPanes();
         }
     });
 })();
@@ -411,10 +746,10 @@ document.querySelectorAll('.ws-filter-btn').forEach(btn => {
 });
 
 async function loadLogs() {
-    if (!currentSessionId) return;
+    if (!logsSessionId) return;
     try {
         const apiUrl = logTab === 'skills' ? '/api/skills-logs' : '/api/logs';
-        const url = `${apiUrl}?sessionId=${encodeURIComponent(currentSessionId)}&t=${Date.now()}`;
+        const url = `${apiUrl}?sessionId=${encodeURIComponent(logsSessionId)}&t=${Date.now()}`;
         const resp = await fetch(url);
         const logs = await resp.json();
         if (logs.length !== allLogs.length) {
@@ -487,16 +822,13 @@ let availableSkills = [];
 let selectedSkill = null;
 let collapsedFolders = new Set();
 
-// Request skills on load
-setTimeout(() => {
-    if (ws.readyState === WebSocket.OPEN) {
+// Request skills on load — will be sent once first pane connects
+function requestSkillsList() {
+    const ws = getActiveWs();
+    if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'skills_list' }));
-    } else {
-        ws.addEventListener('open', () => {
-            ws.send(JSON.stringify({ type: 'skills_list' }));
-        }, { once: true });
     }
-}, 500);
+}
 
 window.toggleFolder = function (el) {
     const folderItem = el.closest('[data-folder-id]');
@@ -673,7 +1005,8 @@ const skillDialogState = {
     messages: [],
     startedAt: null,
     outputBuffer: [],
-    useModal: false // false = panel, true = popup window
+    useModal: false, // false = panel, true = popup window
+    paneId: null // tracks which pane the skill was launched from
 };
 
 function showSkillDialogModal() {
@@ -754,7 +1087,8 @@ function switchToPopupMode() {
 }
 
 function backToSkillsListSilent() {
-    ws.send(JSON.stringify({ type: 'skills_list' }));
+    const ws = getActiveWs();
+    if (ws) ws.send(JSON.stringify({ type: 'skills_list' }));
 }
 
 // Modal event handlers
@@ -932,6 +1266,7 @@ function resetSkillDialogState() {
     skillDialogState.state = 'idle';
     skillDialogState.messages = [];
     skillDialogState.outputBuffer = [];
+    skillDialogState.paneId = null;
 }
 
 function addSkillMessage(type, content) {
@@ -947,16 +1282,54 @@ function addSkillMessage(type, content) {
     skillDialogState.messages.push({ type, content, timestamp: new Date().toISOString() });
 }
 
+/**
+ * Launch skill from terminal command: skill: <name> <prompt>
+ * Finds skill by name (case-insensitive, matches last segment of path)
+ */
+function launchSkillFromTerminal(skillName, prompt) {
+    // Find skill by name (case-insensitive match on last path segment or skill name)
+    const normalizedName = skillName.toLowerCase();
+    const foundSkill = availableSkills.find(s => {
+        const sName = (s.name || '').toLowerCase();
+        const sPath = (s.path || '').toLowerCase();
+        const lastSegment = sPath.split('/').filter(Boolean).pop() || '';
+        return sName === normalizedName || lastSegment === normalizedName || sPath === normalizedName;
+    });
+
+    if (!foundSkill) {
+        const t = getActiveTerm();
+        if (t) {
+            t.writeln(`\r\n\x1b[1;31m[Skill] Ошибка: скилл "${skillName}" не найден\x1b[0m`);
+            t.writeln(`\x1b[90mДоступные скиллы: ${availableSkills.map(s => s.name || s.path).join(', ') || '(нет)'}\x1b[0m`);
+        }
+        return;
+    }
+
+    const t = getActiveTerm();
+    if (t) t.writeln(`\r\n\x1b[1;36m[Skill] Запуск: ${foundSkill.name || skillName}\x1b[0m`);
+
+    // Set prompt into the params input (used by startSkillDialog)
+    const input = document.getElementById('wsSkillParamsInput');
+    if (input) input.value = prompt || '';
+
+    // Use panel mode by default
+    skillDialogState.useModal = false;
+    startSkillDialog(foundSkill);
+}
+
 async function startSkillDialog(skill) {
-    if (!currentSessionId) {
-        term.writeln('\r\n\x1b[1;31m[Ошибка] Session ID ещё не получен\x1b[0m');
+    const sid = getActiveSessionId();
+    if (!sid) {
+        const t = getActiveTerm();
+        if (t) t.writeln('\r\n\x1b[1;31m[Ошибка] Session ID ещё не получен\x1b[0m');
         return;
     }
 
     resetSkillDialogState();
-    skillDialogState.terminalSessionId = currentSessionId;
+    skillDialogState.terminalSessionId = sid;
     skillDialogState.skillName = skill.name;
     skillDialogState.startedAt = new Date().toISOString();
+    skillDialogState.paneId = activePane ? activePane.id : null;
     // useModal is already set by executeSelectedSkill
 
     showSkillDialogView();
@@ -979,7 +1352,7 @@ async function startSkillDialog(skill) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                terminalSessionId: currentSessionId,
+                terminalSessionId: sid,
                 skillId: skill.id,
                 skillPath: skill.path,
                 skillSource: skill.source,
@@ -1066,8 +1439,8 @@ function updateSkillDialogFooter(state) {
 }
 
 function insertCommandToTerminal(command) {
-    term.paste(command);
-    term.focus();
+    const t = getActiveTerm();
+    if (t) { t.paste(command); t.focus(); }
 }
 
 async function sendSkillMessage() {
@@ -1230,7 +1603,8 @@ function backToSkillsList() {
     resetSkillDialogState();
     selectedSkill = null;
     // Re-render skills list
-    ws.send(JSON.stringify({ type: 'skills_list' }));
+    const ws = getActiveWs();
+    if (ws) ws.send(JSON.stringify({ type: 'skills_list' }));
 }
 
 function normalizeCommand(cmd) {
@@ -1238,7 +1612,8 @@ function normalizeCommand(cmd) {
 }
 
 function clearTerminalLine() {
-    ws.send(JSON.stringify({ type: 'data', data: '\x15' })); // Ctrl+U
+    const ws = getActiveWs();
+    if (ws) ws.send(JSON.stringify({ type: 'data', data: '\x15' })); // Ctrl+U
 }
 
 // ========== Skill History ==========
@@ -1299,7 +1674,8 @@ function openEditSkillDialog(skillId, source, skillPath) {
     document.getElementById('wsSkillCreateOverlay').classList.remove('hidden');
     document.getElementById('wsSkillCreateDialog').classList.remove('hidden');
 
-    ws.send(JSON.stringify({ type: 'skill_get_content', source: source, path: skillPath }));
+    const ws = getActiveWs();
+    if (ws) ws.send(JSON.stringify({ type: 'skill_get_content', source: source, path: skillPath }));
 }
 
 function handleSkillContent(content, error) {
@@ -1366,7 +1742,8 @@ function saveNewSkill() {
         name: name,
         content: content
     };
-    ws.send(JSON.stringify(msg));
+    const ws = getActiveWs();
+    if (ws) ws.send(JSON.stringify(msg));
 
     document.getElementById('wsSkillCreateSave').disabled = true;
     document.getElementById('wsSkillCreateSave').textContent = 'Сохранение...';
@@ -1379,8 +1756,10 @@ function handleSkillCreateResult(success, error) {
 
     if (success) {
         closeCreateSkillDialog();
-        ws.send(JSON.stringify({ type: 'skills_list' }));
-        term.writeln(`\r\n\x1b[1;32m[Skills] Skill успешно сохранён\x1b[0m`);
+        const ws = getActiveWs();
+        if (ws) ws.send(JSON.stringify({ type: 'skills_list' }));
+        const t = getActiveTerm();
+        if (t) t.writeln(`\r\n\x1b[1;32m[Skills] Skill успешно сохранён\x1b[0m`);
     } else {
         const errorEl = document.getElementById('wsSkillCreateError');
         errorEl.textContent = error || 'Ошибка при сохранении skill';
@@ -1403,5 +1782,16 @@ document.getElementById('wsSkillCreateContent').onkeydown = (e) => {
 // ========== Cleanup ==========
 window.addEventListener('beforeunload', () => {
     clearInterval(logsInterval);
-    try { ws.close(); } catch { }
+    panes.forEach(p => { try { p.ws.close(); } catch { } });
 });
+
+// ========== Initial Pane Creation ==========
+(function init() {
+    const wsRight = document.getElementById('wsRight');
+    const initialPane = createPane(wsRight);
+    setActivePane(initialPane.id);
+    // Request skills once pane connects
+    initialPane.ws.addEventListener('open', () => {
+        setTimeout(requestSkillsList, 300);
+    }, { once: true });
+})();

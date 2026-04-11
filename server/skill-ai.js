@@ -361,6 +361,16 @@ function parseSkillResponse(aiContent) {
     };
   }
 
+  // NEW GET-FILE
+  const getFileMatch = content.match(/^\[GET-FILE\]\s*(.+?)$/ims);
+
+  if (getFileMatch) {
+    return {
+      type: 'GET-FILE',
+      path: getFileMatch[1].trim()
+    };
+  }
+
   // Старый fallback для неизвестного формата
   logger.warn('skill-ai', 'Unknown response format, treating as command', { content: content.substring(0, 100) });
   let command = content.split('\n')[0].trim();
@@ -413,7 +423,6 @@ async function getRemoteKnowledge(sshConn, remoteOS) {
 
 module.exports = {
   get SKILL_SYSTEM_PROMPT() { return getPrompt('SKILL_SYSTEM_PROMPT_WITH_MEMORY'); },
-  get SKILL_SYSTEM_PROMPT_WITH_ASK() { return getPrompt('SKILL_SYSTEM_PROMPT_WITH_ASK'); },
   get SKILL_SYSTEM_PROMPT_WITH_MEMORY() { return getPrompt('SKILL_SYSTEM_PROMPT_WITH_MEMORY'); },
   buildSkillSystemPrompt, // теперь async
   buildInitialUserPrompt,

@@ -23,6 +23,9 @@
         <select class="theme-selector topbar-link"
             style="background:transparent; border:none; color:var(--text-muted); padding:4px; max-width:80px; margin-right:10px;"
             title="Тема оформления"></select>
+        <button id="wsToggleSidebar" title="Скрыть/показать боковую панель">◀</button>
+        <button id="wsSplitV" title="Split Vertical">│</button>
+        <button id="wsSplitH" title="Split Horizontal">─</button>
         <button id="wsReconnect" class="btn-reconnect">Переподключить</button>
         <button id="wsFit">Подогнать</button>
         <button id="wsClose" class="btn-close">Закрыть</button>
@@ -80,8 +83,10 @@
                     <div class="ws-skill-params-title">Параметры для <span id="wsSkillParamsName"></span>:</div>
                     <div class="ws-skill-param-input">
                         <input type="text" id="wsSkillParamsInput" placeholder="Введите параметры...">
-                        <button class="ws-skill-execute-btn" id="wsSkillExecuteBtn" title="Запустить в панели">▶</button>
-                        <button class="ws-skill-execute-popup-btn" id="wsSkillExecutePopupBtn" title="Запустить в окне">↗</button>
+                        <button class="ws-skill-execute-btn" id="wsSkillExecuteBtn"
+                            title="Запустить в панели">▶</button>
+                        <button class="ws-skill-execute-popup-btn" id="wsSkillExecutePopupBtn"
+                            title="Запустить в окне">↗</button>
                     </div>
                 </div>
             </div>
@@ -90,11 +95,11 @@
         <!-- Vertical Drag Handle -->
         <div class="ws-drag-v" id="wsDragV"></div>
 
-        <!-- Right: Terminal -->
+        <!-- Right: Terminal Panes Container -->
         <div class="ws-right" id="wsRight">
-            <div id="wsTerm" class="ws-term"></div>
+            <!-- Panes will be created dynamically by workspace.js -->
 
-            <!-- Remote command confirmation -->
+            <!-- Remote command confirmation (global overlay) -->
             <div id="wsCommandConfirm" class="ws-command-confirm hidden">
                 <div class="ws-command-confirm-header">
                     <span class="ws-command-confirm-badge">REST API</span>
@@ -149,7 +154,7 @@
         <div class="ws-resize-handle ws-resize-nw" data-resize="nw"></div>
         <div class="ws-resize-handle ws-resize-se" data-resize="se"></div>
         <div class="ws-resize-handle ws-resize-sw" data-resize="sw"></div>
-        
+
         <div class="ws-skill-dialog-modal-header" id="wsSkillDialogModalHeader">
             <div class="ws-skill-dialog-modal-title">
                 <span class="ws-skill-dialog-modal-icon">✨</span>
@@ -157,7 +162,8 @@
                 <span id="wsSkillDialogModalName">-</span>
             </div>
             <div class="ws-skill-dialog-modal-actions">
-                <button class="ws-skill-dialog-modal-minimize" id="wsSkillDialogMinimize" title="Свернуть в панель">⊟</button>
+                <button class="ws-skill-dialog-modal-minimize" id="wsSkillDialogMinimize"
+                    title="Свернуть в панель">⊟</button>
                 <button class="ws-skill-dialog-modal-close" id="wsSkillDialogModalClose" title="Закрыть">×</button>
             </div>
         </div>

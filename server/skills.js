@@ -15,7 +15,9 @@ const {
   callSkillAI,
   parseSkillResponse,
   getRemoteKnowledge,
-  cleanOutputForAI
+  cleanOutputForAI,
+  handleMemoryAction,
+  loadMemoryIndex
 } = require('./skill-ai');
 
 const router = express.Router();
@@ -121,19 +123,34 @@ function parseSkillFrontmatter(content, fallbackName = 'unknown') {
   // More robust regex: allows optional whitespace/BOM at start, and optional delimiter at top
   const match = content.match(/^(?:\s*---\s*\r?\n)?([\s\S]*?)\r?\n---\s*\r?\n([\s\S]*)$/);
   if (!match) {
-    return { name: fallbackName, description: '', params: [], content: content.trim() };
+    return { name: fallbackName, description: '', params: [], historyMode: 'full', content: content.trim() };
   }
 
   const frontmatter = match[1];
   const body = match[2].trim();
 
-  const result = { name: fallbackName, description: '', params: [], content: body };
+  const result = { name: fallbackName, description: '', params: [], historyMode: 'full', content: body };
 
   const nameMatch = frontmatter.match(/^name:\s*(.+)$/m);
   if (nameMatch) result.name = nameMatch[1].trim();
 
   const descMatch = frontmatter.match(/^description:\s*(.+)$/m);
   if (descMatch) result.description = descMatch[1].trim();
+
+  // Parse history_mode: full | last_n | system_only
+  const historyMatch = frontmatter.match(/^history_mode:\s*(\S+)/m);
+  if (historyMatch) {
+    const mode = historyMatch[1].trim().toLowerCase();
+    if (['full', 'last_n', 'system_only'].includes(mode)) {
+      result.historyMode = mode;
+    }
+  }
+
+  // Parse history_max (for last_n mode)
+  const historyMaxMatch = frontmatter.match(/^history_max:\s*(\d+)/m);
+  if (historyMaxMatch) {
+    result.historyMax = parseInt(historyMaxMatch[1], 10);
+  }
 
   const paramsMatch = frontmatter.match(/^params:\s*\n([\s\S]*?)(?=\n\S|$)/m);
   if (paramsMatch) {
@@ -219,7 +236,114 @@ function getRemoteSkill(sshConn, skillName, remoteOS = 'linux', skillPath = null
   });
 }
 
+/**
+ * Read file for [GET-FILE] directive
+ * Supports both project (local fs) and remote (SSH)
+ * Only allows text files (checked by extension)
+ */
+async function handleGetFile(session, filePath) {
+  const isProject = session.skillSource === 'project';
+  const { conn, getOS } = wsSessions[session.terminalSessionId] || {};
+  const remoteOS = getOS ? getOS() : 'linux';
+
+  // Whitelist of allowed text file extensions and filenames
+  const allowedExtensions = [
+    '.md', '.txt', '.js', '.ts', '.jsx', '.tsx', '.json', '.yaml', '.yml',
+    '.html', '.htm', '.css', '.scss', '.sass', '.less', '.xml', '.svg',
+    '.py', '.rb', '.php', '.java', '.c', '.cpp', '.h', '.hpp', '.cs',
+    '.go', '.rs', '.swift', '.kt', '.scala', '.sh', '.bash', '.zsh',
+    '.ps1', '.bat', '.cmd', '.sql', '.graphql', '.prisma'
+  ];
+  const allowedFilenames = [
+    '.env', '.env.example', '.env.local', '.env.development', '.env.production',
+    '.gitignore', '.dockerignore', '.editorconfig', '.eslintrc', '.prettierrc',
+    '.eslintrc.json', '.prettierrc.json', '.babelrc', '.nvmrc', '.npmrc',
+    'dockerfile', 'makefile', 'readme', 'license', 'changelog', 'contributing',
+    '.gitattributes', '.gitmodules'
+  ];
+
+  // Check extension or filename (case insensitive)
+  const ext = path.extname(filePath).toLowerCase();
+  const basename = path.basename(filePath).toLowerCase();
+  const basenameNoExt = path.basename(filePath, ext).toLowerCase();
+  
+  const isAllowed = allowedExtensions.includes(ext) ||
+    allowedFilenames.includes(basename) ||
+    allowedFilenames.includes(basenameNoExt);
+
+  if (!isAllowed) {
+    return `File error:\nOnly text files are allowed. Extension '${ext || 'none'}' not in whitelist.`;
+  }
+
+  if (isProject) {
+    const projectRoot = path.resolve(__dirname, '..');
+    const fullPath = path.join(projectRoot, filePath);
+    try {
+      const content = await fs.readFile(fullPath, 'utf8');
+      return `File content:\n${content}`;
+    } catch (e) {
+      return `File error:\n${e.code === 'ENOENT' ? 'File not found' : e.message}`;
+    }
+  }
+
+  // Remote via SSH
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => resolve('File error:\nTimeout'), 5000);
+    let cmd;
+
+    if (remoteOS === 'windows') {
+      const escPath = filePath.replace(/'/g, "''").replace(/\//g, '\\\\');
+      cmd = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content '${escPath}' -Encoding UTF8 -ErrorAction SilentlyContinue"`;
+    } else {
+      cmd = `cat '${filePath}' 2>&1`;
+    }
+
+    let output = '';
+    conn.exec(cmd, (err, stream) => {
+      if (err) {
+        clearTimeout(timeout);
+        return resolve(`File error:\n${err.message}`);
+      }
+      stream.on('data', (data) => { output += data.toString(); });
+      stream.on('close', () => {
+        clearTimeout(timeout);
+        const clean = output.trim();
+        resolve(clean.startsWith('cat:') || clean === '' ? `File error:\n${clean || 'File not found'}` : `File content:\n${clean}`);
+      });
+    });
+  });
+}
+
 // --- REST API Endpoints ---
+
+/**
+ * Filter messages based on history mode
+ * @param {Array} messages - Full message history
+ * @param {string} historyMode - 'full' | 'last_n' | 'system_only'
+ * @param {number} historyMax - Max messages for last_n mode (default 10)
+ * @returns {Array} Filtered messages
+ */
+function filterMessagesForAI(messages, historyMode = 'full', historyMax = 10) {
+  if (historyMode === 'full') {
+    return messages;
+  }
+
+  const systemMessages = messages.filter(m => m.role === 'system');
+  const nonSystemMessages = messages.filter(m => m.role !== 'system');
+
+  if (historyMode === 'last_n') {
+    // Keep system + last N messages
+    return [...systemMessages, ...nonSystemMessages.slice(-historyMax)];
+  }
+
+  if (historyMode === 'system_only') {
+    // Keep system + only last user message
+    const lastUser = nonSystemMessages.filter(m => m.role === 'user').pop();
+    return lastUser ? [...systemMessages, lastUser] : systemMessages;
+  }
+
+  return messages;
+}
 
 /**
  * POST /api/skills/start
@@ -296,11 +420,21 @@ router.post('/start', async (req, res) => {
     });
 
     // Call AI
-    const aiContent = await callSkillAI(messages);
-    const parsed = parseSkillResponse(aiContent);
+    const aiContent = await callSkillAI(filterMessagesForAI(messages, skill.historyMode, skill.historyMax));
+    let parsed = parseSkillResponse(aiContent);
 
-    // Add assistant message to history
-    messages.push({ role: 'assistant', content: parsed.content });
+    // Handle GET-FILE immediately (server-side, no user wait)
+    if (parsed.type === 'GET-FILE') {
+      const fileResult = await handleGetFile({ terminalSessionId, skillSource }, parsed.path);
+      const userContent = `${fileResult}\n\n[Step 1 of 100]`;
+      messages.push({ role: 'user', content: userContent });
+      const nextAi = await callSkillAI(filterMessagesForAI(messages, skill.historyMode, skill.historyMax));
+      parsed = parseSkillResponse(nextAi);
+      messages.push({ role: 'assistant', content: parsed.content });
+    } else {
+      // Add assistant message to history
+      messages.push({ role: 'assistant', content: parsed.content });
+    }
 
     // Логируем ответ AI (с полным контекстом)
     if (parsed.type === 'CMD') {
@@ -402,6 +536,9 @@ router.post('/start', async (req, res) => {
       serverName,
       skillName: activeSkillName,
       skillDescription: skill.description || '',
+      skillSource,  // 'project' or 'remote'
+      historyMode: skill.historyMode || 'full',
+      historyMax: skill.historyMax || 10,
       messages,
       step: 1,
       maxSteps: 100,
@@ -508,11 +645,21 @@ router.post('/:skillSessionId/message', async (req, res) => {
       serverName: session.serverName
     });
 
-    const aiContent = await callSkillAI(session.messages);
-    const parsed = parseSkillResponse(aiContent);
+    const aiContent = await callSkillAI(filterMessagesForAI(session.messages, session.historyMode, session.historyMax));
+    let parsed = parseSkillResponse(aiContent);
 
-    // Add assistant message
-    session.messages.push({ role: 'assistant', content: parsed.content });
+    // Handle GET-FILE immediately (server-side, no user wait)
+    if (parsed.type === 'GET-FILE') {
+      const fileResult = await handleGetFile(session, parsed.path);
+      const userContent = `${fileResult}\n\n[Step ${session.step} of ${session.maxSteps}]`;
+      session.messages.push({ role: 'user', content: userContent });
+      const nextAi = await callSkillAI(filterMessagesForAI(session.messages, session.historyMode, session.historyMax));
+      parsed = parseSkillResponse(nextAi);
+      session.messages.push({ role: 'assistant', content: parsed.content });
+    } else {
+      // Add assistant message
+      session.messages.push({ role: 'assistant', content: parsed.content });
+    }
 
     // Логируем ответ AI (message endpoint)
     if (parsed.type === 'CMD') {
@@ -700,11 +847,21 @@ router.post('/:skillSessionId/command-result', async (req, res) => {
     }
 
     // Call AI
-    const aiContent = await callSkillAI(session.messages);
-    const parsed = parseSkillResponse(aiContent);
+    const aiContent = await callSkillAI(filterMessagesForAI(session.messages, session.historyMode, session.historyMax));
+    let parsed = parseSkillResponse(aiContent);
 
-    // Add assistant message
-    session.messages.push({ role: 'assistant', content: parsed.content });
+    // Handle GET-FILE immediately (server-side, no user wait)
+    if (parsed.type === 'GET-FILE') {
+      const fileResult = await handleGetFile(session, parsed.path);
+      const fileUserContent = `${fileResult}\n\n[Step ${session.step} of ${session.maxSteps}]`;
+      session.messages.push({ role: 'user', content: fileUserContent });
+      const nextAi = await callSkillAI(filterMessagesForAI(session.messages, session.historyMode, session.historyMax));
+      parsed = parseSkillResponse(nextAi);
+      session.messages.push({ role: 'assistant', content: parsed.content });
+    } else {
+      // Add assistant message
+      session.messages.push({ role: 'assistant', content: parsed.content });
+    }
 
     // Логируем ответ AI (command-result endpoint)
     if (parsed.type === 'CMD') {
@@ -894,11 +1051,21 @@ router.post('/:skillSessionId/continue', async (req, res) => {
     logger.info('skills-api', 'Continuing skill after MESSAGE', { skillSessionId, step: session.step });
 
     // Call AI
-    const aiContent = await callSkillAI(session.messages);
-    const parsed = parseSkillResponse(aiContent);
+    const aiContent = await callSkillAI(filterMessagesForAI(session.messages, session.historyMode, session.historyMax));
+    let parsed = parseSkillResponse(aiContent);
 
-    // Add assistant message
-    session.messages.push({ role: 'assistant', content: parsed.content });
+    // Handle GET-FILE immediately (server-side, no user wait)
+    if (parsed.type === 'GET-FILE') {
+      const fileResult = await handleGetFile(session, parsed.path);
+      const fileUserContent = `${fileResult}\n\n[Step ${session.step} of ${session.maxSteps}]`;
+      session.messages.push({ role: 'user', content: fileUserContent });
+      const nextAi = await callSkillAI(filterMessagesForAI(session.messages, session.historyMode, session.historyMax));
+      parsed = parseSkillResponse(nextAi);
+      session.messages.push({ role: 'assistant', content: parsed.content });
+    } else {
+      // Add assistant message
+      session.messages.push({ role: 'assistant', content: parsed.content });
+    }
 
     // Логируем
     if (parsed.type === 'CMD') {

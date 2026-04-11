@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+/* Fix ReactFlow cursor conflict - isolate Panel from flow cursor styles */
+.react-flow__panel {
+  cursor: default !important;
+  pointer-events: auto !important;
+  isolation: isolate;
+}
+
+.react-flow__panel * {
+  cursor: inherit !important;
+}
+
+.react-flow__panel button {
+  cursor: pointer !important;
+}
+
+.react-flow__panel input {
+  cursor: text !important;
+}

@@ -69,17 +69,22 @@ app.get('/api/servers', (req, res) => {
         color: s.color,
         ssh: s.ssh,
         services: Object.entries(s.services).map(([id, sv]) => {
-          // Находим оригинальный сервис из inventory для получения description
+          // Находим оригинальный сервис из inventory для получения доп. полей
           const originalService = server.services.find(svc => svc.id === id);
           return {
             id,
             ...sv,
-            description: originalService?.description || undefined
+            description: originalService?.description || undefined,
+            dependencies: originalService?.dependencies || []
           };
         }),
       };
     });
-  res.json({ ts: snap.ts, servers: list });
+  res.json({ 
+    ts: snap.ts, 
+    servers: list,
+    poll: inventory.poll
+  });
 });
 
 app.get('/api/service-log', (req, res) => {
@@ -779,6 +784,14 @@ app.delete('/api/ws-terminal/command/:commandId', (req, res) => {
 });
 
 // ========== End WS Terminal REST Bridge API ==========
+
+// Dashboard static assets (built React Flow app)
+app.use('/dashboard', express.static(path.join(process.cwd(), 'web', 'dashboard', 'dist')));
+
+// Flow Dashboard page route
+app.get('/flow', (req, res) => {
+  res.sendFile(path.join(process.cwd(), 'web', 'dashboard', 'dist', 'index.html'));
+});
 
 // Главная страница — без кэша, чтобы всегда подхватывать актуальную ссылку на Настройки
 app.get('/', (req, res, next) => {
