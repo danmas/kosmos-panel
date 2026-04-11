@@ -332,20 +332,31 @@ function splitPane(paneId, direction) {
     const handle = document.createElement('div');
     handle.className = direction === 'vertical' ? 'ws-split-handle-v' : 'ws-split-handle-h';
 
+    // Copy previous inline styles to the new split container so it maintains its size in the parent
+    splitContainer.style.cssText = pane.container.style.cssText;
+
     // Replace old pane with split container
     parent.replaceChild(splitContainer, pane.container);
 
     // Put old pane and handle and new pane into split
-    pane.container.style.flex = '0 0 50%';
+    pane.container.style.flexGrow = '50';
+    pane.container.style.flexShrink = '50';
+    pane.container.style.flexBasis = '0%';
+    pane.container.style.width = '';
+    pane.container.style.height = '';
     splitContainer.appendChild(pane.container);
     splitContainer.appendChild(handle);
 
     // Create new pane
     const newPane = createPane(splitContainer);
-    newPane.container.style.flex = '0 0 50%';
+    newPane.container.style.flexGrow = '50';
+    newPane.container.style.flexShrink = '50';
+    newPane.container.style.flexBasis = '0%';
+    newPane.container.style.width = '';
+    newPane.container.style.height = '';
 
     // Setup drag handle
-    setupSplitDrag(handle, direction, pane.container, newPane.container, splitContainer);
+    setupSplitDrag(handle, direction, splitContainer);
 
     // Fit both after DOM settles
     setTimeout(() => {
@@ -401,15 +412,28 @@ function closePane(paneId) {
 
 // ========== Split Drag Handle ==========
 
-function setupSplitDrag(handle, direction, firstEl, secondEl, splitContainer) {
+function setupSplitDrag(handle, direction, splitContainer) {
     let dragging = false;
     let startPos = 0;
     let containerSize = 0;
     let startFirstPx = 0;
-    const handleSize = direction === 'vertical' ? 5 : 5; // handle width/height in px
+    const handleSize = 5; // handle width/height in px
+    let firstEl = null;
+    let secondEl = null;
 
     handle.addEventListener('mousedown', (e) => {
         e.preventDefault();
+        
+        // Dynamically find siblings every time because panes can be replaced by nested splits
+        const children = Array.from(splitContainer.children);
+        const handleIndex = children.indexOf(handle);
+        if (handleIndex > 0 && handleIndex < children.length - 1) {
+            firstEl = children[handleIndex - 1];
+            secondEl = children[handleIndex + 1];
+        } else {
+            return;
+        }
+
         dragging = true;
         handle.classList.add('active');
         document.body.classList.add('ws-split-dragging');
@@ -438,8 +462,23 @@ function setupSplitDrag(handle, direction, firstEl, secondEl, splitContainer) {
         newFirstPx = Math.max(minPx, Math.min(containerSize - minPx, newFirstPx));
         const newSecondPx = containerSize - newFirstPx;
 
-        firstEl.style.flex = `0 0 ${newFirstPx}px`;
-        secondEl.style.flex = `0 0 ${newSecondPx}px`;
+        const firstPct = (newFirstPx / containerSize) * 100;
+        const secondPct = (newSecondPx / containerSize) * 100;
+
+        // Use flex-grow proportional sizing
+        firstEl.style.flexGrow = firstPct;
+        firstEl.style.flexShrink = firstPct;
+        firstEl.style.flexBasis = '0%';
+        
+        secondEl.style.flexGrow = secondPct;
+        secondEl.style.flexShrink = secondPct;
+        secondEl.style.flexBasis = '0%';
+        
+        // Ensure flex-direction dimensions don't fight with legacy inline styles
+        firstEl.style.width = '';
+        firstEl.style.height = '';
+        secondEl.style.width = '';
+        secondEl.style.height = '';
     });
 
     document.addEventListener('mouseup', () => {

@@ -1492,6 +1492,7 @@ body {
   min-height: 80px;
   position: relative;
   overflow: hidden;
+  align-items: stretch;
 }
 
 .ws-pane.active .ws-pane-toolbar {
@@ -1563,14 +1564,29 @@ body {
   display: flex;
   flex: 1;
   overflow: hidden;
+  align-items: stretch;
+  justify-content: stretch;
+  align-content: stretch;
 }
 
 .ws-split-vertical {
   flex-direction: row;
 }
 
+.ws-split-vertical > .ws-pane,
+.ws-split-vertical > .ws-split,
+.ws-split-vertical > .ws-split-handle-v {
+  height: 100%;
+}
+
 .ws-split-horizontal {
   flex-direction: column;
+}
+
+.ws-split-horizontal > .ws-pane,
+.ws-split-horizontal > .ws-split,
+.ws-split-horizontal > .ws-split-handle-h {
+  width: 100%;
 }
 
 /* Split drag handles */
