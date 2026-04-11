@@ -392,7 +392,10 @@ function closePane(paneId) {
         }
 
         if (sibling) {
-            sibling.style.flex = '1';
+            // Keep the sizing footprint of the splitContainer we are removing!
+            // This prevents outer global borders from shifting when a nested pane is closed.
+            sibling.style.cssText = splitContainer.style.cssText;
+            
             // Replace split container with sibling
             splitContainer.parentNode.replaceChild(sibling, splitContainer);
         }
