@@ -534,6 +534,23 @@ document.getElementById('wsClose').onclick = () => {
 };
 document.getElementById('wsFit').onclick = () => fitAllPanes();
 document.getElementById('wsReconnect').onclick = () => location.reload();
+
+let sidebarVisible = true;
+document.getElementById('wsToggleSidebar').onclick = () => {
+    sidebarVisible = !sidebarVisible;
+    const dragV = document.getElementById('wsDragV');
+    if (sidebarVisible) {
+        document.getElementById('wsLeft').style.display = '';
+        dragV.style.display = '';
+        document.getElementById('wsToggleSidebar').textContent = '◀';
+    } else {
+        document.getElementById('wsLeft').style.display = 'none';
+        dragV.style.display = 'none';
+        document.getElementById('wsToggleSidebar').textContent = '▶';
+    }
+    setTimeout(fitAllPanes, 50);
+};
+
 document.getElementById('wsSplitV').onclick = () => { if (activePane) splitPane(activePane.id, 'vertical'); };
 document.getElementById('wsSplitH').onclick = () => { if (activePane) splitPane(activePane.id, 'horizontal'); };
 
