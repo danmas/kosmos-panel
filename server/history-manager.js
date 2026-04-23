@@ -64,14 +64,14 @@ class HistoryManager {
   }
 
   /**
-   * Фильтрация: вернуть команды начинающиеся с prefix (case-insensitive)
+   * Фильтрация: вернуть команды содержащие prefix (case-insensitive substring match)
    * Если prefix пустой — вернуть всё. Порядок: новые первые (как в файле)
    */
   async getMatches(prefix) {
     const history = await this.loadHistory();
     if (!prefix || !prefix.trim()) return history;
     const lowerPrefix = prefix.toLowerCase();
-    return history.filter(cmd => cmd.toLowerCase().startsWith(lowerPrefix));
+    return history.filter(cmd => cmd.toLowerCase().includes(lowerPrefix));
   }
 }
 

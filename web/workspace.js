@@ -88,6 +88,7 @@ class HistoryPopup {
 
     onHistoryData(commands) {
         this.commands = commands || [];
+        console.log('[historyPopup] onHistoryData received', commands.length, 'commands');
         this._applyFilter();
         this.selectedIndex = 0;
         this.render();
@@ -100,6 +101,7 @@ class HistoryPopup {
             const lowerPrefix = this.inputBuffer.toLowerCase();
             this.filtered = this.commands.filter(c => c.toLowerCase().includes(lowerPrefix));
         }
+        console.log('[historyPopup] filter:', JSON.stringify(this.inputBuffer), '| matched:', this.filtered.length, 'of', this.commands.length);
     }
 
     render() {
@@ -108,24 +110,37 @@ class HistoryPopup {
         if (!listEl) return;
         listEl.innerHTML = '';
 
-        if (this.filtered.length === 0) {
+        if (this.filtered.length === 0 && this.commands.length === 0) {
             const empty = document.createElement('div');
             empty.className = 'history-popup-empty';
-            empty.textContent = this.commands.length === 0 ? 'Loading...' : 'No matches';
+            empty.textContent = 'Loading...';
             listEl.appendChild(empty);
             return;
         }
 
+        // Первая строка — пустая (выполнить введенную команду)
+        const emptyItem = document.createElement('div');
+        emptyItem.className = 'history-popup-item history-popup-item-empty' + (this.selectedIndex === 0 ? ' selected' : '');
+        emptyItem.innerHTML = '&nbsp;';
+        emptyItem.addEventListener('click', () => {
+            this.hide();
+        });
+        emptyItem.addEventListener('mouseenter', () => {
+            this.selectedIndex = 0;
+            this.render();
+        });
+        listEl.appendChild(emptyItem);
+
         this.filtered.forEach((cmd, idx) => {
             const item = document.createElement('div');
-            item.className = 'history-popup-item' + (idx === this.selectedIndex ? ' selected' : '');
+            item.className = 'history-popup-item' + ((idx + 1) === this.selectedIndex ? ' selected' : '');
             item.textContent = cmd;
             item.addEventListener('click', () => {
-                this.selectedIndex = idx;
+                this.selectedIndex = idx + 1;
                 this.selectCurrent();
             });
             item.addEventListener('mouseenter', () => {
-                this.selectedIndex = idx;
+                this.selectedIndex = idx + 1;
                 this.render();
             });
             listEl.appendChild(item);
@@ -137,30 +152,37 @@ class HistoryPopup {
     }
 
     moveSelection(delta) {
-        if (this.filtered.length === 0) return;
-        this.selectedIndex = (this.selectedIndex + delta + this.filtered.length) % this.filtered.length;
+        const totalItems = this.filtered.length + 1; // +1 для пустой строки
+        this.selectedIndex = (this.selectedIndex + delta + totalItems) % totalItems;
         this.render();
     }
 
     selectCurrent() {
-        if (this.filtered.length === 0 || !this.currentPane) {
+        if (!this.currentPane) {
             this.hide();
             return;
         }
-        const selectedCommand = this.filtered[this.selectedIndex];
+        // Пустая строка (index 0) — просто закрыть popup, Enter handler выполнит введенную команду
+        if (this.selectedIndex === 0 || this.filtered.length === 0) {
+            this.hide();
+            return 'empty'; // сигнал что нужно выполнить введенную команду
+        }
+        const selectedCommand = this.filtered[this.selectedIndex - 1]; // -1 из-за пустой строки
         const pane = this.currentPane;
         this.hide();
 
-        // Обновляем inputBuffer на выбранную команду
-        pane._inputBuffer = selectedCommand;
+        console.log('[selectCurrent] executing:', JSON.stringify(selectedCommand));
 
-        // Clear current input line (Ctrl+U) then type the command
+        // Отправляем команду в историю и выполняем
         try {
-            pane.ws.send(JSON.stringify({ type: 'data', data: '\x15' }));
+            pane.ws.send(JSON.stringify({ type: 'command_log', command: selectedCommand }));
+            pane.ws.send(JSON.stringify({ type: 'data', data: '\x15' })); // Ctrl+U clear line
             pane.ws.send(JSON.stringify({ type: 'data', data: selectedCommand }));
+            pane.ws.send(JSON.stringify({ type: 'data', data: '\r' })); // Execute
         } catch (e) {
-            console.error('[HistoryPopup] Failed to insert command:', e);
+            console.error('[HistoryPopup] Failed to execute command:', e);
         }
+        return 'history';
     }
 
     updateFilter(char) {
@@ -401,7 +423,8 @@ function createPane(parentContainer) {
     term.onData(d => {
         // Отслеживаем ввод для надёжного логирования команд
         if (d === '\r') {
-            // Enter — буфер будет обработан в attachKeyHandler
+            // Enter — сохраняем буфер для Enter handler, НЕ очищаем здесь
+            // (Enter handler сам очистит после отправки command_log)
         } else if (d === '\x7f' || d === '\b') {
             // Backspace
             pane._inputBuffer = pane._inputBuffer.slice(0, -1);
@@ -422,6 +445,7 @@ function createPane(parentContainer) {
             pane._inputBuffer += d;
         }
         // else: escape-последовательности (стрелки, etc) — игнорируем
+        console.log('[onData] char:', JSON.stringify(d), '| buffer:', JSON.stringify(pane._inputBuffer));
         try { ws.send(JSON.stringify({ type: 'data', data: d })); } catch { }
     });
 
@@ -502,19 +526,77 @@ function handlePaneWsMessage(pane, m) {
 /** Attach keyboard handler to a pane's terminal */
 function attachKeyHandler(pane) {
     pane.term.attachCustomKeyEventHandler((arg) => {
-        // ========== History Popup keyboard handling ==========
-        if (historyPopup.visible) {
-            if (arg.type === 'keydown') {
-                if (arg.code === 'ArrowUp') { historyPopup.moveSelection(-1); return false; }
-                if (arg.code === 'ArrowDown') { historyPopup.moveSelection(1); return false; }
-                if (arg.code === 'Enter') { historyPopup.selectCurrent(); return false; }
-                if (arg.code === 'Escape') { historyPopup.hide(); return false; }
-            }
-            // Allow typing to pass through to terminal while popup is visible
-            return true;
+        // ========== History Popup: стрелки и Escape ==========
+        if (historyPopup.visible && arg.type === 'keydown') {
+            if (arg.code === 'ArrowUp') { historyPopup.moveSelection(-1); return false; }
+            if (arg.code === 'ArrowDown') { historyPopup.moveSelection(1); return false; }
+            if (arg.code === 'Escape') { historyPopup.hide(); return false; }
         }
 
-        // Auto-show history popup on typing
+        // ========== Enter: ЕДИНЫЙ обработчик (popup + обычный ввод) ==========
+        if (arg.code === 'Enter' && arg.type === 'keydown') {
+            // Если popup виден и выбрана команда из истории (index > 0)
+            if (historyPopup.visible) {
+                const result = historyPopup.selectCurrent();
+                if (result === 'history') {
+                    // Команда из истории — selectCurrent уже отправил command_log + выполнил
+                    pane._inputBuffer = '';
+                    return false;
+                }
+                // result === 'empty' — пустая строка, продолжаем к выполнению введенной команды
+            }
+
+            // Сохранение команды через inputBuffer
+            const inputCmd = pane._inputBuffer.replace(/\r/g, '').trim();
+            pane._inputBuffer = ''; // Сброс буфера
+            console.log('[Enter] inputBuffer cmd:', JSON.stringify(inputCmd));
+            if (inputCmd) {
+                pane.ws.send(JSON.stringify({ type: 'command_log', command: inputCmd }));
+            }
+
+            // Проверка skill/AI команд
+            if (inputCmd) {
+                if (inputCmd === 'skill:skip') {
+                    clearTerminalLine();
+                    pane.term.writeln('\r\n\x1b[1;33m[Skill] Команда пропущена\x1b[0m');
+                    skillSkipCommand();
+                    return false;
+                }
+                if (inputCmd === 'skill:cancel') {
+                    clearTerminalLine();
+                    pane.term.writeln('\r\n\x1b[1;31m[Skill] Отменён\x1b[0m');
+                    skillCancel();
+                    return false;
+                }
+                if (skillDialogState.state === 'waiting_cmd' && skillDialogState.paneId === pane.id) {
+                    skillDialogState.commandMatched = true;
+                    setTimeout(() => onSkillCommandExecuted(), 2000);
+                }
+                const skillMatch = inputCmd.match(/^skill\s*:\s*(\S+)(.*)$/i);
+                if (skillMatch) {
+                    const skillName = skillMatch[1].trim();
+                    const skillPrompt = (skillMatch[2] || '').trim();
+                    clearTerminalLine();
+                    launchSkillFromTerminal(skillName, skillPrompt);
+                    return false;
+                }
+                const prefixText = aiCommandPrefix.slice(0, -1);
+                const prefixSep = aiCommandPrefix.slice(-1);
+                const commandRegex = new RegExp(`(${prefixText}\\s*${prefixSep})`);
+                const match = inputCmd.match(commandRegex);
+                if (match) {
+                    const aiPrompt = inputCmd.substring(match.index + match[0].length).trim();
+                    setTimeout(() => {
+                        pane.term.writeln(`\r\n\x1b[1;33m[AI] Запрос: ${aiPrompt}\x1b[0m`);
+                    }, 50);
+                    pane.ws.send(JSON.stringify({ type: 'ai_query', prompt: inputCmd }));
+                    return true;
+                }
+            }
+            return true; // Разрешаем Enter пройти в терминал
+        }
+
+        // ========== Auto-show history popup on typing ==========
         if (arg.type === 'keydown' && !arg.ctrlKey && !arg.altKey && !arg.metaKey) {
             const skipKeys = ['Enter', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
                 'Tab', 'Shift', 'Control', 'Alt', 'Meta', 'CapsLock',
@@ -541,67 +623,6 @@ function attachKeyHandler(pane) {
             }
         }
 
-        if (arg.code === 'Enter' && arg.type === 'keydown') {
-            historyPopup.hide();
-
-            // Надёжное сохранение через inputBuffer (отслеживает реальный ввод пользователя)
-            const inputCmd = pane._inputBuffer.trim();
-            pane._inputBuffer = ''; // Сброс буфера
-            console.log('[Enter] inputBuffer cmd:', JSON.stringify(inputCmd));
-            if (inputCmd) {
-                pane.ws.send(JSON.stringify({ type: 'command_log', command: inputCmd }));
-            }
-
-            // Проверка skill/AI команд через inputCmd (не нужен парсинг буфера)
-            if (inputCmd) {
-                // skill:skip
-                if (inputCmd === 'skill:skip') {
-                    clearTerminalLine();
-                    pane.term.writeln('\r\n\x1b[1;33m[Skill] Команда пропущена\x1b[0m');
-                    skillSkipCommand();
-                    return false;
-                }
-            
-                // skill:cancel
-                if (inputCmd === 'skill:cancel') {
-                    clearTerminalLine();
-                    pane.term.writeln('\r\n\x1b[1;31m[Skill] Отменён\x1b[0m');
-                    skillCancel();
-                    return false;
-                }
-            
-                // Skill: command execution tracking
-                if (skillDialogState.state === 'waiting_cmd' && skillDialogState.paneId === pane.id) {
-                    skillDialogState.commandMatched = true;
-                    setTimeout(() => onSkillCommandExecuted(), 2000);
-                }
-            
-                // Skill command check: skill: <name> <prompt>
-                const skillMatch = inputCmd.match(/^skill\s*:\s*(\S+)(.*)$/i);
-                if (skillMatch) {
-                    const skillName = skillMatch[1].trim();
-                    const skillPrompt = (skillMatch[2] || '').trim();
-                    clearTerminalLine();
-                    launchSkillFromTerminal(skillName, skillPrompt);
-                    return false;
-                }
-            
-                // AI command check
-                const prefixText = aiCommandPrefix.slice(0, -1);
-                const prefixSep = aiCommandPrefix.slice(-1);
-                const commandRegex = new RegExp(`(${prefixText}\\s*${prefixSep})`);
-                const match = inputCmd.match(commandRegex);
-            
-                if (match) {
-                    const aiPrompt = inputCmd.substring(match.index + match[0].length).trim();
-                    setTimeout(() => {
-                        pane.term.writeln(`\r\n\x1b[1;33m[AI] Запрос: ${aiPrompt}\x1b[0m`);
-                    }, 50);
-                    pane.ws.send(JSON.stringify({ type: 'ai_query', prompt: inputCmd }));
-                    return true;
-                }
-            }
-        }
         return true;
     });
 }
