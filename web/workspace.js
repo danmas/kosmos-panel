@@ -548,10 +548,13 @@ function attachKeyHandler(pane) {
         if (arg.code === 'Enter' && arg.type === 'keydown') {
             historyPopup.hide();
 
-            // Сохранение команды через inputBuffer
-            const inputCmd = pane._inputBuffer.replace(/\r/g, '').trim();
+            // Предпочитаем фактическую строку терминала (учитывает TAB-completion)
+            // Fallback на _inputBuffer если промпт не распознан
+            const termLine = getCurrentInput(pane);
+            const bufferCmd = pane._inputBuffer.replace(/\r/g, '').trim();
+            const inputCmd = termLine || bufferCmd;
             pane._inputBuffer = ''; // Сброс буфера
-            console.log('[Enter] inputBuffer cmd:', JSON.stringify(inputCmd));
+            console.log('[Enter] termLine:', JSON.stringify(termLine), '| buffer:', JSON.stringify(bufferCmd), '| cmd:', JSON.stringify(inputCmd));
             if (inputCmd) {
                 pane.ws.send(JSON.stringify({ type: 'command_log', command: inputCmd }));
             }

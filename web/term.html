@@ -1659,9 +1659,12 @@ description: Описание skill
         if (arg.code === 'Enter' && arg.type === 'keydown') {
           historyPopup.hide();
 
-          const inputCmd = _termInputBuffer.replace(/\r/g, '').trim();
+          // Предпочитаем фактическую строку терминала (учитывает TAB-completion)
+          const termLine = getCurrentInput();
+          const bufferCmd = _termInputBuffer.replace(/\r/g, '').trim();
+          const inputCmd = termLine || bufferCmd;
           _termInputBuffer = '';
-          console.log('[Enter] termInputBuffer cmd:', JSON.stringify(inputCmd));
+          console.log('[Enter] termLine:', JSON.stringify(termLine), '| buffer:', JSON.stringify(bufferCmd), '| cmd:', JSON.stringify(inputCmd));
           if (inputCmd) {
             ws.send(JSON.stringify({ type: 'command_log', command: inputCmd }));
           }
