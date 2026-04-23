@@ -1375,6 +1375,7 @@ description: Описание skill
         const newPrefix = prefix || '';
         if (this.visible && this.overlay && this.inputBuffer === newPrefix) return;
         this.inputBuffer = newPrefix;
+        this.originalInput = newPrefix;
         if (!this.visible || !this.overlay) {
           this.commands = [];
           this.filtered = [];
@@ -1461,26 +1462,27 @@ description: Описание skill
         const totalItems = this.filtered.length + 1;
         this.selectedIndex = (this.selectedIndex + delta + totalItems) % totalItems;
         this.render();
+        this._insertSelectedToInput();
+      }
+
+      _insertSelectedToInput() {
+        if (!ws) return;
+        let text;
+        if (this.selectedIndex === 0) {
+          text = this.originalInput || '';
+        } else {
+          text = this.filtered[this.selectedIndex - 1] || '';
+        }
+        try {
+          ws.send(JSON.stringify({ type: 'data', data: '\x15' }));
+          if (text) ws.send(JSON.stringify({ type: 'data', data: text }));
+        } catch (e) {}
+        _termInputBuffer = text;
       }
 
       selectCurrent() {
-        if (!ws) { this.hide(); return; }
-        if (this.selectedIndex === 0 || this.filtered.length === 0) {
-          this.hide();
-          return 'empty';
-        }
-        const selectedCommand = this.filtered[this.selectedIndex - 1];
         this.hide();
-
-        try {
-          ws.send(JSON.stringify({ type: 'command_log', command: selectedCommand }));
-          ws.send(JSON.stringify({ type: 'data', data: '\x15' }));
-          ws.send(JSON.stringify({ type: 'data', data: selectedCommand }));
-          ws.send(JSON.stringify({ type: 'data', data: '\r' }));
-        } catch (e) {
-          console.error('[HistoryPopup] Failed to execute command:', e);
-        }
-        return 'history';
+        return 'empty';
       }
 
       _createOverlay() {
@@ -1655,14 +1657,7 @@ description: Описание skill
 
         // ========== Enter: ЕДИНЫЙ обработчик ==========
         if (arg.code === 'Enter' && arg.type === 'keydown') {
-          if (historyPopup.visible) {
-            const result = historyPopup.selectCurrent();
-            if (result === 'history') {
-              _termInputBuffer = '';
-              return false;
-            }
-            // 'empty' — пустая строка, продолжаем к выполнению введенной команды
-          }
+          historyPopup.hide();
 
           const inputCmd = _termInputBuffer.replace(/\r/g, '').trim();
           _termInputBuffer = '';

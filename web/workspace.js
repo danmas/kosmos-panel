@@ -50,6 +50,7 @@ class HistoryPopup {
         // If already visible with same prefix — skip redundant request
         if (this.visible && this.overlay && this.inputBuffer === newPrefix) return;
         this.inputBuffer = newPrefix;
+        this.originalInput = newPrefix; // Сохраняем оригинальный ввод
         if (!this.visible || !this.overlay) {
             this.commands = [];
             this.filtered = [];
@@ -155,34 +156,44 @@ class HistoryPopup {
         const totalItems = this.filtered.length + 1; // +1 для пустой строки
         this.selectedIndex = (this.selectedIndex + delta + totalItems) % totalItems;
         this.render();
+        this._insertSelectedToInput();
+    }
+
+    /** Вставляет выбранную команду в строку ввода терминала */
+    _insertSelectedToInput() {
+        const pane = this.currentPane;
+        if (!pane || !pane.ws) return;
+
+        let text;
+        if (this.selectedIndex === 0) {
+            // Пустая строка — восстановить оригинальный ввод
+            text = this.originalInput || '';
+        } else {
+            text = this.filtered[this.selectedIndex - 1] || '';
+        }
+
+        try {
+            pane.ws.send(JSON.stringify({ type: 'data', data: '\x15' })); // Ctrl+U clear line
+            if (text) {
+                pane.ws.send(JSON.stringify({ type: 'data', data: text }));
+            }
+        } catch (e) {
+            console.error('[HistoryPopup] _insertSelectedToInput error:', e);
+        }
+        // Обновляем inputBuffer чтобы onData и Enter знали текущий текст
+        pane._inputBuffer = text;
     }
 
     selectCurrent() {
         if (!this.currentPane) {
             this.hide();
-            return;
+            return 'empty';
         }
-        // Пустая строка (index 0) — просто закрыть popup, Enter handler выполнит введенную команду
-        if (this.selectedIndex === 0 || this.filtered.length === 0) {
-            this.hide();
-            return 'empty'; // сигнал что нужно выполнить введенную команду
-        }
-        const selectedCommand = this.filtered[this.selectedIndex - 1]; // -1 из-за пустой строки
-        const pane = this.currentPane;
+        // Пустая строка (index 0) или нет результатов — закрыть popup
+        // Текст уже в командной строке (либо оригинальный, либо выбранный через стрелки)
+        // Enter handler ниже выполнит то что в _inputBuffer
         this.hide();
-
-        console.log('[selectCurrent] executing:', JSON.stringify(selectedCommand));
-
-        // Отправляем команду в историю и выполняем
-        try {
-            pane.ws.send(JSON.stringify({ type: 'command_log', command: selectedCommand }));
-            pane.ws.send(JSON.stringify({ type: 'data', data: '\x15' })); // Ctrl+U clear line
-            pane.ws.send(JSON.stringify({ type: 'data', data: selectedCommand }));
-            pane.ws.send(JSON.stringify({ type: 'data', data: '\r' })); // Execute
-        } catch (e) {
-            console.error('[HistoryPopup] Failed to execute command:', e);
-        }
-        return 'history';
+        return 'empty';
     }
 
     updateFilter(char) {
@@ -535,16 +546,7 @@ function attachKeyHandler(pane) {
 
         // ========== Enter: ЕДИНЫЙ обработчик (popup + обычный ввод) ==========
         if (arg.code === 'Enter' && arg.type === 'keydown') {
-            // Если popup виден и выбрана команда из истории (index > 0)
-            if (historyPopup.visible) {
-                const result = historyPopup.selectCurrent();
-                if (result === 'history') {
-                    // Команда из истории — selectCurrent уже отправил command_log + выполнил
-                    pane._inputBuffer = '';
-                    return false;
-                }
-                // result === 'empty' — пустая строка, продолжаем к выполнению введенной команды
-            }
+            historyPopup.hide();
 
             // Сохранение команды через inputBuffer
             const inputCmd = pane._inputBuffer.replace(/\r/g, '').trim();
