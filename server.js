@@ -356,9 +356,53 @@ app.get('/api/test-ssh', async (req, res) => {
 app.get('/api/logs', async (req, res) => {
   const logFilePath = path.join(__dirname, 'logs', 'terminal', 'terminal_log.json');
   const sessionId = req.query.sessionId;
+  const MAX_LOG_FILE_SIZE = 10 * 1024 * 1024; // 10MB limit
   try {
-    const data = await fs.readFile(logFilePath, 'utf8');
-    let logs = JSON.parse(data);
+    // Check file size before reading to avoid OOM on huge files
+    let stats;
+    try {
+      stats = await fs.stat(logFilePath);
+    } catch (statErr) {
+      if (statErr.code === 'ENOENT') return res.json([]);
+      throw statErr;
+    }
+
+    let data;
+    if (stats.size > MAX_LOG_FILE_SIZE) {
+      // File too large — read only the tail portion
+      const fd = await fs.open(logFilePath, 'r');
+      const readSize = MAX_LOG_FILE_SIZE;
+      const buffer = Buffer.alloc(readSize);
+      await fd.read(buffer, 0, readSize, stats.size - readSize);
+      await fd.close();
+      let raw = buffer.toString('utf8');
+      // Find the start of the first complete JSON object in the truncated chunk
+      const firstBracket = raw.indexOf('[');
+      if (firstBracket === -1) {
+        // Try to find array items — wrap them
+        const firstObj = raw.indexOf('{');
+        if (firstObj > 0) raw = '[' + raw.slice(firstObj);
+        // Ensure trailing bracket
+        const lastClose = raw.lastIndexOf('}');
+        if (lastClose !== -1) raw = raw.slice(0, lastClose + 1) + ']';
+      }
+      data = raw;
+    } else {
+      data = await fs.readFile(logFilePath, 'utf8');
+    }
+
+    let logs;
+    try {
+      logs = JSON.parse(data);
+    } catch (parseErr) {
+      logger.error('api', 'JSON parse error in terminal_log.json, returning empty', { error: parseErr.message, fileSize: stats.size });
+      return res.json([]);
+    }
+
+    if (!Array.isArray(logs)) {
+      logger.error('api', 'terminal_log.json is not an array, returning empty', { type: typeof logs });
+      return res.json([]);
+    }
 
     // Фильтрация по sessionId если указан
     if (sessionId) {
@@ -371,7 +415,7 @@ app.get('/api/logs', async (req, res) => {
       return res.json([]); // Файл не найден, это нормально. Отдаем пустой массив.
     }
     logger.error('api', 'Error reading or parsing log file', { error: err.message });
-    res.status(500).json({ error: 'Failed to read or parse log file' });
+    res.json([]); // Return empty array instead of 500 to avoid client-side crash
   }
 });
 

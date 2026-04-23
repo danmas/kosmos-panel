@@ -11,6 +11,56 @@
     <link rel="stylesheet" href="./themes.css" />
     <link rel="stylesheet" href="./workspace.css" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <style>
+        /* ========== History Popup (Far Manager Style) ========== */
+        .history-popup {
+            position: absolute;
+            z-index: 1000;
+            background: #1a1a2e;
+            border: 2px solid #00d4ff;
+            border-radius: 4px;
+            color: #e0e0e0;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            min-width: 300px;
+            max-width: 600px;
+            max-height: 300px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+        .history-popup-title {
+            text-align: center;
+            padding: 4px 8px;
+            background: #16213e;
+            border-bottom: 1px solid #00d4ff;
+            color: #00d4ff;
+            font-weight: bold;
+        }
+        .history-popup-list {
+            max-height: 260px;
+            overflow-y: auto;
+        }
+        .history-popup-item {
+            padding: 3px 10px;
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .history-popup-item:hover {
+            background: #1f3460;
+        }
+        .history-popup-item.selected {
+            background: #0a4d8c;
+            color: #ffffff;
+        }
+        .history-popup-empty {
+            padding: 10px;
+            text-align: center;
+            color: #666;
+            font-style: italic;
+        }
+    </style>
 </head>
 
 <body>

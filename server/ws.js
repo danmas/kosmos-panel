@@ -8,6 +8,7 @@ const { findServer, resolvePrivateKey } = require('./ws-utils');
 const logger = require('./logger');
 const { getPrompt } = require('./prompts');
 const { buildSkillSystemPrompt, buildInitialUserPrompt, parseSkillResponse, getRemoteKnowledge, cleanOutputForAI } = require('./skill-ai');
+const historyManager = require('./history-manager');
 
 // Lazy load skills module to avoid circular dependency
 let skillsModule = null;
@@ -594,6 +595,11 @@ function handleTerminal(ws, url) {
             } else if (type === 'close') {
               stream.end();
             } else if (type === 'command_log' && command) {
+              // Фильтруем мусорные команды (например, имена папок из dir/ls)
+              const cmd = command.trim();
+              if (!cmd) return;
+              // Пропускаем слишком короткие команды из одного символа (кроме спецкоманд) и очевидный мусор
+              if (cmd.length < 2 && !/^[a-zA-Z]$/.test(cmd)) return;
               // Записываем команду в лог
               const stdinId = uuidv4();
               const logEntry = {
@@ -613,6 +619,15 @@ function handleTerminal(ws, url) {
 
               currentStdinId = stdinId; // Сохраняем для связи с stdout
               appendToLog(logEntry);
+              logger.info('history', 'Saving command to history', { command });
+              historyManager.saveCommand(command);
+            } else if (type === 'history_get') {
+              const prefix = obj.prefix || '';
+              const matches = await historyManager.getMatches(prefix);
+              ws.send(JSON.stringify({
+                type: 'history_data',
+                commands: matches.slice(0, 50)
+              }));
             } else if (type === 'command_result' && obj.commandId) {
               // Обработка результата команды от клиента (REST bridge)
               const cmd = pendingCommands[obj.commandId];

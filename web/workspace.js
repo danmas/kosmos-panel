@@ -32,6 +32,230 @@ const panes = new Map();
 const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
 const promptRegex = /\w+@[\w\-\.]+[^$#>]*[\$#>]\s*$/;
 
+// ========== History Popup (Far Manager Style) ==========
+class HistoryPopup {
+    constructor() {
+        this.overlay = null;
+        this.commands = [];
+        this.filtered = [];
+        this.selectedIndex = 0;
+        this.visible = false;
+        this.currentPane = null;
+        this.inputBuffer = '';
+    }
+
+    show(pane, prefix) {
+        this.currentPane = pane;
+        const newPrefix = prefix || '';
+        // If already visible with same prefix — skip redundant request
+        if (this.visible && this.overlay && this.inputBuffer === newPrefix) return;
+        this.inputBuffer = newPrefix;
+        if (!this.visible || !this.overlay) {
+            this.commands = [];
+            this.filtered = [];
+            this.selectedIndex = 0;
+            this.visible = true;
+            this._createOverlay();
+        } else {
+            // Update title with new filter
+            const titleEl = this.overlay.querySelector('.history-popup-title');
+            if (titleEl) titleEl.textContent = 'History';
+        }
+        this.requestHistory(this.inputBuffer);
+        this.render();
+    }
+
+    hide() {
+        this.visible = false;
+        if (this.overlay && this.overlay.parentNode) {
+            this.overlay.parentNode.removeChild(this.overlay);
+        }
+        this.overlay = null;
+        if (this.currentPane) {
+            this.currentPane.term.focus();
+        }
+        this.currentPane = null;
+    }
+
+    requestHistory(prefix) {
+        if (!this.currentPane || !this.currentPane.ws) return;
+        try {
+            this.currentPane.ws.send(JSON.stringify({ type: 'history_get', prefix: prefix || '' }));
+        } catch (e) {
+            console.error('[HistoryPopup] Failed to request history:', e);
+        }
+    }
+
+    onHistoryData(commands) {
+        this.commands = commands || [];
+        this._applyFilter();
+        this.selectedIndex = 0;
+        this.render();
+    }
+
+    _applyFilter() {
+        if (!this.inputBuffer) {
+            this.filtered = this.commands.slice();
+        } else {
+            const lowerPrefix = this.inputBuffer.toLowerCase();
+            this.filtered = this.commands.filter(c => c.toLowerCase().includes(lowerPrefix));
+        }
+    }
+
+    render() {
+        if (!this.overlay) return;
+        const listEl = this.overlay.querySelector('.history-popup-list');
+        if (!listEl) return;
+        listEl.innerHTML = '';
+
+        if (this.filtered.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'history-popup-empty';
+            empty.textContent = this.commands.length === 0 ? 'Loading...' : 'No matches';
+            listEl.appendChild(empty);
+            return;
+        }
+
+        this.filtered.forEach((cmd, idx) => {
+            const item = document.createElement('div');
+            item.className = 'history-popup-item' + (idx === this.selectedIndex ? ' selected' : '');
+            item.textContent = cmd;
+            item.addEventListener('click', () => {
+                this.selectedIndex = idx;
+                this.selectCurrent();
+            });
+            item.addEventListener('mouseenter', () => {
+                this.selectedIndex = idx;
+                this.render();
+            });
+            listEl.appendChild(item);
+        });
+
+        // Scroll selected into view
+        const selectedEl = listEl.querySelector('.history-popup-item.selected');
+        if (selectedEl) selectedEl.scrollIntoView({ block: 'nearest' });
+    }
+
+    moveSelection(delta) {
+        if (this.filtered.length === 0) return;
+        this.selectedIndex = (this.selectedIndex + delta + this.filtered.length) % this.filtered.length;
+        this.render();
+    }
+
+    selectCurrent() {
+        if (this.filtered.length === 0 || !this.currentPane) {
+            this.hide();
+            return;
+        }
+        const selectedCommand = this.filtered[this.selectedIndex];
+        const pane = this.currentPane;
+        this.hide();
+
+        // Обновляем inputBuffer на выбранную команду
+        pane._inputBuffer = selectedCommand;
+
+        // Clear current input line (Ctrl+U) then type the command
+        try {
+            pane.ws.send(JSON.stringify({ type: 'data', data: '\x15' }));
+            pane.ws.send(JSON.stringify({ type: 'data', data: selectedCommand }));
+        } catch (e) {
+            console.error('[HistoryPopup] Failed to insert command:', e);
+        }
+    }
+
+    updateFilter(char) {
+        this.inputBuffer += char;
+        this._applyFilter();
+        this.selectedIndex = 0;
+        this.render();
+    }
+
+    _createOverlay() {
+        if (this.overlay && this.overlay.parentNode) {
+            this.overlay.parentNode.removeChild(this.overlay);
+        }
+
+        const pane = this.currentPane;
+        if (!pane) return;
+
+        this.overlay = document.createElement('div');
+        this.overlay.className = 'history-popup';
+
+        const title = document.createElement('div');
+        title.className = 'history-popup-title';
+        title.textContent = 'History';
+
+        const list = document.createElement('div');
+        list.className = 'history-popup-list';
+
+        this.overlay.appendChild(title);
+        this.overlay.appendChild(list);
+
+        // Position relative to the terminal pane — above the cursor line
+        const termContainer = pane.termDiv;
+        termContainer.style.position = 'relative';
+        termContainer.appendChild(this.overlay);
+
+        const rect = termContainer.getBoundingClientRect();
+        const popupWidth = Math.min(Math.max(rect.width * 0.6, 300), 600);
+        this.overlay.style.width = popupWidth + 'px';
+        this.overlay.style.left = ((rect.width - popupWidth) / 2) + 'px';
+
+        // Calculate bottom offset so popup sits above the cursor line
+        try {
+            const cursorY = pane.term.buffer.active.cursorY;
+            const cellHeight = pane.term._core._renderService.dimensions.css.cell.height;
+            const popupBottom = rect.height - (cursorY * cellHeight);
+            this.overlay.style.bottom = popupBottom + 'px';
+        } catch (e) {
+            // Fallback: place above the last line
+            this.overlay.style.bottom = '20px';
+        }
+    }
+}
+
+const historyPopup = new HistoryPopup();
+let _historyDebounceTimer = null;
+
+// Регулярки для определения реального промпта (Linux/macOS/Windows)
+// Linux: user@host:path$ или [user@host path]$ или path#
+// Windows: C:\path> или PS C:\path>
+// БЕЗ $ якоря — промпт находится внутри строки, команда идёт после него
+const _promptPatterns = [
+    /(\w+@[\w.\-]+[^$#]*[\$#])\s*/,              // user@host:path$ или user@host path#
+    /([a-zA-Z]:\\[^>]*>)\s*/,                      // C:\Users\roman>
+    /(PS\s+[a-zA-Z]:\\[^>]*>)\s*/,                 // PS C:\Users\roman>
+];
+
+function getCurrentInput(pane) {
+    try {
+        const buffer = pane.term.buffer.active;
+        const cursorLine = buffer.getLine(buffer.baseY + buffer.cursorY);
+        if (!cursorLine) return '';
+        const lineText = cursorLine.translateToString(true);
+
+        // Ищем промпт через паттерны
+        for (const pattern of _promptPatterns) {
+            const m = lineText.match(pattern);
+            if (m) {
+                const promptEnd = m.index + m[0].length;
+                const cmd = lineText.substring(promptEnd).trim()
+                    .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')
+                    .replace(/[\b\u0007]/g, '')
+                    .trim();
+                console.log('[getCurrentInput] matched pattern:', pattern.source, '| line:', JSON.stringify(lineText.substring(0, 80)), '| cmd:', JSON.stringify(cmd));
+                return cmd;
+            }
+        }
+
+        // Если ни один паттерн не совпал — это не строка промпта
+        console.log('[getCurrentInput] no pattern matched | line:', JSON.stringify(lineText.substring(0, 80)));
+        return '';
+    } catch (e) {
+        return '';
+    }
+}
+
 function getTerminalTheme() {
     return window.themeManager ? window.themeManager.getTerminalTheme() : { background: '#000000', foreground: '#00ff00' };
 }
@@ -136,7 +360,9 @@ function createPane(parentContainer) {
         // Per-pane REST bridge state
         pendingRemoteCommand: null,
         remoteCommandBuffer: '',
-        remoteCommandCollecting: false
+        remoteCommandCollecting: false,
+        // Input tracking buffer for reliable command history
+        _inputBuffer: ''
     };
 
     // Activate on click
@@ -171,8 +397,31 @@ function createPane(parentContainer) {
         }
     };
 
-    // Terminal input
+    // Terminal input + input buffer tracking
     term.onData(d => {
+        // Отслеживаем ввод для надёжного логирования команд
+        if (d === '\r') {
+            // Enter — буфер будет обработан в attachKeyHandler
+        } else if (d === '\x7f' || d === '\b') {
+            // Backspace
+            pane._inputBuffer = pane._inputBuffer.slice(0, -1);
+        } else if (d === '\x15') {
+            // Ctrl+U — очистка строки
+            pane._inputBuffer = '';
+        } else if (d === '\x03') {
+            // Ctrl+C
+            pane._inputBuffer = '';
+        } else if (d === '\x17') {
+            // Ctrl+W — удалить слово
+            pane._inputBuffer = pane._inputBuffer.replace(/\S+\s*$/, '');
+        } else if (d.length === 1 && d.charCodeAt(0) >= 32) {
+            // Печатный символ
+            pane._inputBuffer += d;
+        } else if (d.length > 1 && !d.startsWith('\x1b')) {
+            // Вставка текста (paste)
+            pane._inputBuffer += d;
+        }
+        // else: escape-последовательности (стрелки, etc) — игнорируем
         try { ws.send(JSON.stringify({ type: 'data', data: d })); } catch { }
     });
 
@@ -242,71 +491,114 @@ function handlePaneWsMessage(pane, m) {
     }
     if (m.type === 'skill_create_result') handleSkillCreateResult(m.success, m.error);
     if (m.type === 'skill_content') handleSkillContent(m.content, m.error);
+
+    // History popup data
+    if (m.type === 'history_data') {
+        historyPopup.onHistoryData(m.commands);
+        return;
+    }
 }
 
 /** Attach keyboard handler to a pane's terminal */
 function attachKeyHandler(pane) {
     pane.term.attachCustomKeyEventHandler((arg) => {
+        // ========== History Popup keyboard handling ==========
+        if (historyPopup.visible) {
+            if (arg.type === 'keydown') {
+                if (arg.code === 'ArrowUp') { historyPopup.moveSelection(-1); return false; }
+                if (arg.code === 'ArrowDown') { historyPopup.moveSelection(1); return false; }
+                if (arg.code === 'Enter') { historyPopup.selectCurrent(); return false; }
+                if (arg.code === 'Escape') { historyPopup.hide(); return false; }
+            }
+            // Allow typing to pass through to terminal while popup is visible
+            return true;
+        }
+
+        // Auto-show history popup on typing
+        if (arg.type === 'keydown' && !arg.ctrlKey && !arg.altKey && !arg.metaKey) {
+            const skipKeys = ['Enter', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+                'Tab', 'Shift', 'Control', 'Alt', 'Meta', 'CapsLock',
+                'F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12',
+                'Insert', 'Delete', 'Home', 'End', 'PageUp', 'PageDown'];
+            if (arg.key === 'Backspace') {
+                clearTimeout(_historyDebounceTimer);
+                _historyDebounceTimer = setTimeout(() => {
+                    const currentInput = pane._inputBuffer.trim();
+                    if (currentInput) {
+                        historyPopup.show(pane, currentInput);
+                    } else {
+                        historyPopup.hide();
+                    }
+                }, 80);
+            } else if (!skipKeys.includes(arg.key) && arg.key.length === 1) {
+                clearTimeout(_historyDebounceTimer);
+                _historyDebounceTimer = setTimeout(() => {
+                    const currentInput = pane._inputBuffer.trim();
+                    if (currentInput && currentInput.length >= 1) {
+                        historyPopup.show(pane, currentInput);
+                    }
+                }, 80);
+            }
+        }
+
         if (arg.code === 'Enter' && arg.type === 'keydown') {
-            const buffer = pane.term.buffer.active;
-            for (let i = buffer.length - 1; i >= 0; i--) {
-                const line = buffer.getLine(i).translateToString(true);
-                const promptEndIndex = Math.max(line.lastIndexOf('$'), line.lastIndexOf('#'), line.lastIndexOf('>'));
-                if (promptEndIndex !== -1) {
-                    const commandPart = line.substring(promptEndIndex + 1).trim();
-                    const cleanCommand = commandPart.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '').replace(/[\b\u0007]/g, '').trim();
+            historyPopup.hide();
 
-                    // skill:skip
-                    if (cleanCommand === 'skill:skip') {
-                        clearTerminalLine();
-                        pane.term.writeln('\r\n\x1b[1;33m[Skill] \u041a\u043e\u043c\u0430\u043d\u0434\u0430 \u043f\u0440\u043e\u043f\u0443\u0449\u0435\u043d\u0430\x1b[0m');
-                        skillSkipCommand();
-                        return false;
-                    }
+            // Надёжное сохранение через inputBuffer (отслеживает реальный ввод пользователя)
+            const inputCmd = pane._inputBuffer.trim();
+            pane._inputBuffer = ''; // Сброс буфера
+            console.log('[Enter] inputBuffer cmd:', JSON.stringify(inputCmd));
+            if (inputCmd) {
+                pane.ws.send(JSON.stringify({ type: 'command_log', command: inputCmd }));
+            }
 
-                    // skill:cancel
-                    if (cleanCommand === 'skill:cancel') {
-                        clearTerminalLine();
-                        pane.term.writeln('\r\n\x1b[1;31m[Skill] \u041e\u0442\u043c\u0435\u043d\u0451\u043d\x1b[0m');
-                        skillCancel();
-                        return false;
-                    }
-
-                    // Skill: command execution tracking
-                    if (skillDialogState.state === 'waiting_cmd' && skillDialogState.paneId === pane.id) {
-                        if (cleanCommand.length > 0) {
-                            skillDialogState.commandMatched = true;
-                            setTimeout(() => onSkillCommandExecuted(), 2000);
-                        }
-                    }
-
-                    // Skill command check: skill: <name> <prompt>
-                    const skillMatch = commandPart.match(/^skill\s*:\s*(\S+)(.*)$/i);
-                    if (skillMatch) {
-                        const skillName = skillMatch[1].trim();
-                        const skillPrompt = (skillMatch[2] || '').trim();
-                        clearTerminalLine();
-                        launchSkillFromTerminal(skillName, skillPrompt);
-                        return false;
-                    }
-
-                    // AI command check
-                    const prefixText = aiCommandPrefix.slice(0, -1);
-                    const prefixSep = aiCommandPrefix.slice(-1);
-                    const commandRegex = new RegExp(`(${prefixText}\\s*${prefixSep})`);
-                    const match = commandPart.match(commandRegex);
-
-                    if (match) {
-                        const aiPrompt = commandPart.substring(match.index + match[0].length).trim();
-                        setTimeout(() => {
-                            pane.term.writeln(`\r\n\x1b[1;33m[AI] \u0417\u0430\u043f\u0440\u043e\u0441: ${aiPrompt}\x1b[0m`);
-                        }, 50);
-                        pane.ws.send(JSON.stringify({ type: 'ai_query', prompt: line }));
-                        return true;
-                    } else if (cleanCommand) {
-                        pane.ws.send(JSON.stringify({ type: 'command_log', command: cleanCommand }));
-                    }
-                    break;
+            // Проверка skill/AI команд через inputCmd (не нужен парсинг буфера)
+            if (inputCmd) {
+                // skill:skip
+                if (inputCmd === 'skill:skip') {
+                    clearTerminalLine();
+                    pane.term.writeln('\r\n\x1b[1;33m[Skill] Команда пропущена\x1b[0m');
+                    skillSkipCommand();
+                    return false;
+                }
+            
+                // skill:cancel
+                if (inputCmd === 'skill:cancel') {
+                    clearTerminalLine();
+                    pane.term.writeln('\r\n\x1b[1;31m[Skill] Отменён\x1b[0m');
+                    skillCancel();
+                    return false;
+                }
+            
+                // Skill: command execution tracking
+                if (skillDialogState.state === 'waiting_cmd' && skillDialogState.paneId === pane.id) {
+                    skillDialogState.commandMatched = true;
+                    setTimeout(() => onSkillCommandExecuted(), 2000);
+                }
+            
+                // Skill command check: skill: <name> <prompt>
+                const skillMatch = inputCmd.match(/^skill\s*:\s*(\S+)(.*)$/i);
+                if (skillMatch) {
+                    const skillName = skillMatch[1].trim();
+                    const skillPrompt = (skillMatch[2] || '').trim();
+                    clearTerminalLine();
+                    launchSkillFromTerminal(skillName, skillPrompt);
+                    return false;
+                }
+            
+                // AI command check
+                const prefixText = aiCommandPrefix.slice(0, -1);
+                const prefixSep = aiCommandPrefix.slice(-1);
+                const commandRegex = new RegExp(`(${prefixText}\\s*${prefixSep})`);
+                const match = inputCmd.match(commandRegex);
+            
+                if (match) {
+                    const aiPrompt = inputCmd.substring(match.index + match[0].length).trim();
+                    setTimeout(() => {
+                        pane.term.writeln(`\r\n\x1b[1;33m[AI] Запрос: ${aiPrompt}\x1b[0m`);
+                    }, 50);
+                    pane.ws.send(JSON.stringify({ type: 'ai_query', prompt: inputCmd }));
+                    return true;
                 }
             }
         }
@@ -777,7 +1069,8 @@ async function loadLogs() {
         const apiUrl = logTab === 'skills' ? '/api/skills-logs' : '/api/logs';
         const url = `${apiUrl}?sessionId=${encodeURIComponent(logsSessionId)}&t=${Date.now()}`;
         const resp = await fetch(url);
-        const logs = await resp.json();
+        const data = await resp.json();
+        const logs = Array.isArray(data) ? data : [];
         if (logs.length !== allLogs.length) {
             allLogs = logs;
             renderLogs();

@@ -347,22 +347,30 @@ function openTerminal(server) {
     } catch { }
   };
 
-  // Простая передача данных на сервер
+  // Отслеживание ввода + передача данных на сервер
+  let _appInputBuffer = '';
   xterm.onData((d) => {
+    if (d === '\r') {
+      // Enter — буфер обработан в key handler
+    } else if (d === '\x7f' || d === '\b') {
+      _appInputBuffer = _appInputBuffer.slice(0, -1);
+    } else if (d === '\x15' || d === '\x03') {
+      _appInputBuffer = '';
+    } else if (d.length === 1 && d.charCodeAt(0) >= 32) {
+      _appInputBuffer += d;
+    } else if (d.length > 1 && !d.startsWith('\x1b')) {
+      _appInputBuffer += d;
+    }
     try { ws.send(JSON.stringify({ type: 'data', data: d })); } catch { }
   });
 
-  // Логирование команд
+  // Логирование команд через inputBuffer
   xterm.attachCustomKeyEventHandler((arg) => {
     if (arg.code === 'Enter' && arg.type === 'keydown') {
-      const buffer = xterm.buffer.active;
-      const line = buffer.getLine(buffer.cursorY).translateToString(true).trim();
-      const promptEnd = Math.max(line.lastIndexOf('$'), line.lastIndexOf('#'), line.lastIndexOf('>'));
-      if (promptEnd !== -1) {
-        const cmd = line.substring(promptEnd + 1).trim();
-        if (cmd && !cmd.startsWith('ai:') && !cmd.startsWith('ai :')) {
-          ws.send(JSON.stringify({ type: 'command_log', command: cmd }));
-        }
+      const cmd = _appInputBuffer.trim();
+      _appInputBuffer = '';
+      if (cmd && !cmd.startsWith('ai:') && !cmd.startsWith('ai :')) {
+        ws.send(JSON.stringify({ type: 'command_log', command: cmd }));
       }
     }
     return true;
