@@ -2130,6 +2130,31 @@ window.addEventListener('beforeunload', () => {
     panes.forEach(p => { try { p.ws.close(); } catch { } });
 });
 
+// ========== AI Health Check ==========
+let _aiChecked = false;
+async function checkAiHealth() {
+    if (_aiChecked) return;
+    _aiChecked = true;
+    try {
+        const res = await fetch('/api/ai-test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: 'OK' })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+            const errMsg = data.error || `HTTP ${res.status}`;
+            console.warn('[AI Check] AI не отвечает:', errMsg);
+            alert('⚠️ AI не отвечает: ' + errMsg + '\n\nПроверьте настройки AI Config и доступность модели.');
+        } else {
+            console.log('[AI Check] AI доступен:', data.model, data.latencyMs + 'мс');
+        }
+    } catch (e) {
+        console.warn('[AI Check] Ошибка проверки AI:', e.message);
+        alert('⚠️ AI недоступен: ' + e.message + '\n\nПроверьте настройки AI Config и доступность модели.');
+    }
+}
+
 // ========== Initial Pane Creation ==========
 (function init() {
     const wsRight = document.getElementById('wsRight');
@@ -2139,4 +2164,6 @@ window.addEventListener('beforeunload', () => {
     initialPane.ws.addEventListener('open', () => {
         setTimeout(requestSkillsList, 300);
     }, { once: true });
+    // Check AI health on startup (1.5s delay to let terminal settle)
+    setTimeout(checkAiHealth, 1500);
 })();

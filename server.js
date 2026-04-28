@@ -657,6 +657,97 @@ app.get('/api/config', (req, res) => {
   });
 });
 
+// AI Test endpoint - быстрая проверка доступности модели
+app.post('/api/ai-test', async (req, res) => {
+  const startedAt = Date.now();
+  try {
+    const {
+      baseUrl: bodyBaseUrl,
+      model: bodyModel,
+      prompt: bodyPrompt
+    } = req.body || {};
+
+    const aiBaseUrl = (bodyBaseUrl && String(bodyBaseUrl).trim())
+      || process.env.AI_KOSMOS_MODEL_BASE_URL
+      || 'http://localhost:3002/v1';
+    const aiModel = (bodyModel && String(bodyModel).trim())
+      || process.env.AI_MODEL
+      || 'CHEAP';
+    const userPrompt = (bodyPrompt && String(bodyPrompt).trim())
+      || 'Ответь одним словом: OK';
+
+    const aiServerUrl = `${aiBaseUrl.replace(/\/$/, '')}/chat/completions`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    let aiResponse;
+    try {
+      aiResponse = await fetch(aiServerUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: aiModel,
+          messages: [
+            { role: 'system', content: 'Ты тестовый echo-бот. Отвечай максимально кратко.' },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0,
+          max_tokens: 32
+        }),
+        signal: controller.signal
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    const latencyMs = Date.now() - startedAt;
+
+    if (!aiResponse.ok) {
+      const errorData = await aiResponse.json().catch(() => ({}));
+      return res.status(502).json({
+        success: false,
+        error: errorData.error?.message || `AI сервер вернул ошибку: ${aiResponse.status}`,
+        status: aiResponse.status,
+        baseUrl: aiBaseUrl,
+        model: aiModel,
+        latencyMs
+      });
+    }
+
+    const aiResult = await aiResponse.json();
+    const aiContent = aiResult.choices?.[0]?.message?.content;
+
+    if (!aiContent) {
+      return res.json({
+        success: false,
+        error: aiResult.error?.message || 'Пустой ответ от AI',
+        baseUrl: aiBaseUrl,
+        model: aiModel,
+        latencyMs
+      });
+    }
+
+    res.json({
+      success: true,
+      response: String(aiContent).trim(),
+      baseUrl: aiBaseUrl,
+      model: aiModel,
+      latencyMs
+    });
+  } catch (error) {
+    const latencyMs = Date.now() - startedAt;
+    logger.error('ai', 'Ошибка AI Test', { error: error.message });
+    res.status(500).json({
+      success: false,
+      error: error.name === 'AbortError'
+        ? 'Таймаут запроса к AI (15с)'
+        : `Ошибка обработки запроса: ${error.message}`,
+      latencyMs
+    });
+  }
+});
+
 // ========== WS Terminal REST Bridge API ==========
 
 // Список активных WebSocket терминалов

@@ -314,6 +314,30 @@ function openActions(server) {
 }
 
 let currentWs = null;
+let _aiCheckedApp = false;
+
+async function checkAiHealthApp() {
+  if (_aiCheckedApp) return;
+  _aiCheckedApp = true;
+  try {
+    const res = await fetch('/api/ai-test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'OK' })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      const errMsg = data.error || `HTTP ${res.status}`;
+      console.warn('[AI Check] AI не отвечает:', errMsg);
+      alert('⚠️ AI не отвечает: ' + errMsg + '\n\nПроверьте настройки AI Config и доступность модели.');
+    } else {
+      console.log('[AI Check] AI доступен:', data.model, data.latencyMs + 'мс');
+    }
+  } catch (e) {
+    console.warn('[AI Check] Ошибка проверки AI:', e.message);
+    alert('⚠️ AI недоступен: ' + e.message + '\n\nПроверьте настройки AI Config и доступность модели.');
+  }
+}
 
 function openTerminal(server) {
   openOverlay(`${server.name} — терминал`);
@@ -325,7 +349,10 @@ function openTerminal(server) {
   const ws = new WebSocket(wsUrl);
   currentWs = ws;
   xterm.writeln('[подключение к SSH...]');
-  ws.onopen = () => xterm.writeln('[соединение установлено]');
+  ws.onopen = () => {
+    xterm.writeln('[соединение установлено]');
+    setTimeout(checkAiHealthApp, 1500);
+  };
   ws.onclose = (ev) => xterm.writeln(`\r\n[соединение закрыто${ev.code ? ' код ' + ev.code : ''}]`);
 
   ws.onmessage = (ev) => {
