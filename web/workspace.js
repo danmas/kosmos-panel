@@ -127,8 +127,11 @@ class HistoryPopup {
             this.hide();
         });
         emptyItem.addEventListener('mouseenter', () => {
-            this.selectedIndex = 0;
-            this.render();
+            if (this.selectedIndex !== 0) {
+                this.selectedIndex = 0;
+                this._insertSelectedToInput();
+                this.render();
+            }
         });
         listEl.appendChild(emptyItem);
 
@@ -141,8 +144,11 @@ class HistoryPopup {
                 this.selectCurrent();
             });
             item.addEventListener('mouseenter', () => {
-                this.selectedIndex = idx + 1;
-                this.render();
+                if (this.selectedIndex !== idx + 1) {
+                    this.selectedIndex = idx + 1;
+                    this._insertSelectedToInput();
+                    this.render();
+                }
             });
             listEl.appendChild(item);
         });
