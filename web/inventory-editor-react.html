@@ -192,6 +192,8 @@
     function AiConfigTab({ showToast }) {
       const [config, setConfig] = useState({});
       const [loading, setLoading] = useState(true);
+      const [testing, setTesting] = useState(false);
+      const [testResult, setTestResult] = useState(null);
 
       const loadConfig = useCallback(async () => {
         try {
@@ -236,9 +238,51 @@
 
       const onChange = (key, val) => setConfig(prev => ({ ...prev, [key]: val }));
 
+      const testAi = async () => {
+        setTesting(true);
+        setTestResult({ status: 'pending', message: 'Отправка запроса к модели...' });
+        try {
+          const res = await fetch('/api/ai-test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              baseUrl: config.AI_KOSMOS_MODEL_BASE_URL || '',
+              model: config.AI_MODEL || '',
+              prompt: 'Ответь одним словом: OK'
+            })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.success) {
+            setTestResult({
+              status: 'ok',
+              message: data.response,
+              meta: `${data.model} @ ${data.baseUrl} · ${data.latencyMs} мс`
+            });
+            showToast(`AI OK (${data.latencyMs} мс)`, 'success');
+          } else {
+            const err = data.error || `HTTP ${res.status}`;
+            setTestResult({
+              status: 'err',
+              message: err,
+              meta: data.baseUrl ? `${data.model || '?'} @ ${data.baseUrl} · ${data.latencyMs || 0} мс` : ''
+            });
+            showToast('Ошибка AI: ' + err, 'error');
+          }
+        } catch (e) {
+          setTestResult({ status: 'err', message: e.message, meta: '' });
+          showToast('Ошибка AI: ' + e.message, 'error');
+        } finally {
+          setTesting(false);
+        }
+      };
+
       if (loading) {
         return h('div', { className: 'kp-cfg-panel', style: { display: 'flex', alignItems: 'center', justifyContent: 'center' } }, 'Загрузка...');
       }
+
+      const resultColor = testResult?.status === 'ok' ? 'var(--success)'
+        : testResult?.status === 'err' ? 'var(--error)'
+        : 'var(--text-muted)';
 
       return h('div', { style: { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 } },
         h('div', { className: 'kp-cfg-panel' },
@@ -250,12 +294,48 @@
                   ? h('textarea', { rows: f.rows, value: config[f.key] || '', onChange: e => onChange(f.key, e.target.value) })
                   : h('input', { type: 'text', value: config[f.key] || '', placeholder: f.placeholder || '', onChange: e => onChange(f.key, e.target.value) })
               )
+            ),
+            testResult && h('div', {
+              className: 'kp-cfg-field',
+              style: {
+                background: 'var(--bg-tile)',
+                border: `1px solid ${resultColor}`,
+                borderRadius: '4px',
+                padding: '0.75rem'
+              }
+            },
+              h('label', { style: { color: resultColor, marginBottom: '0.4rem' } },
+                testResult.status === 'ok' ? '✓ Ответ модели' :
+                testResult.status === 'err' ? '✗ Ошибка' : '… Проверка'),
+              h('div', {
+                style: {
+                  fontFamily: "'Consolas', 'Monaco', monospace",
+                  fontSize: '0.9rem',
+                  color: 'var(--text)',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word'
+                }
+              }, testResult.message),
+              testResult.meta && h('div', {
+                style: {
+                  marginTop: '0.4rem',
+                  fontSize: '0.75rem',
+                  color: 'var(--text-muted)',
+                  fontFamily: "'Consolas', 'Monaco', monospace"
+                }
+              }, testResult.meta)
             )
           )
         ),
         h('div', { className: 'kp-actions' },
-          h('button', { className: 'kp-btn', onClick: loadConfig }, 'Перезагрузить'),
-          h('button', { className: 'kp-btn kp-btn--pri', onClick: saveConfig }, 'Сохранить')
+          h('button', { className: 'kp-btn', onClick: loadConfig, disabled: testing }, 'Перезагрузить'),
+          h('button', {
+            className: 'kp-btn',
+            onClick: testAi,
+            disabled: testing,
+            title: 'Отправить короткий тестовый запрос к AI модели'
+          }, testing ? 'Проверка…' : 'Проверить AI'),
+          h('button', { className: 'kp-btn kp-btn--pri', onClick: saveConfig, disabled: testing }, 'Сохранить')
         )
       );
     }

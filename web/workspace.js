@@ -100,7 +100,7 @@ class HistoryPopup {
             this.filtered = this.commands.slice();
         } else {
             const lowerPrefix = this.inputBuffer.toLowerCase();
-            this.filtered = this.commands.filter(c => c.toLowerCase().includes(lowerPrefix));
+            this.filtered = this.commands.filter(c => c.toLowerCase().startsWith(lowerPrefix));
         }
         console.log('[historyPopup] filter:', JSON.stringify(this.inputBuffer), '| matched:', this.filtered.length, 'of', this.commands.length);
     }
@@ -127,8 +127,11 @@ class HistoryPopup {
             this.hide();
         });
         emptyItem.addEventListener('mouseenter', () => {
-            this.selectedIndex = 0;
-            this.render();
+            if (this.selectedIndex !== 0) {
+                this.selectedIndex = 0;
+                this._insertSelectedToInput();
+                this.render();
+            }
         });
         listEl.appendChild(emptyItem);
 
@@ -141,8 +144,11 @@ class HistoryPopup {
                 this.selectCurrent();
             });
             item.addEventListener('mouseenter', () => {
-                this.selectedIndex = idx + 1;
-                this.render();
+                if (this.selectedIndex !== idx + 1) {
+                    this.selectedIndex = idx + 1;
+                    this._insertSelectedToInput();
+                    this.render();
+                }
             });
             listEl.appendChild(item);
         });
@@ -2130,6 +2136,31 @@ window.addEventListener('beforeunload', () => {
     panes.forEach(p => { try { p.ws.close(); } catch { } });
 });
 
+// ========== AI Health Check ==========
+let _aiChecked = false;
+async function checkAiHealth() {
+    if (_aiChecked) return;
+    _aiChecked = true;
+    try {
+        const res = await fetch('/api/ai-test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: 'OK' })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+            const errMsg = data.error || `HTTP ${res.status}`;
+            console.warn('[AI Check] AI не отвечает:', errMsg);
+            alert('⚠️ AI не отвечает: ' + errMsg + '\n\nПроверьте настройки AI Config и доступность модели.');
+        } else {
+            console.log('[AI Check] AI доступен:', data.model, data.latencyMs + 'мс');
+        }
+    } catch (e) {
+        console.warn('[AI Check] Ошибка проверки AI:', e.message);
+        alert('⚠️ AI недоступен: ' + e.message + '\n\nПроверьте настройки AI Config и доступность модели.');
+    }
+}
+
 // ========== Initial Pane Creation ==========
 (function init() {
     const wsRight = document.getElementById('wsRight');
@@ -2139,4 +2170,6 @@ window.addEventListener('beforeunload', () => {
     initialPane.ws.addEventListener('open', () => {
         setTimeout(requestSkillsList, 300);
     }, { once: true });
+    // Check AI health on startup (1.5s delay to let terminal settle)
+    setTimeout(checkAiHealth, 1500);
 })();

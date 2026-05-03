@@ -1336,9 +1336,36 @@ description: Описание skill
     const ws = new WebSocket(wsUrl);
     term.writeln(mode === 'tail' ? `[tail ${path}]` : '[подключение к SSH...]');
 
+    // ========== AI Health Check ==========
+    let _aiChecked = false;
+    async function checkAiHealth() {
+      if (_aiChecked) return;
+      _aiChecked = true;
+      try {
+        const res = await fetch('/api/ai-test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: 'OK' })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+          const errMsg = data.error || `HTTP ${res.status}`;
+          console.warn('[AI Check] AI не отвечает:', errMsg);
+          alert('⚠️ AI не отвечает: ' + errMsg + '\n\nПроверьте настройки AI Config и доступность модели.');
+        } else {
+          console.log('[AI Check] AI доступен:', data.model, data.latencyMs + 'мс');
+        }
+      } catch (e) {
+        console.warn('[AI Check] Ошибка проверки AI:', e.message);
+        alert('⚠️ AI недоступен: ' + e.message + '\n\nПроверьте настройки AI Config и доступность модели.');
+      }
+    }
+
     ws.onopen = () => {
       term.writeln('[соединение установлено]');
       setTimeout(() => { try { fit.fit(); } catch { } sendResize(); }, 100);
+      // Check AI health on terminal start
+      setTimeout(checkAiHealth, 1500);
     };
     ws.onclose = ev => {
       term.writeln(`\r\n[соединение закрыто код ${ev.code}${ev.reason ? ' ' + ev.reason : ''}]`);
@@ -1419,7 +1446,7 @@ description: Описание skill
           this.filtered = this.commands.slice();
         } else {
           const lowerPrefix = this.inputBuffer.toLowerCase();
-          this.filtered = this.commands.filter(c => c.toLowerCase().includes(lowerPrefix));
+          this.filtered = this.commands.filter(c => c.toLowerCase().startsWith(lowerPrefix));
         }
       }
 
@@ -1442,7 +1469,7 @@ description: Описание skill
         emptyItem.className = 'history-popup-item history-popup-item-empty' + (this.selectedIndex === 0 ? ' selected' : '');
         emptyItem.innerHTML = '&nbsp;';
         emptyItem.addEventListener('click', () => { this.hide(); });
-        emptyItem.addEventListener('mouseenter', () => { this.selectedIndex = 0; this.render(); });
+        emptyItem.addEventListener('mouseenter', () => { if (this.selectedIndex !== 0) { this.selectedIndex = 0; this._insertSelectedToInput(); this.render(); } });
         listEl.appendChild(emptyItem);
 
         this.filtered.forEach((cmd, idx) => {
@@ -1450,7 +1477,7 @@ description: Описание skill
           item.className = 'history-popup-item' + ((idx + 1) === this.selectedIndex ? ' selected' : '');
           item.textContent = cmd;
           item.addEventListener('click', () => { this.selectedIndex = idx + 1; this.selectCurrent(); });
-          item.addEventListener('mouseenter', () => { this.selectedIndex = idx + 1; this.render(); });
+          item.addEventListener('mouseenter', () => { if (this.selectedIndex !== idx + 1) { this.selectedIndex = idx + 1; this._insertSelectedToInput(); this.render(); } });
           listEl.appendChild(item);
         });
 
