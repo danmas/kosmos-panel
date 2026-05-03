@@ -100,7 +100,7 @@ class HistoryPopup {
             this.filtered = this.commands.slice();
         } else {
             const lowerPrefix = this.inputBuffer.toLowerCase();
-            this.filtered = this.commands.filter(c => c.toLowerCase().includes(lowerPrefix));
+            this.filtered = this.commands.filter(c => c.toLowerCase().startsWith(lowerPrefix));
         }
         console.log('[historyPopup] filter:', JSON.stringify(this.inputBuffer), '| matched:', this.filtered.length, 'of', this.commands.length);
     }
@@ -127,8 +127,11 @@ class HistoryPopup {
             this.hide();
         });
         emptyItem.addEventListener('mouseenter', () => {
-            this.selectedIndex = 0;
-            this.render();
+            if (this.selectedIndex !== 0) {
+                this.selectedIndex = 0;
+                this._insertSelectedToInput();
+                this.render();
+            }
         });
         listEl.appendChild(emptyItem);
 
@@ -141,8 +144,11 @@ class HistoryPopup {
                 this.selectCurrent();
             });
             item.addEventListener('mouseenter', () => {
-                this.selectedIndex = idx + 1;
-                this.render();
+                if (this.selectedIndex !== idx + 1) {
+                    this.selectedIndex = idx + 1;
+                    this._insertSelectedToInput();
+                    this.render();
+                }
             });
             listEl.appendChild(item);
         });

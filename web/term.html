@@ -1446,7 +1446,7 @@ description: Описание skill
           this.filtered = this.commands.slice();
         } else {
           const lowerPrefix = this.inputBuffer.toLowerCase();
-          this.filtered = this.commands.filter(c => c.toLowerCase().includes(lowerPrefix));
+          this.filtered = this.commands.filter(c => c.toLowerCase().startsWith(lowerPrefix));
         }
       }
 
@@ -1469,7 +1469,7 @@ description: Описание skill
         emptyItem.className = 'history-popup-item history-popup-item-empty' + (this.selectedIndex === 0 ? ' selected' : '');
         emptyItem.innerHTML = '&nbsp;';
         emptyItem.addEventListener('click', () => { this.hide(); });
-        emptyItem.addEventListener('mouseenter', () => { this.selectedIndex = 0; this.render(); });
+        emptyItem.addEventListener('mouseenter', () => { if (this.selectedIndex !== 0) { this.selectedIndex = 0; this._insertSelectedToInput(); this.render(); } });
         listEl.appendChild(emptyItem);
 
         this.filtered.forEach((cmd, idx) => {
@@ -1477,7 +1477,7 @@ description: Описание skill
           item.className = 'history-popup-item' + ((idx + 1) === this.selectedIndex ? ' selected' : '');
           item.textContent = cmd;
           item.addEventListener('click', () => { this.selectedIndex = idx + 1; this.selectCurrent(); });
-          item.addEventListener('mouseenter', () => { this.selectedIndex = idx + 1; this.render(); });
+          item.addEventListener('mouseenter', () => { if (this.selectedIndex !== idx + 1) { this.selectedIndex = idx + 1; this._insertSelectedToInput(); this.render(); } });
           listEl.appendChild(item);
         });
 
