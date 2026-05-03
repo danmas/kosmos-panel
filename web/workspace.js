@@ -100,7 +100,7 @@ class HistoryPopup {
             this.filtered = this.commands.slice();
         } else {
             const lowerPrefix = this.inputBuffer.toLowerCase();
-            this.filtered = this.commands.filter(c => c.toLowerCase().includes(lowerPrefix));
+            this.filtered = this.commands.filter(c => c.toLowerCase().startsWith(lowerPrefix));
         }
         console.log('[historyPopup] filter:', JSON.stringify(this.inputBuffer), '| matched:', this.filtered.length, 'of', this.commands.length);
     }
