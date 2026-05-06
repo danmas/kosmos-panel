@@ -58,9 +58,14 @@ class HistoryPopup {
             this.visible = true;
             this._createOverlay();
         } else {
-            // Update title with new filter
+            // Update title with new filter (preserve toggle)
             const titleEl = this.overlay.querySelector('.history-popup-title');
-            if (titleEl) titleEl.textContent = 'History';
+            if (titleEl) {
+                // Only update text node, keep autoToggle child
+                if (titleEl.firstChild && titleEl.firstChild.nodeType === 3) {
+                    titleEl.firstChild.textContent = 'History';
+                }
+            }
         }
         this.requestHistory(this.inputBuffer);
         this.render();
@@ -127,7 +132,7 @@ class HistoryPopup {
             this.hide();
         });
         emptyItem.addEventListener('mouseenter', () => {
-            if (this.selectedIndex !== 0) {
+            if (historyAutoComplete && this.selectedIndex !== 0) {
                 this.selectedIndex = 0;
                 this._insertSelectedToInput();
                 this.render();
@@ -144,7 +149,7 @@ class HistoryPopup {
                 this.selectCurrent();
             });
             item.addEventListener('mouseenter', () => {
-                if (this.selectedIndex !== idx + 1) {
+                if (historyAutoComplete && this.selectedIndex !== idx + 1) {
                     this.selectedIndex = idx + 1;
                     this._insertSelectedToInput();
                     this.render();
@@ -255,6 +260,7 @@ class HistoryPopup {
 
 const historyPopup = new HistoryPopup();
 let _historyDebounceTimer = null;
+let historyAutoComplete = localStorage.getItem('kosmos_history_autocomplete') !== 'false';
 
 // Регулярки для определения реального промпта (Linux/macOS/Windows)
 // Linux: user@host:path$ или [user@host path]$ или path#
@@ -369,6 +375,24 @@ function createPane(parentContainer) {
     toolbar.appendChild(btnSplitH);
     toolbar.appendChild(btnZoomOut);
     toolbar.appendChild(btnZoomIn);
+
+    // Auto-complete checkbox
+    const autoLabel = document.createElement('label');
+    autoLabel.className = 'ws-auto-toggle';
+    autoLabel.title = historyAutoComplete ? 'Автоподстановка включена' : 'Автоподстановка выключена';
+    const autoCheck = document.createElement('input');
+    autoCheck.type = 'checkbox';
+    autoCheck.checked = historyAutoComplete;
+    autoCheck.addEventListener('change', (e) => {
+        e.stopPropagation();
+        historyAutoComplete = autoCheck.checked;
+        autoLabel.title = historyAutoComplete ? 'Автоподстановка включена' : 'Автоподстановка выключена';
+        localStorage.setItem('kosmos_history_autocomplete', historyAutoComplete ? 'true' : 'false');
+    });
+    autoLabel.appendChild(autoCheck);
+    autoLabel.appendChild(document.createTextNode('Auto'));
+    toolbar.appendChild(autoLabel);
+
     toolbar.appendChild(label);
     toolbar.appendChild(btnClose);
 
@@ -617,7 +641,7 @@ function attachKeyHandler(pane) {
                 clearTimeout(_historyDebounceTimer);
                 _historyDebounceTimer = setTimeout(() => {
                     const currentInput = pane._inputBuffer.trim();
-                    if (currentInput) {
+                    if (currentInput && historyAutoComplete) {
                         historyPopup.show(pane, currentInput);
                     } else {
                         historyPopup.hide();
@@ -627,7 +651,7 @@ function attachKeyHandler(pane) {
                 clearTimeout(_historyDebounceTimer);
                 _historyDebounceTimer = setTimeout(() => {
                     const currentInput = pane._inputBuffer.trim();
-                    if (currentInput && currentInput.length >= 1) {
+                    if (currentInput && currentInput.length >= 1 && historyAutoComplete) {
                         historyPopup.show(pane, currentInput);
                     }
                 }, 80);
