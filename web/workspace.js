@@ -229,6 +229,18 @@ class HistoryPopup {
         title.className = 'history-popup-title';
         title.textContent = 'History';
 
+        // Close button — closes popup and unchecks Auto
+        const closeBtn = document.createElement('span');
+        closeBtn.className = 'history-popup-close';
+        closeBtn.textContent = '\u00d7';
+        closeBtn.title = 'Закрыть и отключить автоподстановку';
+        closeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            disableHistoryAutoComplete();
+            this.hide();
+        });
+        title.appendChild(closeBtn);
+
         const list = document.createElement('div');
         list.className = 'history-popup-list';
 
@@ -261,6 +273,17 @@ class HistoryPopup {
 const historyPopup = new HistoryPopup();
 let _historyDebounceTimer = null;
 let historyAutoComplete = localStorage.getItem('kosmos_history_autocomplete') !== 'false';
+
+function disableHistoryAutoComplete() {
+    historyAutoComplete = false;
+    localStorage.setItem('kosmos_history_autocomplete', 'false');
+    // Sync all toolbar checkboxes
+    document.querySelectorAll('.ws-auto-toggle input').forEach(cb => {
+        cb.checked = false;
+        const label = cb.parentElement;
+        if (label) label.title = 'Автоподстановка выключена';
+    });
+}
 
 // Регулярки для определения реального промпта (Linux/macOS/Windows)
 // Linux: user@host:path$ или [user@host path]$ или path#

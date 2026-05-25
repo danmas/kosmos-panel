@@ -1135,6 +1135,21 @@
       border-bottom: 1px solid #00d4ff;
       color: #00d4ff;
       font-weight: bold;
+      position: relative;
+    }
+    .history-popup-close {
+      position: absolute;
+      right: 6px;
+      top: 50%;
+      transform: translateY(-50%);
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      color: #888;
+      padding: 0 4px;
+    }
+    .history-popup-close:hover {
+      color: #ff4444;
     }
     .history-popup-list {
       max-height: 260px;
@@ -1544,6 +1559,18 @@ description: Описание skill
         title.className = 'history-popup-title';
         title.textContent = 'History';
 
+        // Close button — closes popup and unchecks Auto
+        const closeBtn = document.createElement('span');
+        closeBtn.className = 'history-popup-close';
+        closeBtn.textContent = '\u00d7';
+        closeBtn.title = 'Закрыть и отключить автоподстановку';
+        closeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            disableHistoryAutoComplete();
+            this.hide();
+        });
+        title.appendChild(closeBtn);
+
         const list = document.createElement('div');
         list.className = 'history-popup-list';
 
@@ -1573,6 +1600,17 @@ description: Описание skill
     const historyPopup = new HistoryPopup();
     let _historyDebounceTimer = null;
     let historyAutoComplete = localStorage.getItem('kosmos_history_autocomplete') !== 'false';
+
+    function disableHistoryAutoComplete() {
+        historyAutoComplete = false;
+        localStorage.setItem('kosmos_history_autocomplete', 'false');
+        const cb = document.querySelector('.top-auto-toggle input');
+        if (cb) {
+            cb.checked = false;
+            const label = cb.parentElement;
+            if (label) label.title = 'Автоподстановка выключена';
+        }
+    }
 
     // Add Auto checkbox to top bar
     (function() {
