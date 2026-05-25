@@ -1135,6 +1135,21 @@
       border-bottom: 1px solid #00d4ff;
       color: #00d4ff;
       font-weight: bold;
+      position: relative;
+    }
+    .history-popup-close {
+      position: absolute;
+      right: 6px;
+      top: 50%;
+      transform: translateY(-50%);
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      color: #888;
+      padding: 0 4px;
+    }
+    .history-popup-close:hover {
+      color: #ff4444;
     }
     .history-popup-list {
       max-height: 260px;
@@ -1159,6 +1174,21 @@
       text-align: center;
       color: #666;
       font-style: italic;
+    }
+    .top-auto-toggle {
+      font-size: 11px;
+      font-weight: normal;
+      color: var(--text-dim, #999);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding: 0 4px;
+      white-space: nowrap;
+    }
+    .top-auto-toggle input {
+      margin: 0;
+      cursor: pointer;
     }
   </style>
 </head>
@@ -1410,8 +1440,13 @@ description: Описание skill
           this.visible = true;
           this._createOverlay();
         } else {
+          // Update title with new filter (preserve toggle)
           const titleEl = this.overlay.querySelector('.history-popup-title');
-          if (titleEl) titleEl.textContent = 'History';
+          if (titleEl) {
+            if (titleEl.firstChild && titleEl.firstChild.nodeType === 3) {
+              titleEl.firstChild.textContent = 'History';
+            }
+          }
         }
         this.requestHistory(this.inputBuffer);
         this.render();
@@ -1469,7 +1504,7 @@ description: Описание skill
         emptyItem.className = 'history-popup-item history-popup-item-empty' + (this.selectedIndex === 0 ? ' selected' : '');
         emptyItem.innerHTML = '&nbsp;';
         emptyItem.addEventListener('click', () => { this.hide(); });
-        emptyItem.addEventListener('mouseenter', () => { if (this.selectedIndex !== 0) { this.selectedIndex = 0; this._insertSelectedToInput(); this.render(); } });
+        emptyItem.addEventListener('mouseenter', () => { if (historyAutoComplete && this.selectedIndex !== 0) { this.selectedIndex = 0; this._insertSelectedToInput(); this.render(); } });
         listEl.appendChild(emptyItem);
 
         this.filtered.forEach((cmd, idx) => {
@@ -1477,7 +1512,7 @@ description: Описание skill
           item.className = 'history-popup-item' + ((idx + 1) === this.selectedIndex ? ' selected' : '');
           item.textContent = cmd;
           item.addEventListener('click', () => { this.selectedIndex = idx + 1; this.selectCurrent(); });
-          item.addEventListener('mouseenter', () => { if (this.selectedIndex !== idx + 1) { this.selectedIndex = idx + 1; this._insertSelectedToInput(); this.render(); } });
+          item.addEventListener('mouseenter', () => { if (historyAutoComplete && this.selectedIndex !== idx + 1) { this.selectedIndex = idx + 1; this._insertSelectedToInput(); this.render(); } });
           listEl.appendChild(item);
         });
 
@@ -1524,6 +1559,18 @@ description: Описание skill
         title.className = 'history-popup-title';
         title.textContent = 'History';
 
+        // Close button — closes popup and unchecks Auto
+        const closeBtn = document.createElement('span');
+        closeBtn.className = 'history-popup-close';
+        closeBtn.textContent = '\u00d7';
+        closeBtn.title = 'Закрыть и отключить автоподстановку';
+        closeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            disableHistoryAutoComplete();
+            this.hide();
+        });
+        title.appendChild(closeBtn);
+
         const list = document.createElement('div');
         list.className = 'history-popup-list';
 
@@ -1552,6 +1599,36 @@ description: Описание skill
 
     const historyPopup = new HistoryPopup();
     let _historyDebounceTimer = null;
+    let historyAutoComplete = localStorage.getItem('kosmos_history_autocomplete') !== 'false';
+
+    function disableHistoryAutoComplete() {
+        historyAutoComplete = false;
+        localStorage.setItem('kosmos_history_autocomplete', 'false');
+        const cb = document.querySelector('.top-auto-toggle input');
+        if (cb) {
+            cb.checked = false;
+            const label = cb.parentElement;
+            if (label) label.title = 'Автоподстановка выключена';
+        }
+    }
+
+    // Add Auto checkbox to top bar
+    (function() {
+        const autoLabel = document.createElement('label');
+        autoLabel.className = 'top-auto-toggle';
+        autoLabel.title = historyAutoComplete ? 'Автоподстановка включена' : 'Автоподстановка выключена';
+        const autoCheck = document.createElement('input');
+        autoCheck.type = 'checkbox';
+        autoCheck.checked = historyAutoComplete;
+        autoCheck.addEventListener('change', () => {
+            historyAutoComplete = autoCheck.checked;
+            autoLabel.title = historyAutoComplete ? 'Автоподстановка включена' : 'Автоподстановка выключена';
+            localStorage.setItem('kosmos_history_autocomplete', historyAutoComplete ? 'true' : 'false');
+        });
+        autoLabel.appendChild(autoCheck);
+        autoLabel.appendChild(document.createTextNode('Auto'));
+        document.querySelector('.top').appendChild(autoLabel);
+    })();
 
     function getCurrentInput() {
       try {
@@ -1741,7 +1818,7 @@ description: Описание skill
             clearTimeout(_historyDebounceTimer);
             _historyDebounceTimer = setTimeout(() => {
               const ci = _termInputBuffer.trim();
-              if (ci) {
+              if (ci && historyAutoComplete) {
                 historyPopup.show(ci);
               } else {
                 historyPopup.hide();
@@ -1751,7 +1828,7 @@ description: Описание skill
             clearTimeout(_historyDebounceTimer);
             _historyDebounceTimer = setTimeout(() => {
               const ci = _termInputBuffer.trim();
-              if (ci && ci.length >= 1) {
+              if (ci && ci.length >= 1 && historyAutoComplete) {
                 historyPopup.show(ci);
               }
             }, 80);

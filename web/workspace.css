@@ -1553,6 +1553,22 @@ body {
   border-color: rgba(255, 68, 68, 0.4);
 }
 
+.ws-auto-toggle {
+  font-size: 11px;
+  font-weight: normal;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+.ws-auto-toggle input {
+  margin: 0;
+  cursor: pointer;
+}
+
 .ws-pane-term {
   flex: 1;
   overflow: hidden;
