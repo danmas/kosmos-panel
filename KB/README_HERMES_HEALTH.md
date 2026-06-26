@@ -4,14 +4,15 @@
 
 ## Зачем это нужно
 
-Hermes Gateway не слушают TCP-порты — они работают через Telegram Long Polling (только исходящие соединения). Поэтому прямой HTTP/TCP мониторинг невозможен. Решение — **health-server.js**: промежуточный Node.js HTTP-сервис, который запущен на той же машине, что и gateway, опрашивает локальную систему и отдаёт статус gateway в JSON.
+Hermes Gateway не слушают TCP-порты — они работают через Telegram Long Polling (только исходящие соединения). Поэтому прямой HTTP/TCP мониторинг невозможен. Решение — **health-server.js (Windows) / health-server-linux.js (Linux)**: промежуточный Node.js HTTP-сервис, который запущен на той же машине, что и gateway, опрашивает локальную систему и отдаёт статус gateway в JSON.
 
 Kosmos Panel мониторит health-server через **httpJson** проверки.
 
 ## Архитектура
 
 ```
-health-server.js (порт 3100, процесс/сервис: hermes-health)
+|**Windows:** `health-server.js` (порт 3100, процесс/сервис: hermes-health)
+**Linux:** `health-server-linux.js` (порт 3100, процесс/сервис: hermes-health)
          │
          ├── Gateway 1 — проверка: процесс жив / systemd active / PM2 online
          ├── Gateway 2 — проверка: ... (по ситуации)
@@ -22,17 +23,19 @@ health-server.js (порт 3100, процесс/сервис: hermes-health)
 ```
 
 Принцип универсален:
-- На **Windows** gateway может быть запущен через **планировщик** или **PM2**
-- На **Linux** — через **systemd** или **PM2**
-- health-server.js адаптируется под способ запуска (скрипты проверки под конкретную ОС)
+- На **Windows** gateway может быть запущен через **планировщик** или **PM2** → `health-server.js`
+- На **Linux** — через **systemd** или **PM2** → `health-server-linux.js`
+- Каждый файл адаптирован под свою ОС; их можно копировать на соответствующие машины как готовые сценарии проверки
 
 ---
 
-## 1. Компонент: health-server.js
+## 1. Компонент: health-server.js / health-server-linux.js
 
-Расположение: `./health-server.js` (рядом с `server.js` в проекте kosmos-panel)
+Расположение:
+- `./health-server.js` (Windows) — в корне проекта kosmos-panel
+- `./health-server-linux.js` (Linux) — готовый файл для копирования на Linux-сервер
 
-Этот файл — универсальный. Он содержит логику проверки gateway под конкретную ОС. Принцип работы:
+Файлы содержат логику проверки gateway под конкретную ОС. Принцип работы:
 
 1. Запускается как HTTP-сервер (порт по умолчанию **3100**, задаётся через `HEALTH_PORT`)
 2. Периодически (каждые **30 секунд**) проверяет состояние gateway
@@ -57,7 +60,7 @@ health-server.js (порт 3100, процесс/сервис: hermes-health)
 
 ### Как адаптировать под свою ОС
 
-Логика проверки каждого gateway описывается внутри `checkProcesses()` в `health-server.js`. В секции PM2 gateway используется универсальный парсинг `pm2 jlist` — работает и на Windows, и на Linux.
+Логика проверки каждого gateway описывается внутри `checkProcesses()` в `health-server.js` (Windows) или `health-server-linux.js` (Linux). В секции PM2 gateway используется универсальный парсинг `pm2 jlist` — работает и на Windows, и на Linux.
 
 Для gateway, запущенных **не через PM2** (через systemd, планировщик Windows), нужно написать свою проверку. Примеры ниже.
 
@@ -91,9 +94,12 @@ pm2 start ecosystem.config.js --only hermes-health
 pm2 save
 ```
 
-Если PM2 не используется — можно запустить через systemd (Linux) или планировщик (Windows) как обычный Node.js процесс:
+Если PM2 не используется — можно запустить как обычный Node.js процесс:
 ```bash
+# Windows
 node ./kosmos-panel/health-server.js
+# Linux
+node ./kosmos-panel/health-server-linux.js
 ```
 
 ---
@@ -161,13 +167,15 @@ JSONPath `$.gateways.<gateway-id>.alive` должен совпадать с кл
 
 ---
 
-## 5. Пример для Linux
+## 5. Пример: Linux
+
+> **Готовый файл:** `health-server-linux.js` — скопируйте его на Linux-сервер и используйте как есть. Содержит проверки для systemd, логи и расширяемый блок для PM2.
 
 ### 5.1. Gateway через systemd
 
 На Linux Hermes Gateway обычно запускается через systemd (установка через `hermes gateway install`).
 
-**Проверка в health-server.js:**
+**Проверка в `health-server-linux.js`:**
 
 ```javascript
 // Linux: systemd-запущенный gateway
@@ -201,7 +209,7 @@ After=network.target
 Type=simple
 User=<username>
 WorkingDirectory=/path/to/kosmos-panel
-ExecStart=/usr/bin/node /path/to/kosmos-panel/health-server.js
+|ExecStart=/usr/bin/node /path/to/kosmos-panel/health-server-linux.js
 Restart=always
 RestartSec=5
 Environment=HEALTH_PORT=3100
@@ -235,11 +243,11 @@ sudo systemctl enable --now hermes-health
 
 ---
 
-## 6. Расширение health-server.js
+## 6. Расширение health-server.js / health-server-linux.js
 
-Чтобы добавить новый gateway в мониторинг:
+Чтобы добавить новый gateway в мониторинг, отредактируйте нужный файл под свою ОС:
 
-1. В `health-server.js`, внутри `checkProcesses()`, добавить блок проверки:
+1. В `health-server.js` (Windows) или `health-server-linux.js` (Linux), внутри `checkProcesses()`, добавить блок проверки:
 ```javascript
 try {
   // ... команда проверки под вашу ОС ...
@@ -297,4 +305,4 @@ sudo systemctl restart hermes-health
 - Требует Node.js
 - При перезагрузке ОС нужно убедиться, что health-server настроен на автозапуск
 
-**Последнее обновление:** 2026-06-26
+**Последнее обновление:** 2026-06-26 (добавлен `health-server-linux.js`)
