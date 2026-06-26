@@ -57,6 +57,12 @@ async function fetchServers() {
 }
 
 function render(servers) {
+  // Добавляем класс updating всем dot для анимации обновления
+  document.querySelectorAll('.svc .dot').forEach(d => d.classList.add('updating'));
+  setTimeout(() => {
+    document.querySelectorAll('.svc .dot').forEach(d => d.classList.remove('updating'));
+  }, 1500);
+
   grid.innerHTML = '';
   servers.forEach((s) => {
     const tile = document.createElement('div');
