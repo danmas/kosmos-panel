@@ -70,7 +70,7 @@
 | [README_INDEX.md](./README_INDEX.md) | Этот файл — оглавление БЗ | Навигация по KB | 2026-02-18 |
 | [README_new_skin_instruct.md](./README_new_skin_instruct.md) | Инструкция по созданию новых тем (скинов) | CSS Variables, themes.css, theme-manager.js, примеры | 2026-02-17 |
 | [README_KB_RULES.md](./README_KB_RULES.md) | Правила ведения БЗ (кратко) | Чеклист, ссылки, актуализация, секции | 2026-02-15 |
-| [README_HERMES_HEALTH.md](./README_HERMES_HEALTH.md) | Мониторинг Hermes Gateway | health-server.js, httpJson, carl-db/pilot-work/projects-ex | 2026-06-26 |
+| [README_HERMES_HEALTH.md](./README_HERMES_HEALTH.md) | Мониторинг Hermes Gateway — руководство | health-server.js, httpJson, примеры для Windows/Linux | 2026-06-26 |
 | [ИНСТРУКЦИЯ_ВЕДЕНИЕ_БЗ.md](./ИНСТРУКЦИЯ_ВЕДЕНИЕ_БЗ.md) | Инструкция по внедрению и ведению БЗ | Модель БЗ, шаблон индекса, правила, процесс | 2026-02-15 |
 
 ---

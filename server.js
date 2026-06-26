@@ -68,16 +68,16 @@ app.get('/api/servers', (req, res) => {
         env: s.env,
         color: s.color,
         ssh: s.ssh,
-        services: Object.entries(s.services).map(([id, sv]) => {
-          // Находим оригинальный сервис из inventory для получения доп. полей
-          const originalService = server.services.find(svc => svc.id === id);
+        services: (server.services || []).map(originalSvc => {
+          const sv = s.services[originalSvc.id];
+          if (!sv) return null;
           return {
-            id,
+            id: originalSvc.id,
             ...sv,
-            description: originalService?.description || undefined,
-            dependencies: originalService?.dependencies || []
+            description: originalSvc.description,
+            dependencies: originalSvc.dependencies || []
           };
-        }),
+        }).filter(Boolean),
       };
     });
   res.json({ 

@@ -30,15 +30,15 @@ async function checkProcesses() {
     );
     const hasProcess = procResult.stdout.trim().length > 0;
     const logFresh = logResult.stdout.trim() === 'FRESH';
-    gateways['carl-db'] = {
-      name: 'Hermes Carl-DB Gateway',
+    gateways['default'] = {
+      name: '🤖 HA-Work Gateway (default)',
       alive: hasProcess && logFresh,
       process: hasProcess ? 'running' : 'stopped',
       log: logFresh ? 'fresh' : 'stale',
       detail: hasProcess && logFresh ? 'OK' : (hasProcess ? 'log stale' : 'no process')
     };
   } catch (e) {
-    gateways['carl-db'] = { name: 'Hermes Carl-DB Gateway', alive: false, error: e.message };
+    gateways['default'] = { name: '🤖 HA-Work Gateway (default)', alive: false, error: e.message };
   }
 
   // 2-3. PM2 gateway — парсим jlist напрямую через Node.js (без PowerShell)
@@ -47,6 +47,7 @@ async function checkProcesses() {
     const apps = JSON.parse(pm2Result.stdout || '[]');
 
     const pm2Gateways = [
+      { id: 'carl-db', name: 'Carl-DB Gateway', pm2Name: 'hermes-carl-db-gateway' },
       { id: 'pilot-work', name: 'Hermes Pilot-Work Gateway', pm2Name: 'hermes-pilot-work-gateway' },
       { id: 'projects-ex', name: 'Hermes Projects-Ex Gateway', pm2Name: 'hermes-projects-ex-gateway' }
     ];
@@ -63,6 +64,7 @@ async function checkProcesses() {
     }
   } catch (e) {
     // fallback если pm2 недоступен
+    if (!gateways['carl-db']) gateways['carl-db'] = { name: 'Carl-DB Gateway', alive: false, error: e.message };
     if (!gateways['pilot-work']) gateways['pilot-work'] = { name: 'Hermes Pilot-Work Gateway', alive: false, error: e.message };
     if (!gateways['projects-ex']) gateways['projects-ex'] = { name: 'Hermes Projects-Ex Gateway', alive: false, error: e.message };
   }
