@@ -21,7 +21,7 @@
 | Файл | Описание | Ключевые темы | Актуализация |
 |------|----------|---------------|------------|
 | [README_AI.md](./README_AI.md) | Памятка для LLM/агентов и обзор системы | Backend (server/, monitor, ws, terminal), Frontend (web/), inventory.json, .env, config.json, контракты API/WS, инварианты, как расширять, AI конфигурация | 2026-02-16 |
-| [README_CONFIG.md](./README_CONFIG.md) | Система управления AI-конфигурацией | config.json, REST API (/api/config, /api/reload-config), горячая перезагрузка, UI редактор, миграция с .env | 2026-02-16 |
+| [README_CONFIG.md](./README_CONFIG.md) | Система управления AI-конфигурацией + **горячая перезагрузка inventory.json** | config.json, REST API (/api/config, /api/reload-config), горячая перезагрузка, UI редактор, миграция с .env, inventory.json hot-reload | 2026-06-28 |
 | [DEVELOPER_THEMING_GUIDE.md](./DEVELOPER_THEMING_GUIDE.md) | **Архитектура тем**: Гайд для разработчиков | CSS Variables, ThemeManager, xterm.js integration, Cross-tab sync | 2026-02-18 |
 
 ---
