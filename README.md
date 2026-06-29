@@ -150,6 +150,7 @@ http://localhost:3000/inventory-editor-react.html
 ## API/WS
 
 ### REST API
+- `GET /health` — **статусы Hermes Gateway** (JSON: gateways, alive/false). Встроен в server.js, заменяет отдельный health-server.js
 - `GET /api/servers` — состояние всех серверов и сервисов (порядок как в inventory)
 - `GET /api/inventory` — конфигурация (сервера, креды, poll)
 - `GET /inventory.json` — полный файл конфигурации (для редактора)
