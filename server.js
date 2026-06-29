@@ -10,6 +10,75 @@ const { v4: uuidv4 } = require('uuid');
 const { createSession, executeCommand, closeSession, createSessionV2, executeCommandV2, closeSessionV2 } = require('./server/terminal');
 const logger = require('./server/logger');
 const skillsRouter = require('./server/skills');
+const { exec } = require('child_process');
+
+// ====== Health check integration (бывший отдельный health-server.js) ======
+const HEALTH_CACHE_TTL = 30000;
+let healthCache = { ts: 0, gateways: {}, error: null };
+
+async function checkGateways() {
+  const gateways = {};
+  const isWin = process.platform === 'win32';
+
+  // 1. default gateway — проверка наличия процесса hermes.exe
+  try {
+    if (isWin) {
+      const [procResult] = await Promise.all([
+        execPromise(`powershell -Command "Get-Process hermes -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id"`)
+      ]);
+      const hasProcess = procResult.stdout.trim().length > 0;
+      gateways['default'] = {
+        name: '🤖 HA-Work Gateway (default)',
+        alive: hasProcess,
+        process: hasProcess ? 'running' : 'stopped',
+        detail: hasProcess ? 'OK' : 'no process'
+      };
+    } else {
+      gateways['default'] = { name: '🤖 HA-Work Gateway (default)', alive: false, detail: 'non-Windows' };
+    }
+  } catch (e) {
+    gateways['default'] = { name: '🤖 HA-Work Gateway (default)', alive: false, error: e.message };
+  }
+
+  // 2-4. PM2 gateways
+  try {
+    const pm2Result = await execPromise('pm2 jlist');
+    const apps = JSON.parse(pm2Result.stdout || '[]');
+    const pm2Gateways = [
+      { id: 'carl-db', name: 'Carl-DB Gateway', pm2Name: 'hermes-carl-db-gateway' },
+      { id: 'pilot-work', name: 'Hermes Pilot-Work Gateway', pm2Name: 'hermes-pilot-work-gateway' },
+      { id: 'projects-ex', name: 'Hermes Projects-Ex Gateway', pm2Name: 'hermes-projects-ex-gateway' }
+    ];
+    for (const gw of pm2Gateways) {
+      const app = apps.find(a => a.name === gw.pm2Name);
+      const status = app?.pm2_env?.status || 'stopped';
+      gateways[gw.id] = {
+        name: gw.name,
+        alive: status === 'online',
+        pm2_status: status,
+        systemd: status === 'online' ? 'active' : 'inactive',
+        detail: status === 'online' ? 'OK' : status
+      };
+    }
+  } catch (e) {
+    for (const gw of ['carl-db', 'pilot-work', 'projects-ex']) {
+      if (!gateways[gw]) gateways[gw] = { name: gw, alive: false, error: e.message };
+    }
+  }
+
+  healthCache = { ts: Date.now(), gateways, error: null };
+}
+
+function execPromise(cmd) {
+  return new Promise((resolve) => {
+    exec(cmd, { timeout: 8000, windowsHide: true }, (err, stdout, stderr) => {
+      resolve({ stdout: stdout || '', stderr: stderr || '', error: err });
+    });
+  });
+}
+
+// Health endpoint — регистрируется после const app = express()
+// (см. после строки const app = express();)
 
 // Global config object
 let appConfig = {};
@@ -39,6 +108,17 @@ loadConfig();
 
 const app = express();
 app.use(express.json());
+
+// Health endpoint — статусы gateway (встроен вместо отдельного health-server.js)
+app.get('/health', (req, res) => {
+  const allAlive = Object.values(healthCache.gateways).every(g => g.alive);
+  res.json({
+    ok: allAlive,
+    healthy: allAlive,
+    ts: new Date().toISOString(),
+    gateways: healthCache.gateways
+  });
+});
 
 // Skills REST API
 app.use('/api/skills', skillsRouter);
@@ -972,8 +1052,13 @@ function checkPort(port) {
     process.exit(1);
   });
 
+  // Запуск health check при старте (вместо отдельного health-server.js на 3100)
+  checkGateways();
+  setInterval(checkGateways, HEALTH_CACHE_TTL);
+
   server.listen(port, () => {
     logger.info('server', `UI: http://localhost:${port}`);
+    logger.info('server', `Health: http://localhost:${port}/health`);
     startScheduler();
   });
 

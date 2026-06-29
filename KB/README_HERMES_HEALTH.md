@@ -4,15 +4,32 @@
 
 ## Зачем это нужно
 
-Hermes Gateway не слушают TCP-порты — они работают через Telegram Long Polling (только исходящие соединения). Поэтому прямой HTTP/TCP мониторинг невозможен. Решение — **health-server.js (Windows) / health-server-linux.js (Linux)**: промежуточный Node.js HTTP-сервис, который запущен на той же машине, что и gateway, опрашивает локальную систему и отдаёт статус gateway в JSON.
+Hermes Gateway не слушают TCP-порты — они работают через Telegram Long Polling (только исходящие соединения). Поэтому прямой HTTP/TCP мониторинг невозможен.
 
-Kosmos Panel мониторит health-server через **httpJson** проверки.
+**Решение (рекомендуемое):** `/health` endpoint **встроен прямо в Kosmos Panel** (`server.js`, порт 3000). Запускается автоматически при старте `kosmos-panel`.
 
-## Архитектура
+**Альтернатива (для удалённых машин без Kosmos Panel):** `health-server.js` (Windows) / `health-server-linux.js` (Linux) — отдельный Node.js HTTP-сервис.
+
+## Архитектура (рекомендуемая)
 
 ```
-|**Windows:** `health-server.js` (порт 3100, процесс/сервис: hermes-health)
-**Linux:** `health-server-linux.js` (порт 3100, процесс/сервис: hermes-health)
+  Kosmos Panel server.js (порт 3000, GET /health)
+         │
+         ├── Gateway 1 — проверка: процесс hermes.exe жив / лог свежий
+         ├── Gateway 2 — PM2 jlist → online/stopped
+         ├── Gateway N — ...
+         │
+         ▼
+  inventory.json (httpJson проверки на http://127.0.0.1:3000/health)
+```
+
+Один процесс — один порт. Не требует отдельного `hermes-health` в PM2.
+
+## Архитектура (альтернативная — standalone)
+
+```
+|**Windows:** `health-server.js` (порт 3100, процесс: hermes-health)
+|**Linux:** `health-server-linux.js` (порт 3100, процесс: hermes-health)
          │
          ├── Gateway 1 — проверка: процесс жив / systemd active / PM2 online
          ├── Gateway 2 — проверка: ... (по ситуации)
@@ -66,10 +83,28 @@ Kosmos Panel мониторит health-server через **httpJson** прове
 
 ---
 
-## 2. Запуск health-server
+## 2. Запуск проверки gateway
 
-Через PM2 — добавить в `ecosystem.config.js`:
+### Рекомендуемый способ (встроен в Kosmos Panel)
 
+Логика проверки gateway встроена прямо в `server.js`. Запускается автоматически:
+
+```bash
+pm2 restart kosmos-panel
+```
+
+После запуска `/health` доступен на том же порту, что и панель:
+```
+http://localhost:3000/health
+```
+
+Проверка работает каждые 30 секунд. Отдельный PM2-процесс не требуется.
+
+### Альтернативный способ (отдельный health-server)
+
+Для удалённых машин или если Kosmos Panel не используется — запустить как самостоятельный сервис:
+
+**Через PM2** — добавить в `ecosystem.config.js`:
 ```javascript
 {
   name: 'hermes-health',
@@ -94,7 +129,7 @@ pm2 start ecosystem.config.js --only hermes-health
 pm2 save
 ```
 
-Если PM2 не используется — можно запустить как обычный Node.js процесс:
+**Без PM2** — как обычный Node.js процесс:
 ```bash
 # Windows
 node ./kosmos-panel/health-server.js
@@ -106,14 +141,14 @@ node ./kosmos-panel/health-server-linux.js
 
 ## 3. Мониторинг в Kosmos Panel
 
-В `inventory.json` для нужного сервера добавляются сервисы типа `httpJson`:
+В `inventory.json` для нужного сервера добавляются сервисы типа `httpJson`. **Для встроенного решения (порт Kosmos Panel):**
 
 ```json
 {
   "id": "hermes-<gateway-id>",
   "type": "httpJson",
   "name": "🤖 <Название Gateway>",
-  "url": "http://127.0.0.1:3100/health",
+  "url": "http://127.0.0.1:3000/health",
   "timeoutMs": 5000,
   "rules": [
     { "name": "Gateway alive", "path": "$.gateways.<gateway-id>.alive", "equals": true }
@@ -121,7 +156,12 @@ node ./kosmos-panel/health-server-linux.js
 }
 ```
 
-JSONPath `$.gateways.<gateway-id>.alive` должен совпадать с ключом, указанным в `health-server.js`.
+**Для отдельного health-server (порт 3100):**
+```json
+  "url": "http://127.0.0.1:3100/health",
+```
+
+JSONPath `$.gateways.<gateway-id>.alive` должен совпадать с ключом, указанным в `server.js` (или `health-server.js`).
 
 ---
 
@@ -129,14 +169,16 @@ JSONPath `$.gateways.<gateway-id>.alive` должен совпадать с кл
 
 ### 4.1. Как запущены gateway
 
-| Gateway | Профиль | Откуда запущен |
-|---------|---------|---------------|
-| @erv_HA_WORK_bot (ты тут) | default | **Планировщик Windows** (задача `HermesGateway`, BootTrigger) |
-| carl-db | carl-db | PM2 (`hermes-carl-db-gateway`) |
-| pilot-work | pilot-work | PM2 (`hermes-pilot-work-gateway`) |
-| projects-ex | projects-ex | PM2 (`hermes-projects-ex-gateway`) |
+| Gateway | Профиль | Откуда запущен | Проверка |
+|---------|---------|---------------|----------|
+| @erv_HA_WORK_bot (ты тут) | default | **Планировщик Windows** (задача `HermesGateway`, BootTrigger) | процесс `hermes.exe` + свежесть `gateway.log` |
+| carl-db | carl-db | PM2 (`hermes-carl-db-gateway`) | `pm2 jlist` → online |
+| pilot-work | pilot-work | PM2 (`hermes-pilot-work-gateway`) | `pm2 jlist` → online |
+| projects-ex | projects-ex | PM2 (`hermes-projects-ex-gateway`) | `pm2 jlist` → online |
 
-### 4.2. Логика проверки в health-server.js
+### 4.2. Логика проверки (встроена в server.js)
+
+Код проверки — в `server.js`, функции `checkGateways()`.
 
 **Default gateway (планировщик):** двухфакторная проверка:
 1. Процесс `hermes.exe` запущен
@@ -147,9 +189,13 @@ JSONPath `$.gateways.<gateway-id>.alive` должен совпадать с кл
 **PM2 gateway:** универсальная проверка через `pm2 jlist`:
 - Парсинг JSON → поиск по `name` → проверка `pm2_env.status === 'online'`
 
-### 4.3. Запуск health-server
+### 4.3. Запуск
 
-Через PM2 как `hermes-health` (см. секцию 2). Автостарт — через задачу `PM2-User-Startup` в планировщике (LogonTrigger). При перезагрузке Windows требуется вход пользователя для PM2; основной gateway (HermesGateway) стартует сам по BootTrigger.
+Отдельный процесс не требуется — `/health` стартует вместе с `kosmos-panel`:
+
+```bash
+pm2 start kosmos-panel   # автоматически включает /health
+```
 
 ### 4.4. inventory.json (сервер localhost)
 
@@ -158,7 +204,7 @@ JSONPath `$.gateways.<gateway-id>.alive` должен совпадать с кл
   "id": "hermes-default",
   "type": "httpJson",
   "name": "🤖 HA-Work Gateway (default)",
-  "url": "http://127.0.0.1:3100/health",
+  "url": "http://127.0.0.1:3000/health",
   "rules": [
     { "name": "Gateway alive", "path": "$.gateways.default.alive", "equals": true }
   ]
@@ -243,14 +289,15 @@ sudo systemctl enable --now hermes-health
 
 ---
 
-## 6. Расширение health-server.js / health-server-linux.js
+## 6. Расширение (добавление нового gateway)
 
-Чтобы добавить новый gateway в мониторинг, отредактируйте нужный файл под свою ОС:
+### Для встроенного решения (server.js)
 
-1. В `health-server.js` (Windows) или `health-server-linux.js` (Linux), внутри `checkProcesses()`, добавить блок проверки:
+В `server.js`, внутри функции `checkGateways()`, добавить блок проверки:
+
 ```javascript
 try {
-  // ... команда проверки под вашу ОС ...
+  // ... команда проверки ...
   gateways['my-gateway'] = {
     name: '🤖 Мой Gateway',
     alive: условие,
@@ -261,20 +308,36 @@ try {
 }
 ```
 
-2. В `inventory.json` добавить httpJson сервис с JSONPath `$.gateways.my-gateway.alive`
+### Для отдельного health-server
 
-3. Перезапустить health-server и перезагрузить Kosmos Panel
+Аналогично — в `health-server.js` (Windows) или `health-server-linux.js` (Linux), внутри `checkProcesses()`.
+
+### inventory.json
+
+В любом случае — добавить httpJson сервис с JSONPath `$.gateways.my-gateway.alive`.
+
+### Перезапуск
+
+```bash
+pm2 restart kosmos-panel
+# или для отдельного health-server:
+pm2 restart hermes-health
+```
 
 ---
 
 ## 7. Проверка
 
 ```bash
-# Статус всех gateway через health-server
+# Статус всех gateway (встроенный в Kosmos Panel)
+curl http://127.0.0.1:3000/health
+
+# Для отдельного health-server
 curl http://127.0.0.1:3100/health
 
 # HTML-страница (автообновление каждые 10 сек)
-# Открыть в браузере: http://127.0.0.1:3100/
+# http://localhost:3000/  →  health-server.html
+# или для отдельного: http://localhost:3100/
 
 # Статус в Kosmos Panel
 curl http://<kosmos-panel-host>:3000/api/servers | jq '.servers[] | select(.id=="<server-id>") | .services[] | select(.id | startswith("hermes-"))'
@@ -284,25 +347,26 @@ curl http://<kosmos-panel-host>:3000/api/servers | jq '.servers[] | select(.id==
 
 ## 8. Восстановление после сбоя
 
-**Если health-server упал (PM2):**
+**Если Kosmos Panel упал:**
 ```bash
-pm2 start hermes-health
-pm2 save
+pm2 start kosmos-panel    # автостарт /health вместе с панелью
 ```
 
-**Если health-server упал (systemd):**
+**Если используется отдельный health-server:**
 ```bash
+pm2 restart hermes-health
+# или (systemd):
 sudo systemctl restart hermes-health
 ```
 
-**Если gateway упал** — health-server покажет RED, Kosmos Panel — красную плитку. Действия по восстановлению gateway зависят от способа запуска (systemd restart, pm2 restart, etc.).
+**Если gateway упал** — `/health` покажет RED, Kosmos Panel — красную плитку. Действия по восстановлению gateway зависят от способа запуска (systemd restart, pm2 restart, перезапуск планировщика Windows).
 
 ---
 
 ## 9. Ограничения
 
-- Health-server должен работать на той же машине, что и gateway (иначе не сможет проверять локальные процессы)
+- Проверка должна работать на той же машине, что и gateway (иначе не сможет проверять локальные процессы)
+- Встроенное `/health` работает только вместе с Kosmos Panel; для удалённых машин — отдельный `health-server.js`
 - Требует Node.js
-- При перезагрузке ОС нужно убедиться, что health-server настроен на автозапуск
 
-**Последнее обновление:** 2026-06-26 (добавлен `health-server-linux.js`)
+**Последнее обновление:** 2026-06-29 | встроенное /health в server.js, отдельный health-server.js — альтернатива
